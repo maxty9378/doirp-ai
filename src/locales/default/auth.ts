@@ -254,6 +254,8 @@ export default {
   'usage.activeModels.table.spend': 'Spend',
   'usage.cards.month.modelCalls': 'Model Calls',
   'usage.cards.month.title': "This Month's Spend",
+  'usage.cards.remaining.title': 'Remaining Token Limit',
+  'usage.cards.remaining.used': 'Used',
   'usage.cards.today.title': "Today's Spend",
   'usage.cards.today.yesterday': 'Yesterday',
   'usage.table.actions': 'Actions',

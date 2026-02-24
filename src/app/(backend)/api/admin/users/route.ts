@@ -90,8 +90,12 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    const userId = newUser?.user?.id;
+    // better-auth admin createUser returns the user object directly (has .id), not { user: { id } }
+    const userId =
+      (newUser as { id?: string } | undefined)?.id ??
+      (newUser as { user?: { id?: string } } | undefined)?.user?.id;
     if (!userId) {
+      console.error('createUser returned no id:', JSON.stringify(newUser));
       return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
     }
 
@@ -107,7 +111,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ code, email, tokenQuota });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
+    const cause = error instanceof Error ? error.cause : undefined;
     console.error('Error creating admin user:', error);
+
+    // Return 400 for known client errors (e.g. duplicate email)
+    const errMsg = (cause instanceof Error ? cause.message : message).toLowerCase();
+    if (
+      errMsg.includes('unique') ||
+      errMsg.includes('duplicate') ||
+      errMsg.includes('already exists') ||
+      errMsg.includes('already registered')
+    ) {
+      return NextResponse.json(
+        { error: 'Email already registered', details: process.env.NODE_ENV === 'development' ? message : undefined },
+        { status: 400 },
+      );
+    }
+
     return NextResponse.json(
       { error: 'Internal server error', details: process.env.NODE_ENV === 'development' ? message : undefined },
       { status: 500 },
