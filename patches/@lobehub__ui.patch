@@ -1,0 +1,13 @@
+diff --git a/es/Modal/Modal.mjs b/es/Modal/Modal.mjs
+index 81ec2ee1e229209afd36d549caea2d838fbdd2e4..2f71314ab740561cafe7493fee77c9fedbd35637 100644
+--- a/es/Modal/Modal.mjs
++++ b/es/Modal/Modal.mjs	
+@@ -67,7 +67,7 @@ const Modal$1 = memo(({ panelRef, allowFullscreen, children, title = " ", classN
+ 		theme: { token: { colorBgElevated: cssVar.colorBgContainer } },
+ 		children: /* @__PURE__ */ jsx(Modal, {
+ 			closable: true,
+-			maskClosable: true,
++			mask: { closable: true },
+ 			cancelText,
+ 			className: cx(styles.content, className),
+ 			closeIcon: /* @__PURE__ */ jsx(Icon_default, {
