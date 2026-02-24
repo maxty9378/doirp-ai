@@ -102,9 +102,31 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
       <SettingHeader
         title={t('tab.users')}
         extra={
-          <Button loading={isLoading} onClick={() => mutate()}>
-            {t('common.refresh', { defaultValue: 'Refresh' })}
-          </Button>
+          <Space>
+            <Button
+              onClick={async () => {
+                try {
+                  const res = await fetch('/api/admin/users/sync-usage', { method: 'POST' });
+                  const json = await res.json();
+                  if (!res.ok) {
+                    message.error(json.error || 'Sync failed');
+                    return;
+                  }
+                  message.success(
+                    `Synced ${json.syncedUsers} user(s)`,
+                  );
+                  mutate();
+                } catch {
+                  message.error('Sync failed');
+                }
+              }}
+            >
+              {t('users.syncUsage', { defaultValue: 'Sync Usage' })}
+            </Button>
+            <Button loading={isLoading} onClick={() => mutate()}>
+              {t('common.refresh', { defaultValue: 'Refresh' })}
+            </Button>
+          </Space>
         }
       />
 
