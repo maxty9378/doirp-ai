@@ -7,9 +7,9 @@ import { memo } from 'react';
 import useSWR from 'swr';
 
 interface TokenLimitsData {
+  remaining: number;
   tokenQuota: number;
   tokensUsed: number;
-  remaining: number;
 }
 
 const fetcher = async (url: string): Promise<TokenLimitsData> => {
@@ -77,26 +77,26 @@ const TokenLimits = memo(() => {
           />
           <Text weight={500}>Использование токенов</Text>
         </Flexbox>
-        <Text type="secondary" size={12}>
+        <Text style={{ fontSize: 12 }} type="secondary">
           {tokensUsed.toLocaleString()} / {tokenQuota.toLocaleString()}
         </Text>
       </Flexbox>
 
       <Progress
         percent={usagePercent}
+        showInfo={false}
         strokeColor={isCritical ? '#ff4d4f' : isLow ? '#ffa34d' : '#1890ff'}
         trailColor="rgba(0, 0, 0, 0.06)"
-        showInfo={false}
       />
 
       <Flexbox horizontal align="center" justify="space-between">
-        <Text size={12} type="secondary">
+        <Text style={{ fontSize: 12 }} type="secondary">
           Осталось токенов
         </Text>
         <Text
-          size={14}
           weight={500}
           style={{
+            fontSize: 14,
             color: isCritical ? '#ff4d4f' : isLow ? '#ffa34d' : undefined,
           }}
         >

@@ -31,7 +31,7 @@ export const AdminGuard = ({ children }: AdminGuardProps) => {
     }
   }, [canDecide, isAdmin, navigate]);
 
-  if (!canDecide) return <Loading />;
+  if (!canDecide) return <Loading debugId="AdminGuard" />;
   if (!isAdmin) return null;
 
   return <>{children}</>;

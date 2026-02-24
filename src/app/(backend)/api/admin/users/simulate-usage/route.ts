@@ -1,15 +1,25 @@
-import { NextRequest, NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
-import { ensureAdmin } from '@/const/admin';
-import { serverDB } from '@/database/server';
+import { auth } from '@/auth';
+import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { trackTokenUsage } from '@/server/middleware/trackTokenUsage';
+
+async function ensureAdmin() {
+  const { headers } = await import('next/headers');
+  const session = await auth.api.getSession({ headers: await headers() });
+  const user = session?.user as { email?: string; username?: string } | undefined;
+  const byUsername = user?.username === ADMIN_USERNAME;
+  const byEmail = ADMIN_EMAIL && user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+  if (!byUsername && !byEmail) return null;
+  return session;
+}
 
 export const POST = async (req: NextRequest) => {
   try {
-    // Check admin permissions
-    const adminResult = await ensureAdmin();
-    if (!adminResult.success) {
-      return NextResponse.json({ error: adminResult.error }, { status: 403 });
+    const session = await ensureAdmin();
+    if (!session) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const { userId, tokens } = await req.json();
@@ -24,9 +34,6 @@ export const POST = async (req: NextRequest) => {
     return NextResponse.json({ success: true, tokensAdded: tokens });
   } catch (error: any) {
     console.error('Failed to simulate usage:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 };

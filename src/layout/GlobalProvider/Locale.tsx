@@ -89,10 +89,8 @@ const Locale = memo<LocaleLayoutProps>(({ children, defaultLang, antdLocale }) =
           Button: {
             contentFontSizeSM: 12,
           },
-          // Use new API to avoid antd deprecation warning (maskClosable → mask.closable)
-          Modal: {
-            mask: { closable: true },
-          },
+          // mask.closable: antd theme type may not include mask; runtime supports it
+          Modal: { mask: { closable: true } } as Record<string, unknown>,
         },
       }}
     >

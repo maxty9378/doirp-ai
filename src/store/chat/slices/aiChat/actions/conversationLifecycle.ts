@@ -217,6 +217,32 @@ export class ConversationLifecycleActionImpl {
       inputSendErrorMsg: undefined,
     });
 
+    // Check user token quota before sending (limits are tied to chat usage)
+    try {
+      const limitsRes = await fetch('/api/user/token-limits');
+      if (limitsRes.ok) {
+        const limits = (await limitsRes.json()) as { tokenQuota: number; remaining: number };
+        if (limits.tokenQuota > 0 && limits.remaining <= 0) {
+          this.#get().failOperation(operationId, {
+            type: 'TokenQuotaExceeded',
+            message: t('response.UserTokenQuotaExceeded', { ns: 'error' }),
+          });
+          this.#get().updateOperationMetadata(operationId, {
+            inputSendErrorMsg: t('response.UserTokenQuotaExceeded', { ns: 'error' }),
+          });
+          this.#get().mainInputEditor?.setDocument('markdown', message);
+          this.#get().internal_dispatchMessage(
+            { type: 'deleteMessages', ids: [tempId, tempAssistantId] },
+            { operationId },
+          );
+          this.#get().internal_toggleMessageLoading(false, tempId);
+          return;
+        }
+      }
+    } catch {
+      // If token limits API fails, allow send to proceed (e.g. unauthenticated or no user_codes)
+    }
+
     let data: SendMessageServerResponse | undefined;
     try {
       const { model, provider } = agentSelectors.getAgentConfigById(agentId)(getAgentStoreState());

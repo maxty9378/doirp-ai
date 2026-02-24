@@ -46,7 +46,7 @@ export const aiChatRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       log('trackTokens called for message %s: %d tokens', input.messageId, input.tokensUsed);
-      
+
       try {
         await trackTokenUsage(ctx.userId, input.tokensUsed);
         log('Successfully tracked %d tokens for user %s', input.tokensUsed, ctx.userId);
@@ -73,6 +73,24 @@ export const aiChatRouter = router({
       schema: input.schema,
       tools: input.tools,
     });
+
+    // Track token usage for user_codes quota (same as chat)
+    const usage = (result?.usage ?? result?.metadata?.usage) as
+      | { totalTokens?: number; totalInputTokens?: number; totalOutputTokens?: number }
+      | undefined;
+    if (usage && ctx.userId) {
+      const totalTokens =
+        (usage.totalTokens ?? 0) || (usage.totalInputTokens ?? 0) + (usage.totalOutputTokens ?? 0);
+      if (totalTokens > 0) {
+        try {
+          await trackTokenUsage(ctx.userId, totalTokens);
+          log('outputJSON: tracked %d tokens for user %s', totalTokens, ctx.userId);
+        } catch (err) {
+          log('outputJSON: failed to track tokens: %O', err);
+          throw err;
+        }
+      }
+    }
 
     log('generateObject completed, result: %O', result);
     return result;

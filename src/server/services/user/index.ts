@@ -38,7 +38,8 @@ export class UserService {
 
     // Automatically complete onboarding and set defaults for new users
     try {
-      await UserModel.updateUser(this.db, user.id, {
+      const userModel = new UserModel(this.db, user.id);
+      await userModel.updateUser({
         onboarding: {
           version: CURRENT_ONBOARDING_VERSION,
           currentStep: MAX_ONBOARDING_STEPS,
@@ -48,7 +49,7 @@ export class UserService {
           language: 'ru-RU', // Set Russian as default interface language
         },
       });
-        console.info(`Auto-completed onboarding and set defaults for user ${user.id}`);
+      console.info(`Auto-completed onboarding and set defaults for user ${user.id}`);
     } catch (error) {
       console.error('Failed to auto-complete onboarding:', error);
     }

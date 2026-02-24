@@ -195,6 +195,8 @@ export default {
     'Error requesting {{provider}} service, please troubleshoot or retry based on the following information',
   'response.QuotaLimitReached':
     "Sorry, the token usage or request count has reached the quota limit for this key. Please increase the key's quota or try again later.",
+  'response.UserTokenQuotaExceeded':
+    'Your token quota for this account has been used. You cannot send new messages until the quota is increased.',
   'response.ServerAgentRuntimeError':
     'Sorry, the Agent service is currently unavailable. Please try again later or contact us via email for support.',
   'response.StreamChunkError':

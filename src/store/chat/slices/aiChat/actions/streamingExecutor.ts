@@ -511,11 +511,11 @@ export class StreamingExecutorActionImpl {
         finalUsage = result.usage;
         finalToolCalls = result.toolCalls;
 
-        // Track token usage for user_codes quota
+        // Track token usage for user_codes quota (limits are tied to chat spending)
         if (result.usage) {
           const totalTokens =
             (result.usage.totalTokens ?? 0) ||
-            (result.usage.promptTokens ?? 0) + (result.usage.completionTokens ?? 0);
+            (result.usage.totalInputTokens ?? 0) + (result.usage.totalOutputTokens ?? 0);
 
           if (totalTokens > 0) {
             try {
@@ -523,10 +523,30 @@ export class StreamingExecutorActionImpl {
                 messageId,
                 tokensUsed: totalTokens,
               });
-              log('[internal_fetchAIChatMessage] tracked %d tokens for message %s', totalTokens, messageId);
-            } catch (error) {
+              log(
+                '[internal_fetchAIChatMessage] tracked %d tokens for message %s',
+                totalTokens,
+                messageId,
+              );
+            } catch (error: unknown) {
               log('[internal_fetchAIChatMessage] failed to track tokens: %O', error);
-              // Don't block the user experience if token tracking fails
+              // Surface quota exceeded to user so they see limits are enforced
+              const message =
+                error && typeof error === 'object' && 'message' in error
+                  ? String((error as { message: unknown }).message)
+                  : '';
+              const isQuotaError =
+                message.toLowerCase().includes('quota') ||
+                (error &&
+                  typeof error === 'object' &&
+                  'data' in error &&
+                  (error as { data?: { code?: string } }).data?.code === 'FORBIDDEN');
+              if (operationId && isQuotaError) {
+                this.#get().updateOperationMetadata(operationId, {
+                  inputSendErrorMsg:
+                    message || t('response.UserTokenQuotaExceeded', { ns: 'error' }),
+                });
+              }
             }
           }
         }

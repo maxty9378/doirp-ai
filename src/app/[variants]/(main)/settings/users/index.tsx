@@ -2,8 +2,8 @@
 
 import { Flexbox, FormGroup } from '@lobehub/ui';
 import { App, Button, Input, Progress, Space, Table, Tag, Typography } from 'antd';
-import useSWR from 'swr';
 import { useTranslation } from 'react-i18next';
+import useSWR from 'swr';
 
 import SettingHeader from '@/app/[variants]/(main)/settings/features/SettingHeader';
 
@@ -14,13 +14,13 @@ const ADMIN_USERS_API = '/api/admin/users';
 const DEFAULT_TOKEN_QUOTA = 100_000;
 
 interface UserCodeRow {
-  id: string;
-  userId: string;
-  email: string;
   code: string;
+  createdAt: string;
+  email: string;
+  id: string;
   tokenQuota?: number;
   tokensUsed?: number;
-  createdAt: string;
+  userId: string;
 }
 
 const fetcher = async (url: string) => {
@@ -38,7 +38,7 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
     fetcher,
   );
   const users = data?.users ?? [];
-  const errorMessage = error?.message || (data?.error ? String(data.error) : null);
+  const errorMessage = error?.message ?? null;
 
   const handleSimulateUsage = async (userId: string, tokens: number) => {
     try {
@@ -84,9 +84,7 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
         message.error(json.details || json.error || t('users.addError'));
         return;
       }
-      message.success(
-        t('users.addSuccess', { email: json.email, code: json.code }),
-      );
+      message.success(t('users.addSuccess', { email: json.email, code: json.code }));
       if (emailInput) emailInput.value = '';
       if (quotaInput) quotaInput.value = String(DEFAULT_TOKEN_QUOTA);
       mutate();
@@ -101,15 +99,15 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
 
   return (
     <Flexbox gap={24} style={{ width: '100%' }}>
-      <SettingHeader 
-        title={t('tab.users')} 
+      <SettingHeader
+        title={t('tab.users')}
         extra={
-          <Button onClick={() => mutate()} loading={isLoading}>
+          <Button loading={isLoading} onClick={() => mutate()}>
             {t('common.refresh', { defaultValue: 'Refresh' })}
           </Button>
         }
       />
-      
+
       {users.length > 0 && (
         <FormGroup
           collapsible={false}
@@ -117,50 +115,52 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
           variant="filled"
         >
           <Space orientation="vertical" size="large" style={{ width: '100%' }}>
-            <Space size="large" wrap>
+            <Space wrap size="large">
               <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text style={{ fontSize: 12 }} type="secondary">
                   {t('users.totalUsers', { defaultValue: 'Total Users' })}
                 </Text>
                 <div style={{ fontSize: 24, fontWeight: 600 }}>{users.length}</div>
               </div>
               <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text style={{ fontSize: 12 }} type="secondary">
                   {t('users.totalQuota', { defaultValue: 'Total Token Quota' })}
                 </Text>
                 <div style={{ fontSize: 24, fontWeight: 600 }}>{totalTokens.toLocaleString()}</div>
               </div>
               <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text style={{ fontSize: 12 }} type="secondary">
                   {t('users.usedTokens', { defaultValue: 'Used Tokens' })}
                 </Text>
-                <div style={{ fontSize: 24, fontWeight: 600, color: usagePercent >= 90 ? 'var(--colorError)' : undefined }}>
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 600,
+                    color: usagePercent >= 90 ? 'var(--colorError)' : undefined,
+                  }}
+                >
                   {usedTokens.toLocaleString()}
                 </div>
               </div>
               <div>
-                <Text type="secondary" style={{ fontSize: 12 }}>
+                <Text style={{ fontSize: 12 }} type="secondary">
                   {t('users.overallUsage', { defaultValue: 'Overall Usage' })}
                 </Text>
                 <div style={{ fontSize: 24, fontWeight: 600 }}>{usagePercent}%</div>
               </div>
             </Space>
-            <Progress 
-              percent={usagePercent} 
+            <Progress
+              percent={usagePercent}
+              size={{ height: 12 }}
               status={usagePercent >= 90 ? 'exception' : usagePercent >= 70 ? 'normal' : 'success'}
-              size={[undefined, 12]}
             />
           </Space>
         </FormGroup>
       )}
-      
-      <FormGroup
-        collapsible={false}
-        title={t('users.addTitle')}
-        variant="filled"
-      >
+
+      <FormGroup collapsible={false} title={t('users.addTitle')} variant="filled">
         <form onSubmit={handleAddUser}>
-          <Flexbox gap={12} style={{ flexWrap: 'wrap' }} horizontal>
+          <Flexbox horizontal gap={12} style={{ flexWrap: 'wrap' }}>
             <Input
               name="email"
               placeholder={t('users.emailPlaceholder')}
@@ -168,12 +168,12 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
               type="email"
             />
             <Input
-              name="tokenQuota"
+              defaultValue={DEFAULT_TOKEN_QUOTA}
               min={0}
+              name="tokenQuota"
               placeholder={t('users.tokenQuotaPlaceholder')}
               style={{ width: 140 }}
               type="number"
-              defaultValue={DEFAULT_TOKEN_QUOTA}
             />
             <Button htmlType="submit" type="primary">
               {t('users.addButton')}
@@ -181,13 +181,9 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
           </Flexbox>
         </form>
       </FormGroup>
-      <FormGroup
-        collapsible={false}
-        title={t('users.listTitle')}
-        variant="filled"
-      >
+      <FormGroup collapsible={false} title={t('users.listTitle')} variant="filled">
         {errorMessage && (
-          <Flexbox gap={8} style={{ color: 'var(--colorError)' }} direction="vertical">
+          <Flexbox direction="vertical" gap={8} style={{ color: 'var(--colorError)' }}>
             {t('users.loadError')}
             {errorMessage && errorMessage !== t('users.loadError') && (
               <span style={{ fontSize: 12, opacity: 0.9 }}>{errorMessage}</span>
@@ -197,18 +193,23 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
         {!errorMessage && (
           <div style={{ overflowX: 'auto' }}>
             <Table
+              dataSource={users}
+              loading={isLoading}
+              rowKey="id"
+              scroll={{ x: 800 }}
+              size="small"
               columns={[
-                { 
-                  dataIndex: 'email', 
-                  key: 'email', 
-                  title: t('users.emailColumn'), 
+                {
+                  dataIndex: 'email',
+                  key: 'email',
+                  title: t('users.emailColumn'),
                   width: 220,
                   ellipsis: true,
                 },
-                { 
-                  dataIndex: 'code', 
-                  key: 'code', 
-                  title: t('users.codeColumn'), 
+                {
+                  dataIndex: 'code',
+                  key: 'code',
+                  title: t('users.codeColumn'),
                   width: 180,
                   render: (code: string) => (
                     <Space size="small">
@@ -226,30 +227,35 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                     const quota = record.tokenQuota ?? DEFAULT_TOKEN_QUOTA;
                     const used = record.tokensUsed ?? 0;
                     const percent = quota > 0 ? Math.round((used / quota) * 100) : 0;
-                    const status = percent >= 90 ? 'exception' : percent >= 70 ? 'normal' : 'success';
-                    
+                    const status =
+                      percent >= 90 ? 'exception' : percent >= 70 ? 'normal' : 'success';
+
                     return (
                       <Space orientation="vertical" size={4} style={{ width: '100%' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
-                          <Text type="secondary">{used.toLocaleString()} / {quota.toLocaleString()}</Text>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: 12,
+                          }}
+                        >
+                          <Text type="secondary">
+                            {used.toLocaleString()} / {quota.toLocaleString()}
+                          </Text>
                           <Space size={4}>
                             <Text type={percent >= 90 ? 'danger' : 'secondary'}>{percent}%</Text>
-                            <Button 
-                              size="small" 
+                            <Button
+                              size="small"
+                              style={{ padding: '0 4px', fontSize: '11px', height: '20px' }}
                               type="text"
                               onClick={() => handleSimulateUsage(record.userId, 1000)}
-                              style={{ padding: '0 4px', fontSize: '11px', height: '20px' }}
                             >
                               +1k
                             </Button>
                           </Space>
                         </div>
-                        <Progress 
-                          percent={percent} 
-                          size="small" 
-                          status={status}
-                          showInfo={false}
-                        />
+                        <Progress percent={percent} showInfo={false} size="small" status={status} />
                       </Space>
                     );
                   },
@@ -261,18 +267,34 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                     if (!v) return '—';
                     const date = new Date(v);
                     const now = new Date();
-                    const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
-                    
+                    const diffDays = Math.floor(
+                      (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24),
+                    );
+
                     let tag = null;
-                    if (diffDays === 0) tag = <Tag color="green">{t('users.today', { defaultValue: 'Today' })}</Tag>;
-                    else if (diffDays === 1) tag = <Tag color="blue">{t('users.yesterday', { defaultValue: 'Yesterday' })}</Tag>;
-                    else if (diffDays <= 7) tag = <Tag>{t('users.daysAgo', { defaultValue: '{{count}}d ago', count: diffDays })}</Tag>;
-                    
+                    if (diffDays === 0)
+                      tag = <Tag color="green">{t('users.today', { defaultValue: 'Today' })}</Tag>;
+                    else if (diffDays === 1)
+                      tag = (
+                        <Tag color="blue">
+                          {t('users.yesterday', { defaultValue: 'Yesterday' })}
+                        </Tag>
+                      );
+                    else if (diffDays <= 7)
+                      tag = (
+                        <Tag>
+                          {t('users.daysAgo', { defaultValue: '{{count}}d ago', count: diffDays })}
+                        </Tag>
+                      );
+
                     return (
                       <Space orientation="vertical" size={0}>
                         {tag}
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {date.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                        <Text style={{ fontSize: 12 }} type="secondary">
+                          {date.toLocaleString(undefined, {
+                            dateStyle: 'short',
+                            timeStyle: 'short',
+                          })}
                         </Text>
                       </Space>
                     );
@@ -281,16 +303,12 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                   width: 140,
                 },
               ]}
-              dataSource={users}
-              loading={isLoading}
-              pagination={{ 
-                pageSize: 10, 
+              pagination={{
+                pageSize: 10,
                 showSizeChanger: true,
-                showTotal: (total) => t('users.totalCount', { defaultValue: 'Total: {{count}} users', count: total }),
+                showTotal: (total) =>
+                  t('users.totalCount', { defaultValue: 'Total: {{count}} users', count: total }),
               }}
-              rowKey="id"
-              scroll={{ x: 800 }}
-              size="small"
             />
           </div>
         )}
