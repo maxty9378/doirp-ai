@@ -5,6 +5,6 @@
 export const ADMIN_USERNAME = 'maxim.kadochkin';
 
 /**
- * Optional: admin by email (e.g. if username is not set in DB). Set NEXT_PUBLIC_ADMIN_EMAIL in .env.
+ * Admin email. Set NEXT_PUBLIC_ADMIN_EMAIL in .env to override.
  */
-export const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || '';
+export const ADMIN_EMAIL = process.env.NEXT_PUBLIC_ADMIN_EMAIL || 'maxim.kadochkin@gmail.com';

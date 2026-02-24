@@ -1,6 +1,7 @@
-import { createNanoId } from '@lobechat/database';
-import { DEFAULT_USER_TOKEN_QUOTA, userCodes } from '@lobechat/database/schemas';
-import { desc } from 'drizzle-orm';
+import { createNanoId, idGenerator } from '@lobechat/database';
+import { account, DEFAULT_USER_TOKEN_QUOTA, userCodes, users } from '@lobechat/database/schemas';
+import { hashPassword } from 'better-auth/crypto';
+import { desc, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { type NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -8,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { UserService } from '@/server/services/user';
 
 function generateCode(): string {
   return createNanoId(10)();
@@ -82,28 +84,61 @@ export async function POST(req: NextRequest) {
 
     const code = generateCode();
 
-    const newUser = await auth.api.createUser({
-      body: {
-        email,
-        name: email,
-        password: code,
-      },
+    // Check if user with this email already exists
+    const existingUser = await serverDB.query.users.findFirst({
+      where: eq(users.email, email),
     });
-
-    // better-auth admin createUser returns the user object directly (has .id), not { user: { id } }
-    const userId =
-      (newUser as { id?: string } | undefined)?.id ??
-      (newUser as { user?: { id?: string } } | undefined)?.user?.id;
-    if (!userId) {
-      console.error('createUser returned no id:', JSON.stringify(newUser));
-      return NextResponse.json({ error: 'Failed to create user' }, { status: 500 });
+    if (existingUser) {
+      return NextResponse.json(
+        { error: 'Email already registered' },
+        { status: 400 },
+      );
     }
 
-    const id = createNanoId(12)();
+    // Create user directly in DB (bypassing better-auth admin permission check)
+    const userId = idGenerator('user', 32 - 'user_'.length);
+    const now = new Date();
+    const passwordHash = await hashPassword(code);
+    const accountId = createNanoId(12)();
+
+    // Insert user
+    await serverDB.insert(users).values({
+      id: userId,
+      email,
+      normalizedEmail: email.toLowerCase(),
+      fullName: email,
+      emailVerified: true,
+      createdAt: now,
+      updatedAt: now,
+      lastActiveAt: now,
+    });
+
+    // Insert account record with password (for credential login)
+    await serverDB.insert(account).values({
+      id: accountId,
+      userId,
+      accountId: email,
+      providerId: 'credential',
+      password: passwordHash,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Initialize user (creates inbox session, etc.)
+    const userService = new UserService(serverDB);
+    await userService.initUser({
+      id: userId,
+      email,
+      username: null,
+      createdAt: now,
+    });
+
+    // Insert user code record
+    const userCodeId = createNanoId(12)();
     await serverDB.insert(userCodes).values({
       code,
       email,
-      id,
+      id: userCodeId,
       tokenQuota,
       userId,
     });
