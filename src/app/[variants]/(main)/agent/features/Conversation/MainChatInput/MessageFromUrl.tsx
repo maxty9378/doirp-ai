@@ -36,6 +36,7 @@ const MessageFromUrl = () => {
   useEffect(() => {
     const message = searchParams.get('message');
     if (!message) return;
+    const isHiddenKickoff = searchParams.get('hiddenKickoff') === '1';
 
     // Wait for agentId to be available before sending
     if (!agentId) return;
@@ -59,6 +60,7 @@ const MessageFromUrl = () => {
     setSearchParams(
       (prev) => {
         const newParams = new URLSearchParams(prev);
+        newParams.delete('hiddenKickoff');
         newParams.delete('message');
         return newParams;
       },
@@ -66,7 +68,10 @@ const MessageFromUrl = () => {
     );
 
     // Send the message
-    sendMessage({ message });
+    sendMessage({
+      message,
+      metadata: isHiddenKickoff ? { trainingHiddenKickoff: true } : undefined,
+    });
   }, [
     searchParams,
     setSearchParams,

@@ -30,7 +30,8 @@ interface UserMessageProps {
 const UserMessage = memo<UserMessageProps>(({ id, disableEditing, index }) => {
   const item = useConversationStore(dataSelectors.getDisplayMessageById(id), isEqual)!;
   const actionsConfig = useConversationStore((s) => s.actionsBar?.user);
-  const { content, createdAt, error, role, extra, targetId } = item;
+  const { content, createdAt, error, role, extra, targetId, metadata } = item;
+  const isTrainingHiddenKickoff = !!metadata?.trainingHiddenKickoff;
 
   const { t } = useTranslation('chat');
   const avatar = useUserAvatar();
@@ -76,6 +77,9 @@ const UserMessage = memo<UserMessageProps>(({ id, disableEditing, index }) => {
       setMessageItemActionTypeContext,
     ],
   );
+
+  // Hide technical kickoff message used to auto-start training scenarios.
+  if (isTrainingHiddenKickoff) return null;
 
   return (
     <ChatItem

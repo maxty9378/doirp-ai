@@ -1,7 +1,7 @@
 import { LOADING_FLAT } from '@lobechat/const';
 import { type UIChatMessage } from '@lobechat/types';
-import { Flexbox } from '@lobehub/ui';
-import { memo, useCallback } from 'react';
+import { Block, Button, Flexbox, Text } from '@lobehub/ui';
+import { memo, useCallback, useMemo } from 'react';
 
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
@@ -16,6 +16,43 @@ import Reasoning from '../../components/Reasoning';
 import SearchGrounding from '../../components/SearchGrounding';
 import { useMarkdown } from '../useMarkdown';
 
+interface TrainingOption {
+  description: string;
+  key: 'A' | 'B' | 'C';
+  raw: string;
+}
+
+const parseOptionLine = (line: string): TrainingOption | null => {
+  const trimmed = line.trim();
+  if (trimmed.length < 4) return null;
+
+  const key = trimmed[0];
+  if (key !== 'A' && key !== 'B' && key !== 'C') return null;
+  if (trimmed[1] !== ')') return null;
+  if (!/\s/.test(trimmed[2])) return null;
+
+  const description = trimmed.slice(3).trim();
+  if (!description) return null;
+
+  return {
+    description,
+    key,
+    raw: trimmed,
+  };
+};
+const SCORE_TAG_REGEX = /\[CURRENT_SCORE:\s*(-?\d+)\]/g;
+const TURQUOISE_BUTTON_STYLE = {
+  backgroundColor: '#14b8a6',
+  borderColor: '#14b8a6',
+  color: '#ffffff',
+};
+
+const OPTION_BLOCK_STYLE = {
+  border: '1px solid #99f6e4',
+  borderRadius: 10,
+  padding: '8px 10px',
+};
+
 const MessageContent = memo<UIChatMessage>(
   ({ id, tools, content, chunksList, search, imageList, metadata, ...props }) => {
     const markdownProps = useMarkdown(id);
@@ -25,6 +62,7 @@ const MessageContent = memo<UIChatMessage>(
     const isReasoning = useConversationStore(messageStateSelectors.isMessageInReasoning(id));
     const addReaction = useConversationStore((s) => s.addReaction);
     const removeReaction = useConversationStore((s) => s.removeReaction);
+    const sendMessage = useConversationStore((s) => s.sendMessage);
     const userId = useUserStore(userProfileSelectors.userId)!;
 
     const isToolCallGenerating = generating && (content === LOADING_FLAT || !content) && !!tools;
@@ -40,7 +78,43 @@ const MessageContent = memo<UIChatMessage>(
 
     const showFileChunks = !!chunksList && chunksList.length > 0;
 
-    const reactions = metadata?.reactions || [];
+    const reactions = useMemo(() => metadata?.reactions || [], [metadata?.reactions]);
+
+    const options = useMemo<TrainingOption[]>(() => {
+      if (!content) return [];
+
+      return content
+        .split('\n')
+        .map((line) => parseOptionLine(line))
+        .filter((item): item is TrainingOption => item !== null);
+    }, [content]);
+
+    const isTrainingFlowMessage = useMemo(
+      () => options.length > 0 || content?.includes('Варианты действий:'),
+      [content, options.length],
+    );
+
+    const score = useMemo(() => {
+      if (!content) return null;
+
+      const matches = [...content.matchAll(SCORE_TAG_REGEX)];
+      const latest = matches.at(-1);
+      if (!latest?.[1]) return null;
+
+      const parsed = Number.parseInt(latest[1], 10);
+      return Number.isNaN(parsed) ? null : parsed;
+    }, [content]);
+
+    const displayContent = useMemo(() => {
+      if (!content) return content;
+
+      return content
+        .split('\n')
+        .filter((line) => parseOptionLine(line) === null)
+        .join('\n')
+        .replaceAll(SCORE_TAG_REGEX, '')
+        .trim();
+    }, [content]);
 
     const handleReactionClick = useCallback(
       (emoji: string) => {
@@ -51,7 +125,7 @@ const MessageContent = memo<UIChatMessage>(
           addReaction(id, emoji);
         }
       },
-      [id, reactions, addReaction, removeReaction],
+      [id, reactions, addReaction, removeReaction, userId],
     );
 
     const isActive = useCallback(
@@ -59,7 +133,14 @@ const MessageContent = memo<UIChatMessage>(
         const reaction = reactions.find((r) => r.emoji === emoji);
         return !!reaction && reaction.users.includes(userId);
       },
-      [reactions],
+      [reactions, userId],
+    );
+
+    const handleOptionClick = useCallback(
+      async (option: string) => {
+        await sendMessage({ message: option });
+      },
+      [sendMessage],
     );
 
     if (isCollapsed) return <CollapsedMessage content={content} id={id} />;
@@ -70,9 +151,9 @@ const MessageContent = memo<UIChatMessage>(
           <SearchGrounding citations={search?.citations} searchQueries={search?.searchQueries} />
         )}
         {showFileChunks && <FileChunks data={chunksList} />}
-        {showReasoning && <Reasoning {...props.reasoning} id={id} />}
+        {showReasoning && !isTrainingFlowMessage && <Reasoning {...props.reasoning} id={id} />}
         <DisplayContent
-          content={content}
+          content={displayContent}
           hasImages={showImageItems}
           id={id}
           isMultimodal={metadata?.isMultimodal}
@@ -80,13 +161,51 @@ const MessageContent = memo<UIChatMessage>(
           markdownProps={markdownProps}
           tempDisplayContent={metadata?.tempDisplayContent}
         />
+        {(options.length > 0 || score !== null) && (
+          <Flexbox gap={8}>
+            {options.map((option) => (
+              <Block key={`${id}-${option.raw}`} style={OPTION_BLOCK_STYLE} variant={'outlined'}>
+                <Flexbox gap={6}>
+                  <Flexbox horizontal align={'center'}>
+                    <Text style={{ color: '#14b8a6' }}>-</Text>
+                    <Button
+                      size={'small'}
+                      style={TURQUOISE_BUTTON_STYLE}
+                      variant={'filled'}
+                      onClick={() => {
+                        void handleOptionClick(option.raw);
+                      }}
+                    >
+                      {`Вариант ${option.key}`}
+                    </Button>
+                  </Flexbox>
+                  <Text fontSize={12} type={'secondary'}>
+                    {option.description}
+                  </Text>
+                </Flexbox>
+              </Block>
+            ))}
+            {score !== null && (
+              <Block style={OPTION_BLOCK_STYLE} variant={'outlined'}>
+                <Button
+                  disabled
+                  size={'small'}
+                  style={TURQUOISE_BUTTON_STYLE}
+                  variant={'filled'}
+                >
+                  {`Счет: ${score}`}
+                </Button>
+              </Block>
+            )}
+          </Flexbox>
+        )}
         {showImageItems && <ImageFileListViewer items={imageList} />}
         {reactions.length > 0 && (
           <ReactionDisplay
             isActive={isActive}
             messageId={id}
-            onReactionClick={handleReactionClick}
             reactions={reactions}
+            onReactionClick={handleReactionClick}
           />
         )}
       </Flexbox>
