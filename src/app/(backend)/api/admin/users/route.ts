@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { ensureUserCodesSchema } from '@/server/services/admin/ensureUserCodesSchema';
 import { UserService } from '@/server/services/user';
 
 function generateCode(): string {
@@ -37,6 +38,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   try {
+    await ensureUserCodesSchema();
+
     const list = await serverDB
       .select({
         code: userCodes.code,
@@ -71,6 +74,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   try {
+    await ensureUserCodesSchema();
+
     const body = await req.json();
     const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
     if (!email) {

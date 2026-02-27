@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { trackTokenUsage } from '@/server/middleware/trackTokenUsage';
+import { ensureUserCodesSchema } from '@/server/services/admin/ensureUserCodesSchema';
 
 async function ensureAdmin() {
   const { headers } = await import('next/headers');
@@ -27,6 +28,8 @@ export const POST = async (req: NextRequest) => {
     if (!userId || typeof tokens !== 'number' || tokens <= 0) {
       return NextResponse.json({ error: 'Invalid userId or tokens' }, { status: 400 });
     }
+
+    await ensureUserCodesSchema();
 
     // Simulate token usage
     await trackTokenUsage(userId, tokens);

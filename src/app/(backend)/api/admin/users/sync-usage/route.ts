@@ -1,5 +1,5 @@
 import { userCodes } from '@lobechat/database/schemas';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -7,6 +7,7 @@ import { auth } from '@/auth';
 import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { messages } from '@/database/schemas';
 import { serverDB } from '@/database/server';
+import { ensureUserCodesSchema } from '@/server/services/admin/ensureUserCodesSchema';
 
 async function ensureAdmin() {
   const session = await auth.api.getSession({
@@ -30,6 +31,8 @@ export async function POST() {
   }
 
   try {
+    await ensureUserCodesSchema();
+
     // Get all user codes
     const allUserCodes = await serverDB
       .select({

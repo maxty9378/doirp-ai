@@ -1,7 +1,7 @@
 import { LOADING_FLAT } from '@lobechat/const';
 import { type UIChatMessage } from '@lobechat/types';
 import { Block, Button, Flexbox, Text } from '@lobehub/ui';
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
@@ -40,6 +40,24 @@ const parseOptionLine = (line: string): TrainingOption | null => {
     raw: trimmed,
   };
 };
+
+const extractTrainingSpeechText = (text?: string): string | null => {
+  if (!text) return null;
+
+  const quoteMatches = [...text.matchAll(/"([^"\n]{8,})"/g)]
+    .map((match) => match[1]?.trim())
+    .filter((match): match is string => !!match && match.length > 0);
+
+  if (quoteMatches.length > 0) {
+    const longest = quoteMatches.reduce((prev, current) =>
+      current.length > prev.length ? current : prev,
+    );
+    return longest;
+  }
+
+  return null;
+};
+
 const SCORE_TAG_REGEX = /\[CURRENT_SCORE:\s*(-?\d+)\]/g;
 const TURQUOISE_BUTTON_STYLE = {
   backgroundColor: '#14b8a6',
@@ -52,6 +70,8 @@ const OPTION_BLOCK_STYLE = {
   borderRadius: 10,
   padding: '8px 10px',
 };
+
+const TRAINING_TTS_API = '/webapi/tts/google';
 
 const MessageContent = memo<UIChatMessage>(
   ({ id, tools, content, chunksList, search, imageList, metadata, ...props }) => {
@@ -69,6 +89,9 @@ const MessageContent = memo<UIChatMessage>(
 
     const showSearch = !!search && !!search.citations?.length;
     const showImageItems = !!imageList && imageList.length > 0;
+    const spokenTrainingTextRef = useRef<string | null>(null);
+    const trainingAudioRef = useRef<HTMLAudioElement | null>(null);
+    const trainingAudioAbortRef = useRef<AbortController | null>(null);
 
     // remove \n to avoid empty content
     // refs: https://github.com/lobehub/lobe-chat/pull/6153
@@ -115,6 +138,64 @@ const MessageContent = memo<UIChatMessage>(
         .replaceAll(SCORE_TAG_REGEX, '')
         .trim();
     }, [content]);
+
+    const trainingSpeechText = useMemo(
+      () => (isTrainingFlowMessage ? extractTrainingSpeechText(displayContent) : null),
+      [displayContent, isTrainingFlowMessage],
+    );
+
+    useEffect(() => {
+      if (!isTrainingFlowMessage || generating) return;
+      if (!trainingSpeechText) return;
+      if (spokenTrainingTextRef.current === trainingSpeechText) return;
+      if (typeof window === 'undefined') return;
+
+      const playWithGeminiTTS = async () => {
+        trainingAudioAbortRef.current?.abort();
+        trainingAudioRef.current?.pause();
+        trainingAudioRef.current = null;
+
+        const controller = new AbortController();
+        trainingAudioAbortRef.current = controller;
+
+        try {
+          const response = await fetch(TRAINING_TTS_API, {
+            body: JSON.stringify({ text: trainingSpeechText }),
+            headers: { 'Content-Type': 'application/json' },
+            method: 'POST',
+            signal: controller.signal,
+          });
+
+          if (!response.ok) throw new Error(`Gemini TTS request failed: ${response.status}`);
+
+          const audioBlob = await response.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+
+          trainingAudioRef.current = audio;
+
+          audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            if (trainingAudioRef.current === audio) trainingAudioRef.current = null;
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(audioUrl);
+            if (trainingAudioRef.current === audio) trainingAudioRef.current = null;
+          };
+
+          await audio.play();
+        } catch {
+          // Strict Gemini-only mode: do not fallback to browser speech synthesis.
+        }
+      };
+
+      void playWithGeminiTTS();
+      spokenTrainingTextRef.current = trainingSpeechText;
+
+      return () => {
+        trainingAudioAbortRef.current?.abort();
+      };
+    }, [generating, isTrainingFlowMessage, trainingSpeechText]);
 
     const handleReactionClick = useCallback(
       (emoji: string) => {
