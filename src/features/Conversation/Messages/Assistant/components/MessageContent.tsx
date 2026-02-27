@@ -1,13 +1,13 @@
 import { LOADING_FLAT } from '@lobechat/const';
 import { type UIChatMessage } from '@lobechat/types';
 import { Block, Button, Flexbox, Text } from '@lobehub/ui';
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
 
 import { ReactionDisplay } from '../../../components/Reaction';
-import { messageStateSelectors, useConversationStore } from '../../../store';
+import { dataSelectors, messageStateSelectors, useConversationStore } from '../../../store';
 import { CollapsedMessage } from '../../AssistantGroup/components/CollapsedMessage';
 import DisplayContent from '../../components/DisplayContent';
 import FileChunks from '../../components/FileChunks';
@@ -21,6 +21,50 @@ interface TrainingOption {
   key: 'A' | 'B' | 'C';
   raw: string;
 }
+
+interface TrainingRecognitionResult {
+  0: { transcript: string };
+  isFinal: boolean;
+}
+
+interface TrainingRecognitionEvent extends Event {
+  results: ArrayLike<TrainingRecognitionResult>;
+}
+
+interface TrainingSpeechRecognition {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onend: null | (() => void);
+  onerror: null | ((event: Event) => void);
+  onresult: null | ((event: TrainingRecognitionEvent) => void);
+  start: () => void;
+  stop: () => void;
+}
+
+interface TrainingSpeechRecognitionWindow extends Window {
+  SpeechRecognition?: new () => TrainingSpeechRecognition;
+  webkitSpeechRecognition?: new () => TrainingSpeechRecognition;
+}
+
+type VoiceSupportState = 'supported' | 'unsupported';
+
+const RU = {
+  actionsLabel: 'Варианты действий:',
+  answerByVoice: 'Ответить голосом',
+  choose: 'Выбрать',
+  client: 'клиент',
+  hotkeysHint: 'Горячие клавиши: A / B / C',
+  listening: 'Идет запись... говорите',
+  noVoiceSupport: 'В этом браузере нет голосового ввода',
+  recognized: 'Распознано',
+  score: 'Счет',
+  stopRecording: 'Остановить запись',
+  timer: 'Осталось',
+  timerExpired: 'Время вышло',
+  variant: 'Вариант',
+  you: 'Вы',
+} as const;
 
 const parseOptionLine = (line: string): TrainingOption | null => {
   const trimmed = line.trim();
@@ -59,6 +103,7 @@ const extractTrainingSpeechText = (text?: string): string | null => {
 };
 
 const SCORE_TAG_REGEX = /\[CURRENT_SCORE:\s*(-?\d+)\]/g;
+const CLIENT_ROLE_REGEX = new RegExp(`^(\\s*\\**)(${RU.client})(:\\**\\s*)`, 'i');
 const TURQUOISE_BUTTON_STYLE = {
   backgroundColor: '#14b8a6',
   borderColor: '#14b8a6',
@@ -66,35 +111,106 @@ const TURQUOISE_BUTTON_STYLE = {
 };
 
 const OPTION_BLOCK_STYLE = {
-  border: '1px solid #99f6e4',
-  borderRadius: 10,
-  padding: '8px 10px',
+  background: 'linear-gradient(180deg, #f0fdfa 0%, #ffffff 100%)',
+  border: '1px solid #5eead4',
+  borderRadius: 12,
+  padding: '10px 12px',
+};
+const ROUND_PANEL_STYLE = {
+  background: 'linear-gradient(90deg, #f0fdfa 0%, #ecfeff 100%)',
+  border: '1px solid #5eead4',
+  borderRadius: 12,
+  padding: '8px 12px',
+  position: 'sticky' as const,
+  top: 8,
+  zIndex: 2,
 };
 
 const TRAINING_TTS_API = '/webapi/tts/google';
+let activeTrainingAudio: HTMLAudioElement | null = null;
+let activeTrainingAudioUrl: string | null = null;
+let activeTrainingAudioAbortController: AbortController | null = null;
+let lastAutoPlayedMessageId: string | null = null;
+
+const stopTrainingAudio = () => {
+  activeTrainingAudioAbortController?.abort();
+  activeTrainingAudioAbortController = null;
+
+  if (activeTrainingAudio) {
+    activeTrainingAudio.pause();
+    activeTrainingAudio.currentTime = 0;
+    activeTrainingAudio = null;
+  }
+
+  if (activeTrainingAudioUrl) {
+    URL.revokeObjectURL(activeTrainingAudioUrl);
+    activeTrainingAudioUrl = null;
+  }
+};
+
+const normalizeTrainingDisplayContent = (rawContent: string) => {
+  const withoutOptionsAndScore = rawContent
+    .split('\n')
+    .filter((line) => parseOptionLine(line) === null)
+    .join('\n')
+    .replaceAll(SCORE_TAG_REGEX, '')
+    .trim();
+
+  let clientRoleCount = 0;
+  return withoutOptionsAndScore
+    .split('\n')
+    .map((line) => {
+      if (!CLIENT_ROLE_REGEX.test(line)) return line;
+
+      clientRoleCount += 1;
+      if (clientRoleCount <= 1) return line;
+
+      return line.replace(CLIENT_ROLE_REGEX, `$1${RU.you}$2`);
+    })
+    .join('\n');
+};
 
 const MessageContent = memo<UIChatMessage>(
   ({ id, tools, content, chunksList, search, imageList, metadata, ...props }) => {
     const markdownProps = useMarkdown(id);
-    // Use ConversationStore instead of ChatStore
     const generating = useConversationStore(messageStateSelectors.isMessageGenerating(id));
     const isCollapsed = useConversationStore(messageStateSelectors.isMessageCollapsed(id));
     const isReasoning = useConversationStore(messageStateSelectors.isMessageInReasoning(id));
     const addReaction = useConversationStore((s) => s.addReaction);
     const removeReaction = useConversationStore((s) => s.removeReaction);
     const sendMessage = useConversationStore((s) => s.sendMessage);
+    const latestAssistantMessageId = useConversationStore((s) => {
+      const lastAssistant = dataSelectors
+        .displayMessages(s)
+        .slice()
+        .reverse()
+        .find((message) => message.role === 'assistant');
+
+      return lastAssistant?.id;
+    });
     const userId = useUserStore(userProfileSelectors.userId)!;
+
+    const [isVoiceListening, setIsVoiceListening] = useState(false);
+    const [isReplayLoading, setIsReplayLoading] = useState(false);
+    const [voiceLastTranscript, setVoiceLastTranscript] = useState('');
+    const [selectedOptionKey, setSelectedOptionKey] = useState<TrainingOption['key'] | null>(null);
+    const [isSubmittingAnswer, setIsSubmittingAnswer] = useState(false);
+    const [roundTimeLeft, setRoundTimeLeft] = useState(30);
+    const [voiceSupport] = useState<VoiceSupportState>(() => {
+      if (typeof window === 'undefined') return 'unsupported';
+
+      const speechWindow = window as TrainingSpeechRecognitionWindow;
+      return speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition
+        ? 'supported'
+        : 'unsupported';
+    });
 
     const isToolCallGenerating = generating && (content === LOADING_FLAT || !content) && !!tools;
 
     const showSearch = !!search && !!search.citations?.length;
     const showImageItems = !!imageList && imageList.length > 0;
-    const spokenTrainingTextRef = useRef<string | null>(null);
-    const trainingAudioRef = useRef<HTMLAudioElement | null>(null);
-    const trainingAudioAbortRef = useRef<AbortController | null>(null);
+    const speechRecognitionRef = useRef<TrainingSpeechRecognition | null>(null);
 
-    // remove \n to avoid empty content
-    // refs: https://github.com/lobehub/lobe-chat/pull/6153
     const showReasoning =
       (!!props.reasoning && props.reasoning.content?.trim() !== '') ||
       (!props.reasoning && isReasoning);
@@ -113,7 +229,7 @@ const MessageContent = memo<UIChatMessage>(
     }, [content]);
 
     const isTrainingFlowMessage = useMemo(
-      () => options.length > 0 || content?.includes('Варианты действий:'),
+      () => options.length > 0 || content?.includes(RU.actionsLabel),
       [content, options.length],
     );
 
@@ -131,12 +247,7 @@ const MessageContent = memo<UIChatMessage>(
     const displayContent = useMemo(() => {
       if (!content) return content;
 
-      return content
-        .split('\n')
-        .filter((line) => parseOptionLine(line) === null)
-        .join('\n')
-        .replaceAll(SCORE_TAG_REGEX, '')
-        .trim();
+      return normalizeTrainingDisplayContent(content);
     }, [content]);
 
     const trainingSpeechText = useMemo(
@@ -144,23 +255,28 @@ const MessageContent = memo<UIChatMessage>(
       [displayContent, isTrainingFlowMessage],
     );
 
-    useEffect(() => {
-      if (!isTrainingFlowMessage || generating) return;
-      if (!trainingSpeechText) return;
-      if (spokenTrainingTextRef.current === trainingSpeechText) return;
-      if (typeof window === 'undefined') return;
+    const handleOptionClick = useCallback(
+      async (option: TrainingOption) => {
+        setSelectedOptionKey(option.key);
+        setIsSubmittingAnswer(true);
+        await sendMessage({ message: `${RU.variant} ${option.key}: ${option.description}` });
+      },
+      [sendMessage],
+    );
 
-      const playWithGeminiTTS = async () => {
-        trainingAudioAbortRef.current?.abort();
-        trainingAudioRef.current?.pause();
-        trainingAudioRef.current = null;
+    const playTrainingSpeech = useCallback(
+      async (text: string) => {
+        if (typeof window === 'undefined') return;
+
+        setIsReplayLoading(true);
+        stopTrainingAudio();
 
         const controller = new AbortController();
-        trainingAudioAbortRef.current = controller;
+        activeTrainingAudioAbortController = controller;
 
         try {
           const response = await fetch(TRAINING_TTS_API, {
-            body: JSON.stringify({ text: trainingSpeechText }),
+            body: JSON.stringify({ text }),
             headers: { 'Content-Type': 'application/json' },
             method: 'POST',
             signal: controller.signal,
@@ -172,30 +288,91 @@ const MessageContent = memo<UIChatMessage>(
           const audioUrl = URL.createObjectURL(audioBlob);
           const audio = new Audio(audioUrl);
 
-          trainingAudioRef.current = audio;
-
+          activeTrainingAudio = audio;
+          activeTrainingAudioUrl = audioUrl;
           audio.onended = () => {
-            URL.revokeObjectURL(audioUrl);
-            if (trainingAudioRef.current === audio) trainingAudioRef.current = null;
+            if (activeTrainingAudio === audio) {
+              activeTrainingAudio = null;
+            }
+            if (activeTrainingAudioUrl === audioUrl) {
+              URL.revokeObjectURL(audioUrl);
+              activeTrainingAudioUrl = null;
+            }
           };
           audio.onerror = () => {
-            URL.revokeObjectURL(audioUrl);
-            if (trainingAudioRef.current === audio) trainingAudioRef.current = null;
+            if (activeTrainingAudio === audio) {
+              activeTrainingAudio = null;
+            }
+            if (activeTrainingAudioUrl === audioUrl) {
+              URL.revokeObjectURL(audioUrl);
+              activeTrainingAudioUrl = null;
+            }
           };
 
           await audio.play();
         } catch {
           // Strict Gemini-only mode: do not fallback to browser speech synthesis.
+        } finally {
+          setIsReplayLoading(false);
+        }
+      },
+      [setIsReplayLoading],
+    );
+
+    const handleReplayClick = useCallback(() => {
+      if (!trainingSpeechText) return;
+      void playTrainingSpeech(trainingSpeechText);
+    }, [playTrainingSpeech, trainingSpeechText]);
+
+    const handleStopReplayClick = useCallback(() => {
+      stopTrainingAudio();
+      setIsReplayLoading(false);
+    }, []);
+
+    const handleVoiceAnswerClick = useCallback(() => {
+      if (typeof window === 'undefined') return;
+
+      const speechWindow = window as TrainingSpeechRecognitionWindow;
+      const RecognitionClass = speechWindow.SpeechRecognition || speechWindow.webkitSpeechRecognition;
+
+      if (!RecognitionClass) return;
+
+      if (isVoiceListening) {
+        speechRecognitionRef.current?.stop();
+        setIsVoiceListening(false);
+        return;
+      }
+
+      const recognition = new RecognitionClass();
+      speechRecognitionRef.current = recognition;
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'ru-RU';
+
+      recognition.onresult = (event) => {
+        const transcript = Array.from(event.results)
+          .map((result) => result[0]?.transcript?.trim())
+          .filter((item): item is string => !!item && item.length > 0)
+          .join(' ')
+          .trim();
+
+        if (transcript.length > 0) {
+          setVoiceLastTranscript(transcript);
+          setIsSubmittingAnswer(true);
+          void sendMessage({ message: transcript });
         }
       };
 
-      void playWithGeminiTTS();
-      spokenTrainingTextRef.current = trainingSpeechText;
-
-      return () => {
-        trainingAudioAbortRef.current?.abort();
+      recognition.onerror = () => {
+        setIsVoiceListening(false);
       };
-    }, [generating, isTrainingFlowMessage, trainingSpeechText]);
+      recognition.onend = () => {
+        setIsVoiceListening(false);
+      };
+
+      setIsVoiceListening(true);
+      recognition.start();
+    }, [isVoiceListening, sendMessage]);
 
     const handleReactionClick = useCallback(
       (emoji: string) => {
@@ -206,8 +383,17 @@ const MessageContent = memo<UIChatMessage>(
           addReaction(id, emoji);
         }
       },
-      [id, reactions, addReaction, removeReaction, userId],
+      [addReaction, id, reactions, removeReaction, userId],
     );
+
+    const isLatestTrainingMessage = id === latestAssistantMessageId && isTrainingFlowMessage;
+    const isRoundListening = isVoiceListening || isReplayLoading || !!activeTrainingAudio;
+    const isRoundReview = generating || isSubmittingAnswer;
+    const roundStage: 'listen' | 'respond' | 'review' = isRoundListening
+      ? 'listen'
+      : isRoundReview
+        ? 'review'
+        : 'respond';
 
     const isActive = useCallback(
       (emoji: string) => {
@@ -217,11 +403,97 @@ const MessageContent = memo<UIChatMessage>(
       [reactions, userId],
     );
 
-    const handleOptionClick = useCallback(
-      async (option: string) => {
-        await sendMessage({ message: option });
+    useEffect(() => {
+      if (id !== latestAssistantMessageId || !isTrainingFlowMessage) return;
+      const resetTimeout = window.setTimeout(() => {
+        setRoundTimeLeft(30);
+        setIsSubmittingAnswer(false);
+        setSelectedOptionKey(null);
+      }, 0);
+
+      return () => {
+        window.clearTimeout(resetTimeout);
+      };
+    }, [id, isTrainingFlowMessage, latestAssistantMessageId]);
+
+    useEffect(() => {
+      if (!isLatestTrainingMessage) return;
+      if (roundStage !== 'respond') return;
+      if (roundTimeLeft <= 0) return;
+
+      const timerId = window.setTimeout(() => {
+        setRoundTimeLeft((value) => Math.max(0, value - 1));
+      }, 1000);
+
+      return () => {
+        window.clearTimeout(timerId);
+      };
+    }, [isLatestTrainingMessage, roundStage, roundTimeLeft]);
+
+    useEffect(() => {
+      if (!isSubmittingAnswer) return;
+      if (generating) return;
+      if (!isLatestTrainingMessage) return;
+
+      const timeout = window.setTimeout(() => {
+        setIsSubmittingAnswer(false);
+      }, 600);
+
+      return () => {
+        window.clearTimeout(timeout);
+      };
+    }, [generating, isLatestTrainingMessage, isSubmittingAnswer]);
+
+    useEffect(() => {
+      if (!isTrainingFlowMessage || generating) return;
+      if (!trainingSpeechText) return;
+      if (id !== latestAssistantMessageId) return;
+      if (lastAutoPlayedMessageId === id) return;
+
+      void playTrainingSpeech(trainingSpeechText);
+      lastAutoPlayedMessageId = id;
+    }, [
+      generating,
+      id,
+      isTrainingFlowMessage,
+      latestAssistantMessageId,
+      playTrainingSpeech,
+      trainingSpeechText,
+    ]);
+
+    useEffect(() => {
+      if (!isTrainingFlowMessage) return;
+      if (id !== latestAssistantMessageId) return;
+      if (options.length === 0) return;
+      if (typeof window === 'undefined') return;
+
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.defaultPrevented) return;
+        if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+        const target = event.target as HTMLElement | null;
+        const tagName = target?.tagName?.toLowerCase();
+        if (tagName === 'input' || tagName === 'textarea' || target?.isContentEditable) return;
+
+        const key = event.key.toUpperCase();
+        const option = options.find((item) => item.key === key);
+        if (!option) return;
+
+        event.preventDefault();
+        void handleOptionClick(option);
+      };
+
+      window.addEventListener('keydown', onKeyDown);
+      return () => {
+        window.removeEventListener('keydown', onKeyDown);
+      };
+    }, [handleOptionClick, id, isTrainingFlowMessage, latestAssistantMessageId, options]);
+
+    useEffect(
+      () => () => {
+        speechRecognitionRef.current?.stop();
       },
-      [sendMessage],
+      [],
     );
 
     if (isCollapsed) return <CollapsedMessage content={content} id={id} />;
@@ -244,23 +516,116 @@ const MessageContent = memo<UIChatMessage>(
         />
         {(options.length > 0 || score !== null) && (
           <Flexbox gap={8}>
-            {options.map((option) => (
-              <Block key={`${id}-${option.raw}`} style={OPTION_BLOCK_STYLE} variant={'outlined'}>
+            {isLatestTrainingMessage && (
+              <Block style={ROUND_PANEL_STYLE} variant={'outlined'}>
                 <Flexbox gap={6}>
-                  <Flexbox horizontal align={'center'}>
-                    <Text style={{ color: '#14b8a6' }}>-</Text>
+                  <Flexbox horizontal justify={'space-between'}>
+                    <Text style={{ color: '#0f766e', fontWeight: 700 }}>Раунд</Text>
+                    <Text fontSize={12} type={'secondary'}>
+                      {roundStage === 'listen'
+                        ? 'Слушаем'
+                        : roundStage === 'review'
+                          ? 'Разбор'
+                          : 'Отвечаем'}
+                    </Text>
+                  </Flexbox>
+                  <Text
+                    fontSize={12}
+                    style={{ color: roundTimeLeft <= 5 ? '#dc2626' : '#0f766e', fontWeight: 600 }}
+                  >
+                    {roundTimeLeft > 0
+                      ? `${RU.timer}: ${roundTimeLeft}с`
+                      : `${RU.timerExpired}. ${RU.answerByVoice.toLowerCase()} или выберите вариант`}
+                  </Text>
+                  <Flexbox horizontal style={{ gap: 6 }}>
+                    {(['listen', 'respond', 'review'] as const).map((step) => (
+                      <Block
+                        key={step}
+                        style={{
+                          backgroundColor: step === roundStage ? '#14b8a6' : '#ccfbf1',
+                          borderRadius: 999,
+                          color: step === roundStage ? '#ffffff' : '#0f766e',
+                          fontSize: 12,
+                          padding: '2px 10px',
+                        }}
+                      >
+                        {step === 'listen' ? 'Слушаем' : step === 'respond' ? 'Отвечаем' : 'Разбор'}
+                      </Block>
+                    ))}
+                  </Flexbox>
+                </Flexbox>
+              </Block>
+            )}
+            <Flexbox horizontal gap={8} style={{ flexWrap: 'wrap' }}>
+              <Button
+                loading={isReplayLoading}
+                size={'small'}
+                style={TURQUOISE_BUTTON_STYLE}
+                variant={'filled'}
+                onClick={handleReplayClick}
+              >
+                Play
+              </Button>
+              <Button
+                disabled={!activeTrainingAudio}
+                size={'small'}
+                style={TURQUOISE_BUTTON_STYLE}
+                variant={'filled'}
+                onClick={handleStopReplayClick}
+              >
+                Stop
+              </Button>
+              <Button
+                disabled={voiceSupport === 'unsupported'}
+                size={'small'}
+                style={TURQUOISE_BUTTON_STYLE}
+                variant={'filled'}
+                onClick={handleVoiceAnswerClick}
+              >
+                {isVoiceListening ? RU.stopRecording : RU.answerByVoice}
+              </Button>
+            </Flexbox>
+            <Text fontSize={12} type={'secondary'}>
+              {voiceSupport === 'unsupported'
+                ? RU.noVoiceSupport
+                : isVoiceListening
+                  ? RU.listening
+                  : RU.hotkeysHint}
+            </Text>
+            {voiceLastTranscript && (
+              <Text fontSize={12} style={{ color: '#0f766e' }}>
+                {`${RU.recognized}: ${voiceLastTranscript}`}
+              </Text>
+            )}
+            {options.map((option) => (
+              <Block
+                key={`${id}-${option.raw}`}
+                variant={'outlined'}
+                style={{
+                  ...OPTION_BLOCK_STYLE,
+                  border:
+                    selectedOptionKey === option.key ? '2px solid #0f766e' : OPTION_BLOCK_STYLE.border,
+                  boxShadow:
+                    selectedOptionKey === option.key
+                      ? '0 0 0 3px rgba(20, 184, 166, 0.15)'
+                      : 'none',
+                }}
+              >
+                <Flexbox gap={6}>
+                  <Flexbox horizontal align={'center'} justify={'space-between'}>
+                    <Text style={{ color: '#0f766e', fontWeight: 700 }}>{`${RU.variant} ${option.key}`}</Text>
                     <Button
                       size={'small'}
                       style={TURQUOISE_BUTTON_STYLE}
                       variant={'filled'}
                       onClick={() => {
-                        void handleOptionClick(option.raw);
+                        void handleOptionClick(option);
                       }}
                     >
-                      {`Вариант ${option.key}`}
+                      {`${RU.choose} (${option.key})`}
                     </Button>
                   </Flexbox>
-                  <Text fontSize={12} type={'secondary'}>
+                  <Text fontSize={14} style={{ color: '#0f172a', lineHeight: 1.5 }}>
                     {option.description}
                   </Text>
                 </Flexbox>
@@ -274,7 +639,7 @@ const MessageContent = memo<UIChatMessage>(
                   style={TURQUOISE_BUTTON_STYLE}
                   variant={'filled'}
                 >
-                  {`Счет: ${score}`}
+                  {`${RU.score}: ${score}`}
                 </Button>
               </Block>
             )}

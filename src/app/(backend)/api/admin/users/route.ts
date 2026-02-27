@@ -129,14 +129,18 @@ export async function POST(req: NextRequest) {
       updatedAt: now,
     });
 
-    // Initialize user (creates inbox session, etc.)
-    const userService = new UserService(serverDB);
-    await userService.initUser({
-      id: userId,
-      email,
-      username: null,
-      createdAt: now,
-    });
+    // Initialize user (onboarding, analytics). Non-fatal: user already created.
+    try {
+      const userService = new UserService(serverDB);
+      await userService.initUser({
+        id: userId,
+        email,
+        username: null,
+        createdAt: now,
+      });
+    } catch (initError) {
+      console.error('Admin create user: initUser failed (user created):', initError);
+    }
 
     // Insert user code record
     const userCodeId = createNanoId(12)();
