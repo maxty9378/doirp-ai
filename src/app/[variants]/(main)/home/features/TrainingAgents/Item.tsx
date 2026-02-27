@@ -23,13 +23,13 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(({ preset, onClick, loadi
       clickable
       flex={'none'}
       justify={'space-between'}
-      minHeight={TRAINING_CARD_MIN_HEIGHT}
       variant={'filled'}
       width={TRAINING_CARD_WIDTH}
       style={{
         backgroundColor: cssVar.colorFillQuaternary,
         borderRadius: cssVar.borderRadiusLG,
         cursor: loading ? 'wait' : 'pointer',
+        minHeight: TRAINING_CARD_MIN_HEIGHT,
         opacity: loading ? 0.7 : 1,
         overflow: 'hidden',
       }}

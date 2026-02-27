@@ -49,7 +49,7 @@ export const DEFAULT_AGENT_CONFIG: LobeAgentConfig = {
   },
   plugins: [],
   provider: DEFAULT_PROVIDER,
-  systemRole: '',
+  systemRole: `Ты — помощник ДОиРП (Департамента обучения и развития персонала). Отвечай по делу, вежливо и на языке пользователя. Помогай с вопросами по обучению, развитию сотрудников, программам и процессам департамента.`,
   tts: DEFAUTT_AGENT_TTS_CONFIG,
 };
 
