@@ -51,6 +51,7 @@ const wideScreen = (s: GlobalState) => !s.status.noWideScreen;
 const chatInputHeight = (s: GlobalState) => s.status.chatInputHeight || 64;
 const expandInputActionbar = (s: GlobalState) => s.status.expandInputActionbar;
 const isStatusInit = (s: GlobalState) => !!s.isStatusInit;
+const isVoiceCallActive = (s: GlobalState) => !!s.isVoiceCallActive;
 
 const getAgentSystemRoleExpanded =
   (agentId: string) =>
@@ -89,6 +90,7 @@ export const systemStatusSelectors = {
   isNotificationRead,
   isShowCredit,
   isStatusInit,
+  isVoiceCallActive,
   language,
   leftPanelWidth,
   mobileShowPortal,

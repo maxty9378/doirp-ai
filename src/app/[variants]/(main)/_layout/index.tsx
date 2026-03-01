@@ -6,7 +6,7 @@ import { cx } from 'antd-style';
 import { type FC } from 'react';
 import { lazy, Suspense } from 'react';
 import { HotkeysProvider } from 'react-hotkeys-hook';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 
 import { DndContextWrapper } from '@/app/[variants]/(main)/resource/features/DndContextWrapper';
 import Loading from '@/components/Loading/BrandTextLoading';
@@ -39,6 +39,8 @@ const CloudBanner = dynamic(() => import('@/features/AlertBanner/CloudBanner'));
 
 const Layout: FC = () => {
   const { isPWA } = usePlatform();
+  const { pathname } = useLocation();
+  const isVoiceCall = pathname.startsWith('/voice-call');
   const { showCloudPromotion } = useServerConfigStore(featureFlagsSelectors);
   const {
     initialValues: feedbackInitialValues,
@@ -73,9 +75,11 @@ const Layout: FC = () => {
           <NavPanel />
           <DesktopLayoutContainer>
             <MarketAuthProvider isDesktop={isDesktop}>
-              <DesktopHomeLayout>
-                <DesktopHome />
-              </DesktopHomeLayout>
+              {!isVoiceCall && (
+                <DesktopHomeLayout>
+                  <DesktopHome />
+                </DesktopHomeLayout>
+              )}
               <Suspense fallback={<Loading debugId="DesktopMainLayout > Outlet" />}>
                 <Outlet />
               </Suspense>

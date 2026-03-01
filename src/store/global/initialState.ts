@@ -178,6 +178,11 @@ export interface SystemStatus {
 }
 
 export interface GlobalState {
+  /**
+   * When true, the embedded voice call is active (e.g. Полевой боец).
+   * Used to hide/disable the main chat input during the call.
+   */
+  isVoiceCallActive?: boolean;
   hasNewVersion?: boolean;
   initClientDBError?: Error;
   initClientDBMigrations?: {

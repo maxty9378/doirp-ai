@@ -8,8 +8,10 @@ import ChatMiniMap from '@/features/ChatMiniMap';
 import { ChatList, ConversationProvider, TodoProgress } from '@/features/Conversation';
 import ZenModeToast from '@/features/ZenModeToast';
 import { useOperationState } from '@/hooks/useOperationState';
+import { useGlobalStore } from '@/store/global';
 import { useChatStore } from '@/store/chat';
 import { messageMapKey } from '@/store/chat/utils/messageMapKey';
+import { systemStatusSelectors } from '@/store/global/selectors';
 
 import WelcomeChatItem from './AgentWelcome';
 import ChatHydration from './ChatHydration';
@@ -29,6 +31,7 @@ const log = debug('lobe-render:agent:ConversationArea');
  */
 const Conversation = memo(() => {
   const context = useAgentContext();
+  const isVoiceCallActive = useGlobalStore(systemStatusSelectors.isVoiceCallActive);
 
   // Get raw dbMessages from ChatStore for this context
   // ConversationStore will parse them internally to generate displayMessages
@@ -70,7 +73,7 @@ const Conversation = memo(() => {
         <ChatList welcome={<WelcomeChatItem />} />
       </Flexbox>
       <TodoProgress />
-      <MainChatInput />
+      {!isVoiceCallActive && <MainChatInput />}
       <ChatHydration />
       <ThreadHydration />
       <ChatMiniMap />
