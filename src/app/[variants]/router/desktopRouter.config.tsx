@@ -378,6 +378,25 @@ export const desktopRoutes: RouteConfig[] = [
         path: 'video',
       },
 
+      // Voice call (Gemini Live) routes
+      {
+        children: [
+          {
+            element: dynamicElement(
+              () => import('../(main)/voice-call'),
+              'Desktop > Voice Call',
+            ),
+            index: true,
+          },
+        ],
+        element: dynamicElement(
+          () => import('../(main)/voice-call/_layout'),
+          'Desktop > Voice Call > Layout',
+        ),
+        errorElement: <ErrorBoundary resetPath="/" />,
+        path: 'voice-call',
+      },
+
       // Image routes
       {
         children: [

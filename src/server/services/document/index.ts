@@ -1,9 +1,7 @@
 import { type LobeChatDatabase } from '@lobechat/database';
 import { type DocumentItem } from '@lobechat/database/schemas';
-import { documents, files } from '@lobechat/database/schemas';
 import { loadFile } from '@lobechat/file-loaders';
 import debug from 'debug';
-import { and, eq } from 'drizzle-orm';
 
 import { DocumentModel } from '@/database/models/document';
 import { FileModel } from '@/database/models/file';
@@ -144,48 +142,44 @@ export class DocumentService {
   }
 
   /**
-   * Delete document (recursively deletes children if it's a folder)
+   * Soft-delete (archive) document. It stays in DB and appears in archive; purged after 24h if not restored.
    */
   async deleteDocument(id: string) {
-    const document = await this.documentModel.findById(id);
-    if (!document) return;
-
-    // If it's a folder, recursively delete all children first
-    if (document.fileType === 'custom/folder') {
-      const children = await this.db.query.documents.findMany({
-        where: eq(documents.parentId, id),
-      });
-
-      // Recursively delete all children
-      for (const child of children) {
-        await this.deleteDocument(child.id);
-      }
-
-      // Also delete all files in this folder
-      const childFiles = await this.db.query.files.findMany({
-        where: and(eq(files.parentId, id), eq(files.userId, this.userId)),
-      });
-
-      for (const file of childFiles) {
-        await this.fileModel.delete(file.id);
-      }
-    }
-
-    // Delete the associated file record if it exists
-    if (document.fileId) {
-      await this.fileModel.delete(document.fileId);
-    }
-
-    // Finally delete the document itself
     return this.documentModel.delete(id);
   }
 
   /**
-   * Delete multiple documents in batch
+   * Soft-delete multiple documents in batch
    */
   async deleteDocuments(ids: string[]) {
-    // Delete each document (which handles recursive deletion for folders)
     await Promise.all(ids.map((id) => this.deleteDocument(id)));
+  }
+
+  /**
+   * List soft-deleted (archived) documents for the current user
+   */
+  async queryDeletedDocuments(params?: {
+    current?: number;
+    fileTypes?: string[];
+    pageSize?: number;
+    sourceTypes?: string[];
+  }) {
+    return this.documentModel.queryDeleted(params);
+  }
+
+  /**
+   * Restore a soft-deleted document
+   */
+  async restoreDocument(id: string) {
+    return this.documentModel.restore(id);
+  }
+
+  /**
+   * Permanently remove documents that have been in archive longer than 24h
+   */
+  async purgeDeletedOlderThan24h(): Promise<number> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return this.documentModel.purgeDeletedOlderThan(cutoff);
   }
 
   /**

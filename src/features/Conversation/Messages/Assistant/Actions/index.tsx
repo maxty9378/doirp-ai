@@ -123,17 +123,19 @@ export const AssistantActionsBar = memo<AssistantActionsBarProps>(
     }, [actionsConfig?.extraMenuActions, id]);
 
     // Use external config if provided, otherwise use defaults
-    // Append extra actions from factories
+    // Append extra actions from factories (insertOnPage first when in page scope)
     const barItems = useMemo(() => {
       const base =
         actionsConfig?.bar ??
         (hasTools
           ? [defaultActions.delAndRegenerate, defaultActions.copy]
           : [defaultActions.edit, defaultActions.copy]);
-      return [...base, ...extraBarItems];
+      const insertFirst = defaultActions.insertOnPage ? [defaultActions.insertOnPage] : [];
+      return [...insertFirst, ...base, ...extraBarItems];
     }, [
       actionsConfig?.bar,
       hasTools,
+      defaultActions.insertOnPage,
       defaultActions.delAndRegenerate,
       defaultActions.copy,
       defaultActions.edit,
@@ -141,6 +143,7 @@ export const AssistantActionsBar = memo<AssistantActionsBarProps>(
     ]);
 
     const menuItems = useMemo(() => {
+      const insertFirst = defaultActions.insertOnPage ? [defaultActions.insertOnPage, defaultActions.divider] : [];
       const base = actionsConfig?.menu ?? [
         defaultActions.edit,
         defaultActions.copy,
@@ -155,9 +158,10 @@ export const AssistantActionsBar = memo<AssistantActionsBarProps>(
         defaultActions.delAndRegenerate,
         defaultActions.del,
       ];
-      return [...base, ...extraMenuItems];
+      return [...insertFirst, ...base, ...extraMenuItems];
     }, [
       actionsConfig?.menu,
+      defaultActions.insertOnPage,
       defaultActions.edit,
       defaultActions.copy,
       collapseAction,

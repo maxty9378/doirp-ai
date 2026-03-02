@@ -2,8 +2,9 @@
 
 import { useEditor } from '@lobehub/editor/react';
 import { type ReactNode } from 'react';
-import { memo } from 'react';
+import { memo, useCallback } from 'react';
 
+import { InsertOnPageProvider } from './InsertOnPageContext';
 import { createStore, Provider } from './store';
 import { type StoreUpdaterProps } from './StoreUpdater';
 import StoreUpdater from './StoreUpdater';
@@ -31,6 +32,7 @@ export const PageEditorProvider = memo<PageEditorProviderProps>(
     emoji,
   }) => {
     const editor = useEditor();
+    const getEditor = useCallback(() => editor ?? null, [editor]);
 
     return (
       <Provider
@@ -51,6 +53,7 @@ export const PageEditorProvider = memo<PageEditorProviderProps>(
           })
         }
       >
+        <InsertOnPageProvider getEditor={getEditor}>
         <StoreUpdater
           emoji={emoji}
           knowledgeBaseId={knowledgeBaseId}
@@ -65,6 +68,7 @@ export const PageEditorProvider = memo<PageEditorProviderProps>(
           onTitleChange={onTitleChange}
         />
         {children}
+        </InsertOnPageProvider>
       </Provider>
     );
   },

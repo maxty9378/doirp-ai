@@ -77,7 +77,7 @@ import { default as zhipu } from './zhipu';
 type ModelsMap = Record<string, AiFullModelCard[]>;
 
 /** Единственная разрешённая модель Google в интерфейсе (жёсткое ограничение). */
-const GOOGLE_SINGLE_MODEL_ID = 'gemini-2.5-pro';
+const GOOGLE_SINGLE_MODEL_ID = 'gemini-3-flash-preview';
 
 const buildDefaultModelList = (map: ModelsMap): LobeDefaultAiModelListItem[] => {
   let models: LobeDefaultAiModelListItem[] = [];

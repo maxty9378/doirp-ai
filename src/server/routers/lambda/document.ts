@@ -182,6 +182,34 @@ export const documentRouter = router({
       return ctx.documentService.queryDocuments(input);
     }),
 
+  queryDeletedDocuments: documentProcedure
+    .input(
+      z
+        .object({
+          current: z.number().optional(),
+          fileTypes: z.array(z.string()).optional(),
+          pageSize: z.number().optional(),
+          sourceTypes: z.array(z.string()).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const result = await ctx.documentService.queryDeletedDocuments(input);
+      // Purge documents deleted >24h in background (no await to avoid delaying response)
+      void ctx.documentService.purgeDeletedOlderThan24h();
+      return result;
+    }),
+
+  restoreDocument: documentProcedure
+    .input(z.object({ id: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.documentService.restoreDocument(input.id);
+    }),
+
+  purgeDeletedOlderThan24h: documentProcedure.mutation(async ({ ctx }) => {
+    return ctx.documentService.purgeDeletedOlderThan24h();
+  }),
+
   updateDocument: documentProcedure
     .input(
       z.object({

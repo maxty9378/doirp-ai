@@ -15,9 +15,6 @@ const getFilteredDocuments = (s: PageState): LobeDocument[] => {
 
   let result = docs;
 
-  // Filter out documents with sourceType='file'
-  result = result.filter((doc: LobeDocument) => doc.sourceType !== 'file');
-
   // Filter by library membership
   if (showOnlyPagesNotInLibrary) {
     result = result.filter((doc: LobeDocument) => {

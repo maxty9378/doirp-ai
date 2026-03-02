@@ -1,14 +1,11 @@
-import { flatten } from 'es-toolkit/compat';
 import { type MetadataRoute } from 'next';
 import qs from 'query-string';
-import urlJoin from 'url-join';
 
 import { serverFeatureFlags } from '@/config/featureFlags';
 import { DEFAULT_LANG } from '@/const/locale';
 import { SITEMAP_BASE_URL } from '@/const/url';
 import { type Locales } from '@/locales/resources';
 import { locales as allLocales } from '@/locales/resources';
-import { DiscoverService } from '@/server/services/discover';
 import { getCanonicalUrl } from '@/server/utils/url';
 import { isDev } from '@/utils/env';
 
@@ -33,30 +30,20 @@ export enum SitemapType {
 
 export const LAST_MODIFIED = new Date().toISOString();
 
-// Number of items per page
-const ITEMS_PER_PAGE = 100;
-
 export class Sitemap {
   sitemapIndexs = [{ id: SitemapType.Pages }, { id: SitemapType.Providers }];
 
-  private discoverService = new DiscoverService();
-
-  // Get total number of plugin pages
+  // No market/discover usage: sitemap only includes static pages (no /community/agent|plugin|model|provider from LobeHub market)
   async getPluginPageCount(): Promise<number> {
-    const list = await this.discoverService.getPluginIdentifiers();
-    return Math.ceil(list.length / ITEMS_PER_PAGE);
+    return 0;
   }
 
-  // Get total number of assistant pages
   async getAssistantPageCount(): Promise<number> {
-    const list = await this.discoverService.getAssistantIdentifiers();
-    return Math.ceil(list.length / ITEMS_PER_PAGE);
+    return 0;
   }
 
-  // Get total number of model pages
   async getModelPageCount(): Promise<number> {
-    const list = await this.discoverService.getModelIdentifiers();
-    return Math.ceil(list.length / ITEMS_PER_PAGE);
+    return 0;
   }
 
   private _generateSitemapLink(url: string) {
@@ -203,103 +190,20 @@ export class Sitemap {
     ].join('\n');
   }
 
-  async getAssistants(page?: number): Promise<MetadataRoute.Sitemap> {
-    const list = await this.discoverService.getAssistantIdentifiers();
-
-    if (page !== undefined) {
-      const startIndex = (page - 1) * ITEMS_PER_PAGE;
-      const endIndex = startIndex + ITEMS_PER_PAGE;
-      const pageAssistants = list.slice(startIndex, endIndex);
-
-      const sitmap = pageAssistants
-        .filter((item) => item.identifier) // Filter out items with empty identifiers
-        .map((item) =>
-          this._genSitemap(urlJoin('/community/agent', item.identifier), {
-            lastModified: item?.lastModified || LAST_MODIFIED,
-          }),
-        );
-      return flatten(sitmap);
-    }
-
-    // If page number is not specified, return all (backward compatibility)
-    const sitmap = list
-      .filter((item) => item.identifier) // Filter out items with empty identifiers
-      .map((item) =>
-        this._genSitemap(urlJoin('/community/agent', item.identifier), {
-          lastModified: item?.lastModified || LAST_MODIFIED,
-        }),
-      );
-    return flatten(sitmap);
+  async getAssistants(_page?: number): Promise<MetadataRoute.Sitemap> {
+    return [];
   }
 
-  async getPlugins(page?: number): Promise<MetadataRoute.Sitemap> {
-    const list = await this.discoverService.getPluginIdentifiers();
-
-    if (page !== undefined) {
-      const startIndex = (page - 1) * ITEMS_PER_PAGE;
-      const endIndex = startIndex + ITEMS_PER_PAGE;
-      const pagePlugins = list.slice(startIndex, endIndex);
-
-      const sitmap = pagePlugins
-        .filter((item) => item.identifier) // Filter out items with empty identifiers
-        .map((item) =>
-          this._genSitemap(urlJoin('/community/plugin', item.identifier), {
-            lastModified: item?.lastModified || LAST_MODIFIED,
-          }),
-        );
-      return flatten(sitmap);
-    }
-
-    // If page number is not specified, return all (backward compatibility)
-    const sitmap = list
-      .filter((item) => item.identifier) // Filter out items with empty identifiers
-      .map((item) =>
-        this._genSitemap(urlJoin('/community/plugin', item.identifier), {
-          lastModified: item?.lastModified || LAST_MODIFIED,
-        }),
-      );
-    return flatten(sitmap);
+  async getPlugins(_page?: number): Promise<MetadataRoute.Sitemap> {
+    return [];
   }
 
-  async getModels(page?: number): Promise<MetadataRoute.Sitemap> {
-    const list = await this.discoverService.getModelIdentifiers();
-
-    if (page !== undefined) {
-      const startIndex = (page - 1) * ITEMS_PER_PAGE;
-      const endIndex = startIndex + ITEMS_PER_PAGE;
-      const pageModels = list.slice(startIndex, endIndex);
-
-      const sitmap = pageModels
-        .filter((item) => item.identifier) // Filter out items with empty identifiers
-        .map((item) =>
-          this._genSitemap(urlJoin('/community/model', item.identifier), {
-            lastModified: item?.lastModified || LAST_MODIFIED,
-          }),
-        );
-      return flatten(sitmap);
-    }
-
-    // If page number is not specified, return all (backward compatibility)
-    const sitmap = list
-      .filter((item) => item.identifier) // Filter out items with empty identifiers
-      .map((item) =>
-        this._genSitemap(urlJoin('/community/model', item.identifier), {
-          lastModified: item?.lastModified || LAST_MODIFIED,
-        }),
-      );
-    return flatten(sitmap);
+  async getModels(_page?: number): Promise<MetadataRoute.Sitemap> {
+    return [];
   }
 
   async getProviders(): Promise<MetadataRoute.Sitemap> {
-    const list = await this.discoverService.getProviderIdentifiers();
-    const sitmap = list
-      .filter((item) => item.identifier) // Filter out items with empty identifiers
-      .map((item) =>
-        this._genSitemap(urlJoin('/community/provider', item.identifier), {
-          lastModified: item?.lastModified || LAST_MODIFIED,
-        }),
-      );
-    return flatten(sitmap);
+    return [];
   }
 
   async getPage(): Promise<MetadataRoute.Sitemap> {

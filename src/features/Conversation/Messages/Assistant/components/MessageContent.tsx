@@ -1,8 +1,11 @@
 import { LOADING_FLAT } from '@lobechat/const';
 import { type UIChatMessage } from '@lobechat/types';
 import { Block, Button, Flexbox, Text } from '@lobehub/ui';
+import { App } from 'antd';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
+import { useInsertOnPageContext } from '@/features/PageEditor/InsertOnPageContext';
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
 
@@ -170,9 +173,15 @@ const normalizeTrainingDisplayContent = (rawContent: string) => {
     .join('\n');
 };
 
+const INSERT_ON_PAGE_BUTTON_STYLE = { marginTop: 6 } as const;
+
 const MessageContent = memo<UIChatMessage>(
   ({ id, tools, content, chunksList, search, imageList, metadata, ...props }) => {
+    const { t } = useTranslation('chat');
+    const { message: messageApi } = App.useApp();
     const markdownProps = useMarkdown(id);
+    const context = useConversationStore((s) => s.context);
+    const insertOnPageContext = useInsertOnPageContext();
     const generating = useConversationStore(messageStateSelectors.isMessageGenerating(id));
     const isCollapsed = useConversationStore(messageStateSelectors.isMessageCollapsed(id));
     const isReasoning = useConversationStore(messageStateSelectors.isMessageInReasoning(id));
@@ -496,6 +505,33 @@ const MessageContent = memo<UIChatMessage>(
       [],
     );
 
+    const handleInsertOnPage = useCallback(() => {
+      if (!insertOnPageContext) return;
+      const editor = insertOnPageContext.getEditor();
+      if (!editor) {
+        messageApi.warning(t('pageEditor.editorNotReady', { ns: 'file' }));
+        return;
+      }
+      const text = (content || '').trim();
+      if (!text) return;
+      try {
+        const current = (editor.getDocument('markdown') as unknown as string) || '';
+        const newContent = current.trim() ? `${current}\n\n${text}` : text;
+        editor.setDocument('markdown', newContent);
+        messageApi.success(t('pageEditor.insertSuccess', { ns: 'file' }));
+        editor.focus?.();
+      } catch (err) {
+        console.error('[insertOnPage]', err);
+        messageApi.error(t('pageEditor.insertError', { ns: 'file' }));
+      }
+    }, [content, insertOnPageContext, messageApi, t]);
+
+    const showInsertOnPage =
+      context?.scope === 'page' &&
+      !!insertOnPageContext &&
+      !generating &&
+      !!(content || '').trim();
+
     if (isCollapsed) return <CollapsedMessage content={content} id={id} />;
 
     return (
@@ -514,6 +550,13 @@ const MessageContent = memo<UIChatMessage>(
           markdownProps={markdownProps}
           tempDisplayContent={metadata?.tempDisplayContent}
         />
+        {showInsertOnPage && (
+          <Flexbox justify={'flex-end'} style={INSERT_ON_PAGE_BUTTON_STYLE}>
+            <Button size={'small'} type={'primary'} onClick={handleInsertOnPage}>
+              {t('messageAction.insertOnPage', { defaultValue: 'Вставить на страницу' })}
+            </Button>
+          </Flexbox>
+        )}
         {(options.length > 0 || score !== null) && (
           <Flexbox gap={8}>
             {isLatestTrainingMessage && (

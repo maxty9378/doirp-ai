@@ -82,6 +82,12 @@ cd packages/[package-name] && bunx vitest run --silent='passed-only' '[file-path
 - **Dev**: Translate `locales/zh-CN/namespace.json` locale file only for preview
 - DON'T run `pnpm i18n`, let CI auto handle it
 
+### Язык интерфейса (русский)
+
+- Весь пользовательский интерфейс — на **русском языке**. Кнопки, подсказки, сообщения, заголовки.
+- При добавлении или правке UI-текстов используй русский. В `defaultValue` для i18n указывай русские строки.
+- Если в коде или в интерфейсе встречается текст не на русском — замени на русский. Подробнее: `.cursor/rules/russian-ui.mdc`.
+
 ## Linear Issue Management
 
 Follow [Linear rules in CLAUDE.md](CLAUDE.md#linear-issue-management-ignore-if-not-installed-linear-mcp) when working with Linear issues.

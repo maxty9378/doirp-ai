@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -7,7 +7,7 @@ import { AudioStreamer } from './AudioStreamer';
 const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 
-const LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+const LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-latest';
 
 const PCM_IN_SAMPLE_RATE = 16_000;
 const PCM_OUT_SAMPLE_RATE = 24_000;
@@ -27,15 +27,16 @@ const PATIENCE_INITIAL = 100;
 const MUMBLE_VOLUME_THRESHOLD = 5;
 const MUMBLE_DURATION_MS = 10_000;
 const MUMBLE_COOLDOWN_MS = 30_000;
+const SILENCE_HARD_HANGUP_MS = 45_000;
 const MONOLOGUE_DURATION_MS = 15_000;
 const MONOLOGUE_VOLUME_THRESHOLD = 10;
-const AMBIENT_AUDIO_URL = '/audio/ambient-store.mp3';
+const AMBIENT_AUDIO_URL = '/audio/ambient-store.mp3?v=20260302';
 
-/** Очищает английские размышления и теги */
+/** РћС‡РёС‰Р°РµС‚ Р°РЅРіР»РёР№СЃРєРёРµ СЂР°Р·РјС‹С€Р»РµРЅРёСЏ Рё С‚РµРіРё */
 function cleanAiText(text: string): string {
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-  cleaned = cleaned.replace(/\*.*?\*/g, '');
-  cleaned = cleaned.replace(/[a-zA-Z]+/g, '');
+  cleaned = cleaned.replace(/\[CURRENT_SCORE:\s*-?\d+\]/gi, '');
+  cleaned = cleaned.replace(/\s+/g, ' ');
   return cleaned.trim();
 }
 
@@ -68,7 +69,7 @@ export function useGeminiLive({
   const [hangUpByLpr, setHangUpByLpr] = useState(false);
   const [subtitle, setSubtitle] = useState('');
 
-  // Внутренний чат тренажера
+  // Р’РЅСѓС‚СЂРµРЅРЅРёР№ С‡Р°С‚ С‚СЂРµРЅР°Р¶РµСЂР°
   const [liveTranscript, setLiveTranscript] = useState<TranscriptEntry[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -90,6 +91,7 @@ export function useGeminiLive({
 
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const currentAiTurnTextRef = useRef('');
+  const pendingScoreDeltaRef = useRef(0);
 
   const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(null);
   const recognitionActiveRef = useRef(false);
@@ -103,6 +105,7 @@ export function useGeminiLive({
   const monologueTriggeredRef = useRef(false);
   const silenceSinceRef = useRef<number>(0);
   const silenceCooldownRef = useRef<number>(0);
+  const silenceNudgeCountRef = useRef(0);
   const disconnectRef = useRef<() => void>(() => {});
   const hangUpToneRef = useRef<() => void>(() => {});
   const hangupScheduledRef = useRef(false);
@@ -178,7 +181,9 @@ export function useGeminiLive({
       setLiveTranscript([]);
 
       currentAiTurnTextRef.current = '';
+      pendingScoreDeltaRef.current = 0;
       hangupScheduledRef.current = false;
+      silenceNudgeCountRef.current = 0;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -211,29 +216,31 @@ export function useGeminiLive({
           const ambient = new Audio(AMBIENT_AUDIO_URL);
           ambient.loop = true;
           ambient.volume = 0.15;
-          ambient
-            .play()
-            .then(() => {
-              ambientRef.current = ambient;
-            })
-            .catch(() => {});
+          ambient.preload = 'auto';
+          ambientRef.current = ambient;
+          ambient.play().catch(() => {
+            const retry = () => {
+              ambient.play().catch(() => {});
+            };
+            window.addEventListener('pointerdown', retry, { once: true });
+          });
         } else {
           ambientRef.current.play().catch(() => {});
         }
-      } catch (_) {}
+      } catch {}
 
       if (!configFetchedRef.current || !configRef.current || lastAgentIdRef.current !== agentId) {
         const res = await fetch(`/api/voice-call/config?agentId=${encodeURIComponent(agentId)}`, {
           credentials: 'include',
         });
-        if (!res.ok) throw new Error(`Ошибка загрузки конфига: ${res.status}`);
+        if (!res.ok) throw new Error(`РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РєРѕРЅС„РёРіР°: ${res.status}`);
         lastAgentIdRef.current = agentId;
         configRef.current = await res.json();
         configFetchedRef.current = true;
       }
 
       const config = configRef.current;
-      if (!config?.apiKey) throw new Error('Нет API-ключа Google.');
+      if (!config?.apiKey) throw new Error('РќРµС‚ API-РєР»СЋС‡Р° Google.');
 
       const url = `${GEMINI_LIVE_WS}?key=${encodeURIComponent(config.apiKey)}`;
       const ws = new WebSocket(url);
@@ -247,7 +254,7 @@ export function useGeminiLive({
                 turns: [
                   {
                     role: 'user',
-                    parts: [{ text: 'Начинай диалог. Скажи первую реплику от лица Марины Ивановны.' }],
+                    parts: [{ text: 'РќР°С‡РёРЅР°Р№ РґРёР°Р»РѕРі. РЎРєР°Р¶Рё РїРµСЂРІСѓСЋ СЂРµРїР»РёРєСѓ РѕС‚ Р»РёС†Р° РњР°СЂРёРЅС‹ РРІР°РЅРѕРІРЅС‹.' }],
                   },
                 ],
                 turnComplete: true,
@@ -301,7 +308,13 @@ export function useGeminiLive({
           if (!serverContent) return;
 
           if (serverContent.interrupted) {
+            const interruptedText = currentAiTurnTextRef.current.trim();
+            if (interruptedText) {
+              transcriptRef.current.push({ role: 'ai', text: interruptedText });
+              setLiveTranscript([...transcriptRef.current]);
+            }
             currentAiTurnTextRef.current = '';
+            pendingScoreDeltaRef.current = 0;
             return;
           }
 
@@ -315,43 +328,68 @@ export function useGeminiLive({
                 const textChunk = part.text;
 
                 if (
-                  textChunk.toLowerCase().includes('кладу трубку') &&
+                  textChunk.toLowerCase().includes('РєР»Р°РґСѓ С‚СЂСѓР±РєСѓ') &&
                   !hangupScheduledRef.current
                 ) {
                   hangupScheduledRef.current = true;
                   setHangUpByLpr(true);
-                  reportError('Марина Ивановна бросила трубку!');
+                  reportError('РњР°СЂРёРЅР° РРІР°РЅРѕРІРЅР° Р±СЂРѕСЃРёР»Р° С‚СЂСѓР±РєСѓ!');
                   setTimeout(() => {
                     hangUpToneRef.current();
                     disconnectRef.current();
                   }, 3500);
                 }
 
-                const cleaned = cleanAiText(textChunk);
-                if (cleaned) {
-                  currentAiTurnTextRef.current += cleaned + ' ';
+                const scoreMatches = textChunk.matchAll(/\[CURRENT_SCORE:\s*([-\d]+)\]/g);
+                for (const match of scoreMatches) {
+                  const val = Number.parseInt(match[1] || '', 10);
+                  if (!Number.isNaN(val)) pendingScoreDeltaRef.current += val;
                 }
               }
             }
           }
 
+          const rawTranscriptionText = serverContent.outputTranscription?.text ?? '';
+          const transcriptionScoreMatches = rawTranscriptionText.matchAll(/\[CURRENT_SCORE:\s*([-\d]+)\]/g);
+          for (const match of transcriptionScoreMatches) {
+            const val = Number.parseInt(match[1] || '', 10);
+            if (!Number.isNaN(val)) pendingScoreDeltaRef.current += val;
+          }
+
+          const transcriptionText = cleanAiText(rawTranscriptionText);
+          if (transcriptionText) {
+            currentAiTurnTextRef.current += transcriptionText + ' ';
+          }
+
           if (serverContent.turnComplete) {
             const turnText = currentAiTurnTextRef.current.trim();
+
+            if (pendingScoreDeltaRef.current !== 0) {
+              setScore((prev) => prev + pendingScoreDeltaRef.current);
+              pendingScoreDeltaRef.current = 0;
+            }
+
             if (turnText) {
               transcriptRef.current.push({ role: 'ai', text: turnText });
               setLiveTranscript([...transcriptRef.current]);
-              currentAiTurnTextRef.current = '';
             }
+            currentAiTurnTextRef.current = '';
           }
         } catch (e) {
-          console.warn('Ошибка парсинга:', e);
+          console.warn('РћС€РёР±РєР° РїР°СЂСЃРёРЅРіР°:', e);
         }
       };
 
-      ws.onerror = () => reportError('Ошибка WebSocket. Проверьте интернет.');
-      ws.onclose = () => {
+      ws.onerror = () => reportError('РћС€РёР±РєР° WebSocket. РџСЂРѕРІРµСЂСЊС‚Рµ РёРЅС‚РµСЂРЅРµС‚.');
+      ws.onclose = (event) => {
         wsRef.current = null;
-        if (!isSetupCompleteRef.current) connectionLockRef.current = false;
+        if (!isSetupCompleteRef.current) {
+          connectionLockRef.current = false;
+          reportError(
+            `Live-СЃРѕРµРґРёРЅРµРЅРёРµ Р·Р°РєСЂС‹С‚Рѕ РґРѕ СЃС‚Р°СЂС‚Р° (code: ${event.code}). РџСЂРѕРІРµСЂСЊС‚Рµ VPN/Р°РЅС‚РёРІРёСЂСѓСЃ/РїСЂРѕРєСЃРё Рё РґРѕСЃС‚СѓРї Рє generativelanguage.googleapis.com.`,
+          );
+          return;
+        }
         setStatus('idle');
       };
 
@@ -380,7 +418,7 @@ export function useGeminiLive({
       source.connect(workletNode);
     } catch (err) {
       connectionLockRef.current = false;
-      reportError(err instanceof Error ? err.message : 'Не удалось подключиться');
+      reportError(err instanceof Error ? err.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ');
     }
   }, [agentId, systemInstruction, voiceName, reportError, playConnectionTone]);
 
@@ -390,6 +428,7 @@ export function useGeminiLive({
 
     transcriptRef.current = [];
     setLiveTranscript([]);
+    pendingScoreDeltaRef.current = 0;
     recognitionActiveRef.current = false;
 
     try {
@@ -473,6 +512,7 @@ export function useGeminiLive({
       if (isPlayingRef.current) {
         lowVolumeSinceRef.current = 0;
         silenceSinceRef.current = 0;
+        silenceNudgeCountRef.current = 0;
         return;
       }
 
@@ -480,10 +520,23 @@ export function useGeminiLive({
         lowVolumeSinceRef.current = 0;
         if (silenceSinceRef.current === 0) {
           silenceSinceRef.current = now;
-        } else if (now - silenceSinceRef.current >= 15000 && now >= silenceCooldownRef.current) {
-          sendClientText('Собеседник молчит. Спроси: "Алло, вы меня вообще слушаете?"');
-          silenceCooldownRef.current = now + 30000;
-          silenceSinceRef.current = 0;
+        } else {
+          if (now - silenceSinceRef.current >= 15000 && now >= silenceCooldownRef.current) {
+            sendClientText('Собеседник молчит. Спроси: "Алло, вы меня вообще слушаете?"');
+            silenceCooldownRef.current = now + 15000;
+            silenceNudgeCountRef.current += 1;
+          }
+
+          if (now - silenceSinceRef.current >= SILENCE_HARD_HANGUP_MS && !hangupScheduledRef.current) {
+            hangupScheduledRef.current = true;
+            setHangUpByLpr(true);
+            reportError('Марина Ивановна завершила звонок: слишком долгое молчание.');
+            setTimeout(() => {
+              hangUpToneRef.current();
+              disconnectRef.current();
+            }, 1200);
+            return;
+          }
         }
       } else if (vol >= 3 && vol < MUMBLE_VOLUME_THRESHOLD) {
         silenceSinceRef.current = 0;
@@ -493,7 +546,7 @@ export function useGeminiLive({
           now - lowVolumeSinceRef.current >= MUMBLE_DURATION_MS &&
           now >= mumbleCooldownRef.current
         ) {
-          sendClientText('Собеседник говорит очень тихо, мямлит. Сделай ему жесткое замечание.');
+          sendClientText('РЎРѕР±РµСЃРµРґРЅРёРє РіРѕРІРѕСЂРёС‚ РѕС‡РµРЅСЊ С‚РёС…Рѕ, РјСЏРјР»РёС‚. РЎРґРµР»Р°Р№ РµРјСѓ Р¶РµСЃС‚РєРѕРµ Р·Р°РјРµС‡Р°РЅРёРµ.');
           mumbleCooldownRef.current = now + MUMBLE_COOLDOWN_MS;
           lowVolumeSinceRef.current = 0;
         }
@@ -549,7 +602,6 @@ export function useGeminiLive({
     const SR = win?.SpeechRecognition ?? win?.webkitSpeechRecognition;
     if (!SR) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const recognition = new (SR as any)();
     recognition.continuous = true;
     recognition.interimResults = false;
@@ -611,3 +663,4 @@ export function useGeminiLive({
     analyserRef,
   };
 }
+

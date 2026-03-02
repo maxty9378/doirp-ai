@@ -1,5 +1,7 @@
 import { type BuiltinAgentSlug } from '@lobechat/builtin-agents';
 import { BUILTIN_AGENT_SLUGS, getAgentRuntimeConfig } from '@lobechat/builtin-agents';
+import { DEFAULT_PROVIDER } from '@lobechat/business-const';
+import { DEFAULT_MODEL } from '@lobechat/const';
 import { PageAgentIdentifier } from '@lobechat/builtin-tool-page-agent';
 import { type LobeToolManifest } from '@lobechat/context-engine';
 import {
@@ -379,9 +381,14 @@ export const resolveAgentConfig = (ctx: AgentConfigResolverContext): ResolvedAge
   }
 
   // Merge runtime systemRole into agent config
+  // Page-agent: всегда Gemini, выбор модели пользователю не показываем
   const resolvedAgentConfig: LobeAgentConfig = {
     ...agentConfig,
     systemRole: resolvedSystemRole,
+    ...(slug === BUILTIN_AGENT_SLUGS.pageAgent && {
+      model: DEFAULT_MODEL,
+      provider: DEFAULT_PROVIDER,
+    }),
   };
 
   // Apply params adjustments based on chatConfig

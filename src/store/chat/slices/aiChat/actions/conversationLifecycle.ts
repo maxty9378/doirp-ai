@@ -217,12 +217,17 @@ export class ConversationLifecycleActionImpl {
       inputSendErrorMsg: undefined,
     });
 
-    // Check user token quota before sending (limits are tied to chat usage)
+    // Check user token quota before sending (allow up to overdraftLimit into negative)
     try {
       const limitsRes = await fetch('/api/user/token-limits');
       if (limitsRes.ok) {
-        const limits = (await limitsRes.json()) as { tokenQuota: number; remaining: number };
-        if (limits.tokenQuota > 0 && limits.remaining <= 0) {
+        const limits = (await limitsRes.json()) as {
+          tokenQuota: number;
+          remaining: number;
+          overdraftLimit?: number;
+        };
+        const overdraftLimit = limits.overdraftLimit ?? 10_000;
+        if (limits.tokenQuota > 0 && limits.remaining < -overdraftLimit) {
           this.#get().failOperation(operationId, {
             type: 'TokenQuotaExceeded',
             message: t('response.UserTokenQuotaExceeded', { ns: 'error' }),

@@ -7,15 +7,15 @@ import { ArrowUpIcon, PlusIcon } from 'lucide-react';
 import React, { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { message } from '@/components/AntdStaticMethods';
 import GuideModal from '@/components/GuideModal';
+import { mutate } from '@/libs/swr';
 import GuideVideo from '@/components/GuideVideo';
 import NavHeader from '@/features/NavHeader';
 import useNotionImport from '@/features/ResourceManager/components/Header/hooks/useNotionImport';
 import { useFileStore } from '@/store/file';
 import { usePageStore } from '@/store/page';
 import { DocumentSourceType } from '@/types/document';
-import { standardizeIdentifier } from '@/utils/identifier';
-
 const ICON_SIZE = 80;
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
@@ -46,6 +46,23 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     &:hover {
       background: ${cssVar.colorFillSecondary};
     }
+  `,
+  cardDisabled: css`
+    cursor: not-allowed;
+    opacity: 0.6;
+    pointer-events: none;
+
+    &:hover {
+      background: ${cssVar.colorFillTertiary};
+    }
+  `,
+  inDevelopment: css`
+    display: block;
+    margin-block-start: 4px;
+    font-size: 11px;
+    font-weight: 400;
+    opacity: 0.45;
+    color: ${cssVar.colorTextSecondary};
   `,
   glow: css`
     position: absolute;
@@ -85,12 +102,14 @@ const PageExplorerPlaceholder = memo<PageExplorerPlaceholderProps>(
       replaceTempPageWithReal,
       setSelectedPageId,
       fetchDocuments,
+      navigateToPage,
     ] = usePageStore((s) => [
       s.createNewPage,
       s.createOptimisticPage,
       s.replaceTempPageWithReal,
       s.setSelectedPageId,
       s.fetchDocuments,
+      s.navigateToPage,
     ]);
 
     // File operations from FileStore (for uploads and notion import)
@@ -232,19 +251,28 @@ const PageExplorerPlaceholder = memo<PageExplorerPlaceholderProps>(
             // Update selected page ID in store (with full ID including prefix)
             setSelectedPageId(parsedDocument.id, false);
 
-            // Update URL with stripped ID (without prefix)
-            const cleanId = standardizeIdentifier(parsedDocument.id);
-            const newPath = cleanId ? `/page/${cleanId}` : '/page';
-            window.history.replaceState({}, '', newPath);
+            // Navigate to the new page via React Router (so the app actually switches route; replaceState alone may not)
+            navigateToPage(parsedDocument.id);
+
+            // Invalidate SWR cache and refetch list so sidebar shows the new doc. If this fails, we already navigated.
+            try {
+              mutate(['pageDocuments']);
+              await fetchDocuments();
+            } catch (refreshErr) {
+              console.warn('Failed to refresh page list after upload:', refreshErr);
+            }
           } catch (error) {
             console.error('Failed to upload and parse file:', error);
-            // Remove temp document on error
             usePageStore.getState().removeTempPage(tempPageId);
+            const msg = error instanceof Error ? error.message : String(error);
+            message.error(t('pageEditor.uploadParseError', { ns: 'file', message: msg }));
             throw error;
           }
         }
       } catch (error) {
         console.error('Failed to upload file:', error);
+        const msg = error instanceof Error ? error.message : String(error);
+        message.error(t('pageEditor.uploadError', { ns: 'file', message: msg }));
       } finally {
         setIsUploading(false);
       }
@@ -293,7 +321,7 @@ const PageExplorerPlaceholder = memo<PageExplorerPlaceholderProps>(
                 style={{ opacity: isUploading ? 0.5 : 1 }}
               >
                 <span className={styles.actionTitle}>
-                  {isUploading ? 'Uploading...' : t('pageEditor.empty.uploadFiles')}
+                  {isUploading ? t('pageEditor.uploading', { ns: 'file' }) : t('pageEditor.empty.uploadFiles')}
                 </span>
                 <div className={styles.glow} style={{ background: cssVar.gold }} />
                 <FileTypeIcon
@@ -306,13 +334,15 @@ const PageExplorerPlaceholder = memo<PageExplorerPlaceholderProps>(
               </Flexbox>
             </Upload>
 
-            {/* Import from Notion */}
+            {/* Import from Notion (в разработке) */}
             <Flexbox
-              className={styles.card}
+              className={`${styles.card} ${styles.cardDisabled}`}
               padding={16}
-              onClick={notionImport.handleOpenNotionGuide}
             >
-              <span className={styles.actionTitle}>{t('pageEditor.empty.importNotion')}</span>
+              <span className={styles.actionTitle}>
+                {t('pageEditor.empty.importNotion')}
+                <span className={styles.inDevelopment}>В разработке</span>
+              </span>
               <div className={styles.glow} style={{ background: cssVar.geekblue }} />
               <FileTypeIcon
                 className={styles.icon}

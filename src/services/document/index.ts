@@ -63,6 +63,19 @@ export class DocumentService {
     await lambdaClient.document.deleteDocuments.mutate({ ids });
   }
 
+  async queryDeletedDocuments(params?: {
+    current?: number;
+    fileTypes?: string[];
+    pageSize?: number;
+    sourceTypes?: string[];
+  }): Promise<{ items: DocumentItem[]; total: number }> {
+    return lambdaClient.document.queryDeletedDocuments.query(params);
+  }
+
+  async restoreDocument(id: string): Promise<void> {
+    await lambdaClient.document.restoreDocument.mutate({ id });
+  }
+
   async updateDocument(params: UpdateDocumentParams): Promise<void> {
     await lambdaClient.document.updateDocument.mutate(params);
   }

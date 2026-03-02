@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { DEFAULT_AVATAR } from '@/const/meta';
 import PostCallReport, { type PostCallReportData } from './PostCallReport';
-import VoiceCallLobeChatTranscript from './VoiceCallLobeChatTranscript';
+import VoiceCallTranscript from './VoiceCallTranscript';
 import { useGeminiLive, type TranscriptEntry } from './useGeminiLive';
 
 const MIN_BAR_HEIGHT = 4;
@@ -125,12 +125,14 @@ const GeminiLiveCall = memo(({ agentId, autoConnect, embedded, onEnd }: GeminiLi
   const [showDebrief, setShowDebrief] = useState(false);
   const [debriefLoading, setDebriefLoading] = useState(false);
   const [reportData, setReportData] = useState<PostCallReportData | null>(null);
+  const [allowAutoConnect, setAllowAutoConnect] = useState(true);
 
   const [hint, setHint] = useState<string | null>(null);
   const [isHintLoading, setIsHintLoading] = useState(false);
 
   const handleCallEnd = useCallback(
     async (transcript: TranscriptEntry[]) => {
+      setAllowAutoConnect(false);
       if (!transcript.length) {
         if (onEnd) onEnd();
         else navigate('/');
@@ -165,6 +167,7 @@ const GeminiLiveCall = memo(({ agentId, autoConnect, embedded, onEnd }: GeminiLi
     userVolume,
     aiVolume,
     liveTranscript,
+    score,
   } = useGeminiLive({
     agentId,
     onCallEnd: handleCallEnd,
@@ -200,8 +203,8 @@ const GeminiLiveCall = memo(({ agentId, autoConnect, embedded, onEnd }: GeminiLi
   }, [getTranscript]);
 
   useEffect(() => {
-    if (autoConnect && status === 'idle' && !hangUpByLpr) connect();
-  }, [autoConnect, status, connect, hangUpByLpr]);
+    if (autoConnect && allowAutoConnect && status === 'idle' && !hangUpByLpr) connect();
+  }, [autoConnect, allowAutoConnect, status, connect, hangUpByLpr]);
 
   return (
     <div className={styles.root}>
@@ -286,7 +289,12 @@ const GeminiLiveCall = memo(({ agentId, autoConnect, embedded, onEnd }: GeminiLi
       </div>
 
       {isCallActive && (
-        <VoiceCallLobeChatTranscript scrollRef={scrollRef} transcript={liveTranscript} />
+        <VoiceCallTranscript 
+          scrollRef={scrollRef} 
+          transcript={liveTranscript} 
+          score={score} 
+          agentId={agentId} 
+        />
       )}
 
       {isCallActive && (

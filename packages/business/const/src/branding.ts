@@ -5,7 +5,7 @@
 export const LOBE_CHAT_CLOUD = 'LobeHub Cloud';
 
 export const BRANDING_NAME = 'ДОиРП AI';
-export const BRANDING_LOGO_URL = '';
+export const BRANDING_LOGO_URL = '/doirp_logo.png';
 
 export const ORG_NAME = 'ДОиРП AI';
 

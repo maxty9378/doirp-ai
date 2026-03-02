@@ -7,18 +7,27 @@ import { getDBInstance } from './web-server';
  */
 let cachedDB: LobeChatDatabase | null = null;
 
-export const getServerDB = async (): Promise<LobeChatDatabase> => {
-  // If there's already a cached instance, return it directly
+function getCachedOrNewDB(): LobeChatDatabase {
   if (cachedDB) return cachedDB;
-
   try {
-    // Select the appropriate database instance based on the environment
     cachedDB = getDBInstance();
     return cachedDB;
   } catch (error) {
     console.error('❌ Failed to initialize database:', error);
     throw error;
   }
+}
+
+export const getServerDB = async (): Promise<LobeChatDatabase> => {
+  return getCachedOrNewDB();
 };
 
-export const serverDB = getDBInstance();
+/**
+ * Synchronous DB access for code that cannot await (e.g. Better Auth adapter).
+ * Lazy: first use initializes the connection (after env is loaded).
+ */
+export const serverDB = new Proxy({} as LobeChatDatabase, {
+  get(_, prop) {
+    return (getCachedOrNewDB() as Record<string | symbol, unknown>)[prop];
+  },
+});

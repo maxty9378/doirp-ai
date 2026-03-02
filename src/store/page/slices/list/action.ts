@@ -126,6 +126,40 @@ export class ListActionImpl {
     await this.#get().fetchDocuments();
   };
 
+  fetchDeletedDocuments = async (): Promise<void> => {
+    try {
+      const result = await documentService.queryDeletedDocuments({
+        current: 0,
+        fileTypes: Array.from(ALLOWED_PAGE_FILE_TYPES),
+        pageSize: 100,
+        sourceTypes: Array.from(ALLOWED_PAGE_SOURCE_TYPES),
+      });
+
+      const deletedDocuments = result.items.filter(isAllowedPage).map((doc) => ({
+        ...doc,
+        filename: doc.filename ?? doc.title ?? 'Untitled',
+      })) as LobeDocument[];
+
+      this.#set({ deletedDocuments }, false, n('fetchDeletedDocuments/success'));
+    } catch (error) {
+      console.error('Failed to fetch deleted documents:', error);
+      this.#set({ deletedDocuments: [] }, false, n('fetchDeletedDocuments/error'));
+    }
+  };
+
+  restorePage = async (pageId: string): Promise<void> => {
+    await documentService.restoreDocument(pageId);
+    const { deletedDocuments } = this.#get();
+    if (deletedDocuments) {
+      this.#set(
+        { deletedDocuments: deletedDocuments.filter((d) => d.id !== pageId) },
+        false,
+        n('restorePage'),
+      );
+    }
+    await this.#get().fetchDocuments();
+  };
+
   setSearchKeywords = (keywords: string): void => {
     this.#set({ searchKeywords: keywords }, false, n('setSearchKeywords'));
   };

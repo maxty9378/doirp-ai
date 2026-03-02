@@ -1,103 +1,206 @@
 'use client';
 
+import { Avatar } from '@lobehub/ui';
 import { createStaticStyles } from 'antd-style';
 import { memo, type RefObject } from 'react';
 
 import type { TranscriptEntry } from './useGeminiLive';
 
 const styles = createStaticStyles(({ css }) => ({
-  transcriptLog: css`
+  transcriptWrap: css`
     width: 100%;
     flex: 1;
-    min-height: 150px;
-    overflow-y: auto;
-    background: rgba(15, 23, 42, 0.3);
-    border-radius: 16px;
-    padding: 16px;
-    margin-top: 24px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    margin-top: 24px;
+    background: var(--colorBgContainer);
+    border-radius: 16px;
+    border: 1px solid var(--colorBorderSecondary);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+  `,
+  transcriptHeader: css`
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--colorBorderSecondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--colorBgLayout);
+  `,
+  scoreWrap: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 500;
+  `,
+  scoreScale: css`
+    width: 100px;
+    height: 8px;
+    background: var(--colorFillSecondary);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+  `,
+  scoreFill: css`
+    height: 100%;
+    transition: width 0.3s ease, background 0.3s ease;
+  `,
+  transcriptLog: css`
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
     &::-webkit-scrollbar {
       width: 6px;
     }
     &::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.1);
+      background: var(--colorFillSecondary);
       border-radius: 4px;
     }
   `,
   placeholder: css`
     text-align: center;
     opacity: 0.5;
-    margin-top: 20px;
-    color: #fff;
+    margin-top: auto;
+    margin-bottom: auto;
+    color: var(--colorTextSecondary);
     font-size: 14px;
+  `,
+  bubbleRow: css`
+    display: flex;
+    width: 100%;
+    gap: 12px;
+  `,
+  rowAi: css`
+    flex-direction: row;
+  `,
+  rowUser: css`
+    flex-direction: row-reverse;
   `,
   bubbleWrap: css`
     display: flex;
-    width: 100%;
+    flex-direction: column;
+    max-width: 80%;
   `,
   bubbleAi: css`
-    justify-content: flex-start;
+    align-items: flex-start;
     .bubble-text {
-      background: rgba(99, 102, 241, 0.15);
-      border: 1px solid rgba(99, 102, 241, 0.25);
-      color: #e0e7ff;
-      border-radius: 16px 16px 16px 4px;
+      background: var(--colorFillTertiary);
+      color: var(--colorText);
+      border-radius: 12px 12px 12px 2px;
     }
   `,
   bubbleUser: css`
-    justify-content: flex-end;
+    align-items: flex-end;
     .bubble-text {
-      background: rgba(16, 185, 129, 0.15);
-      border: 1px solid rgba(16, 185, 129, 0.25);
-      color: #d1fae5;
-      border-radius: 16px 16px 4px 16px;
+      background: #1677ff;
+      color: #fff;
+      border-radius: 12px 12px 2px 12px;
     }
   `,
   bubbleText: css`
-    min-width: 160px;
-    max-width: 92%;
     padding: 12px 16px;
     font-size: 14px;
     line-height: 1.5;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   `,
   bubbleLabel: css`
-    font-size: 11px;
+    font-size: 12px;
     opacity: 0.6;
-    display: block;
     margin-bottom: 4px;
+    color: var(--colorTextSecondary);
+    padding: 0 4px;
+  `,
+  avatar: css`
+    flex-shrink: 0;
+    margin-top: 20px;
   `,
 }));
 
 const EMPTY_PLACEHOLDER = 'Поздоровайтесь с клиентом...';
 
 export interface VoiceCallTranscriptProps {
+  agentId: string;
+  score: number;
   scrollRef: RefObject<HTMLDivElement | null>;
   transcript: TranscriptEntry[];
 }
 
-const VoiceCallTranscript = memo(({ scrollRef, transcript }: VoiceCallTranscriptProps) => (
-  <div className={styles.transcriptLog} ref={scrollRef}>
-    {transcript.length === 0 ? (
-      <div className={styles.placeholder}>{EMPTY_PLACEHOLDER}</div>
-    ) : (
-      transcript.map((msg, i) => (
-        <div
-          key={i}
-          className={`${styles.bubbleWrap} ${msg.role === 'ai' ? styles.bubbleAi : styles.bubbleUser}`}
-        >
-          <div className={`bubble-text ${styles.bubbleText}`}>
-            <span className={styles.bubbleLabel}>
-              {msg.role === 'ai' ? 'Марина Ивановна' : 'Вы'}
-            </span>
-            {msg.text}
+const VoiceCallTranscript = memo(({ agentId, score, scrollRef, transcript }: VoiceCallTranscriptProps) => {
+  const getScoreColor = (s: number) => {
+    if (s < -10) return '#ff4d4f';
+    if (s > 10) return '#52c41a';
+    return '#faad14';
+  };
+
+  const getScoreLabel = (s: number) => {
+    if (s < -10) return 'ЛПР злится';
+    if (s > 10) return 'Лояльность растет';
+    return 'Нейтрально';
+  };
+
+  // Normalizing score for the bar (assuming -50 to 50 range roughly)
+  const normalizedScore = Math.max(0, Math.min(100, 50 + score));
+
+  const isLpr = agentId === 'voice-simulator-lpr' || agentId === 'training-tp-price-objection';
+  const aiName = isLpr ? 'Марина Ивановна' : 'Собеседник';
+
+  return (
+    <div className={styles.transcriptWrap}>
+      <div className={styles.transcriptHeader}>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>История диалога</div>
+        <div className={styles.scoreWrap}>
+          <span>{getScoreLabel(score)}</span>
+          <div className={styles.scoreScale}>
+            <div
+              className={styles.scoreFill}
+              style={{
+                width: `${normalizedScore}%`,
+                background: getScoreColor(score),
+              }}
+            />
           </div>
+          <span style={{ minWidth: 24, textAlign: 'right' }}>{score > 0 ? `+${score}` : score}</span>
         </div>
-      ))
-    )}
-  </div>
-));
+      </div>
+      
+      <div className={styles.transcriptLog} ref={scrollRef}>
+        {transcript.length === 0 ? (
+          <div className={styles.placeholder}>{EMPTY_PLACEHOLDER}</div>
+        ) : (
+          transcript.map((msg, i) => {
+            const isAi = msg.role === 'ai';
+            return (
+              <div
+                key={i}
+                className={`${styles.bubbleRow} ${isAi ? styles.rowAi : styles.rowUser}`}
+              >
+                <div className={styles.avatar}>
+                  {isAi ? (
+                    <Avatar avatar={isLpr ? '💼' : '🤖'} size={32} />
+                  ) : (
+                    <Avatar avatar={'😎'} background={'#1677ff'} size={32} />
+                  )}
+                </div>
+                
+                <div className={`${styles.bubbleWrap} ${isAi ? styles.bubbleAi : styles.bubbleUser}`}>
+                  <div className={styles.bubbleLabel}>{isAi ? aiName : 'Вы'}</div>
+                  <div className={`bubble-text ${styles.bubbleText}`}>
+                    {msg.text}
+                  </div>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+});
 
 VoiceCallTranscript.displayName = 'VoiceCallTranscript';
 

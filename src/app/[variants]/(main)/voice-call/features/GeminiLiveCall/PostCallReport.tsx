@@ -3,7 +3,7 @@
 import { Flexbox, Text } from '@lobehub/ui';
 import { Progress } from 'antd';
 import { createStaticStyles, cssVar } from 'antd-style';
-import { Award, MessageSquare, Target, TrendingUp } from 'lucide-react';
+import { Award, MessageSquare, Target, TrendingUp, Lightbulb } from 'lucide-react';
 import { memo } from 'react';
 
 export interface PostCallReportData {
@@ -12,6 +12,7 @@ export interface PostCallReportData {
   summary: string;
   strengths: string[];
   improvements: string[];
+  recommendedAction?: string;
   phraseFeedback: Array<{
     userPhrase: string;
     suggestedPhrase: string;
@@ -194,6 +195,18 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {data.recommendedAction && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>
+            <Lightbulb size={16} />
+            Рекомендация тренера
+          </div>
+          <div className={styles.summaryText} style={{ fontStyle: 'italic', background: 'var(--colorFillTertiary)', padding: 12, borderRadius: 8 }}>
+            {data.recommendedAction}
+          </div>
         </div>
       )}
 

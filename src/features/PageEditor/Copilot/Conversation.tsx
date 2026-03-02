@@ -1,3 +1,5 @@
+import { DEFAULT_PROVIDER } from '@lobechat/business-const';
+import { DEFAULT_MODEL } from '@lobechat/const';
 import { Flexbox } from '@lobehub/ui';
 import { memo, useCallback, useEffect, useMemo } from 'react';
 
@@ -6,11 +8,10 @@ import { actionMap } from '@/features/ChatInput/ActionBar/config';
 import { ActionBarContext } from '@/features/ChatInput/ActionBar/context';
 import { ChatInput, ChatList } from '@/features/Conversation';
 import { useAgentStore } from '@/store/agent';
-import { agentByIdSelectors } from '@/store/agent/selectors';
+import { agentByIdSelectors, builtinAgentSelectors } from '@/store/agent/selectors';
 import { useChatStore } from '@/store/chat';
 
 import AgentSelectorAction from './AgentSelector/AgentSelectorAction';
-import CopilotModelSelector from './CopilotModelSelector';
 import CopilotToolbar from './Toolbar';
 import Welcome from './Welcome';
 
@@ -28,16 +29,26 @@ interface ConversationProps {
 }
 
 const Conversation = memo<ConversationProps>(({ agentId }) => {
-  const [activeAgentId, setActiveAgentId, useFetchAgentConfig] = useAgentStore((s) => [
-    s.activeAgentId,
-    s.setActiveAgentId,
-    s.useFetchAgentConfig,
-  ]);
+  const pageAgentId = useAgentStore(builtinAgentSelectors.pageAgentId);
+  const [activeAgentId, setActiveAgentId, useFetchAgentConfig, updateAgentConfigById] =
+    useAgentStore((s) => [
+      s.activeAgentId,
+      s.setActiveAgentId,
+      s.useFetchAgentConfig,
+      s.updateAgentConfigById,
+    ]);
 
   useEffect(() => {
     setActiveAgentId(agentId);
     useChatStore.setState({ activeAgentId: agentId });
   }, [agentId, setActiveAgentId]);
+
+  // Агент страницы: не показываем выбор модели, всегда Gemini
+  useEffect(() => {
+    if (agentId && agentId === pageAgentId) {
+      updateAgentConfigById(agentId, { model: DEFAULT_MODEL, provider: DEFAULT_PROVIDER });
+    }
+  }, [agentId, pageAgentId, updateAgentConfigById]);
 
   const currentAgentId = activeAgentId || agentId;
 
@@ -69,11 +80,6 @@ const Conversation = memo<ConversationProps>(({ agentId }) => {
     [currentAgentId, handleAgentChange],
   );
 
-  const modelSelector = useMemo(
-    () => <CopilotModelSelector agentId={currentAgentId} />,
-    [currentAgentId],
-  );
-
   return (
     <DragUploadZone
       style={{ flex: 1, height: '100%', minWidth: 300 }}
@@ -89,7 +95,6 @@ const Conversation = memo<ConversationProps>(({ agentId }) => {
           allowExpand={false}
           leftActions={EMPTY_LEFT_ACTIONS}
           leftContent={leftContent}
-          sendAreaPrefix={modelSelector}
           sendButtonProps={COMPACT_SEND_BUTTON_PROPS}
         />
       </Flexbox>

@@ -1,24 +1,47 @@
-import { getLLMConfig } from '@/envs/llm';
-import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
+import fs from 'node:fs';
+import path from 'node:path';
+
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import path from 'path';
-import fs from 'fs';
 
 import { auth } from '@/auth';
+import { VOICE_CALL_PRESETS, VOICE_SIMULATOR_LPR_PRESET } from '@/config/initialAgents';
+import { getLLMConfig } from '@/envs/llm';
+import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 
 const GEMINI_TTS_MODEL = 'gemini-2.5-pro-preview-tts';
 const LEGEND_VOICE = 'Charon';
 const DEFAULT_SAMPLE_RATE = 24_000;
 const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
-const LEGEND_TEXT =
-  'Вы — торговый представитель. Заходите в локальную розничную точку. ' +
-  'ЛПР — Марина Ивановна, директор магазина. Она недовольна новым прайсом и готова вывести вашу позицию из матрицы. ' +
-  'Ваша задача — отработать возражение «Дорого» в живом голосовом диалоге.';
+const sanitizeAgentId = (agentId: string) => agentId.replaceAll(/[^\w-]/g, '-');
 
-/** Текст для Gemini: мужской голос, стиль трейлера */
-const TTS_PROMPT = `Прочитай как диктор трейлера к фильму: низким, уверенным мужским голосом, драматично и с паузами. Текст: ${LEGEND_TEXT}`;
+const buildLegendText = (preset: {
+  goals?: string[];
+  scenario_context?: string;
+  title?: string;
+  user_role?: string;
+}) => {
+  const scenario = preset.scenario_context ?? '';
+  const userRole = preset.user_role ?? '';
+  const goals = preset.goals?.length ? preset.goals.map((goal) => `- ${goal}`).join('\n') : '';
+
+  return [
+    preset.title ? `Сценарий: ${preset.title}` : '',
+    scenario ? `Легенда:\n${scenario}` : '',
+    userRole ? `Роль:\n${userRole}` : '',
+    goals ? `Цели:\n${goals}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
+};
+
+const buildTtsPrompt = (legendText: string) =>
+  [
+    'Прочитай как диктор трейлера к фильму: низким, уверенным мужским голосом, драматично и с паузами.',
+    'Говори только на русском языке.',
+    `Текст: ${legendText}`,
+  ].join(' ');
 
 const toWavFromPcm16 = (pcm16: Buffer, sampleRate = DEFAULT_SAMPLE_RATE) => {
   const channels = 1;
@@ -45,37 +68,38 @@ const toWavFromPcm16 = (pcm16: Buffer, sampleRate = DEFAULT_SAMPLE_RATE) => {
   return Buffer.concat([header, pcm16]);
 };
 
-const LEGEND_FILENAME = 'legend-polevoi-boez.wav';
-
 /**
  * POST /api/voice-call/generate-legend-audio
- * Генерирует озвучку легенды через Gemini TTS (мужской голос, стиль трейлера) и сохраняет в public/audio/legend-polevoi-boez.wav
+ * Body: { agentId?: string }
  */
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const body = (await request.json().catch(() => ({}))) as { agentId?: string };
+    const agentId = body.agentId || 'training-tp-price-objection';
+    const preset = VOICE_CALL_PRESETS[agentId] || VOICE_SIMULATOR_LPR_PRESET;
+
+    const legendText = buildLegendText(preset);
+    if (!legendText) {
+      return NextResponse.json({ error: 'Legend text is empty' }, { status: 400 });
     }
 
     const { GOOGLE_API_KEY } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
     if (!apiKey) {
-      return NextResponse.json(
-        { error: 'GOOGLE_API_KEY is not configured' },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: 'GOOGLE_API_KEY is not configured' }, { status: 503 });
     }
 
     const endpoint = `${GOOGLE_API_BASE}/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
     const googleResponse = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: TTS_PROMPT }] }],
+        contents: [{ parts: [{ text: buildTtsPrompt(legendText) }] }],
         generationConfig: {
           responseModalities: ['AUDIO'],
           speechConfig: {
@@ -108,10 +132,7 @@ export async function POST() {
     const inlineData = result?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
     const b64 = inlineData?.data;
     if (!b64) {
-      return NextResponse.json(
-        { error: 'Gemini returned empty audio' },
-        { status: 502 },
-      );
+      return NextResponse.json({ error: 'Gemini returned empty audio' }, { status: 502 });
     }
 
     const audioBuffer = Buffer.from(b64, 'base64');
@@ -121,15 +142,14 @@ export async function POST() {
         ? toWavFromPcm16(audioBuffer)
         : audioBuffer;
 
-    const publicDir = path.join(process.cwd(), 'public');
-    const audioDir = path.join(publicDir, 'audio');
+    const filename = `legend-${sanitizeAgentId(agentId)}.wav`;
+    const audioDir = path.join(process.cwd(), 'public', 'audio');
     fs.mkdirSync(audioDir, { recursive: true });
-    const filePath = path.join(audioDir, LEGEND_FILENAME);
-    fs.writeFileSync(filePath, wavBuffer);
+    fs.writeFileSync(path.join(audioDir, filename), wavBuffer);
 
     return NextResponse.json({
       ok: true,
-      url: `/audio/${LEGEND_FILENAME}`,
+      url: `/audio/${filename}`,
     });
   } catch (error) {
     console.error('[voice-call/generate-legend-audio]', error);

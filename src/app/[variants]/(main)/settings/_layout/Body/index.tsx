@@ -1,6 +1,7 @@
 'use client';
 
-import { Accordion, AccordionItem, Flexbox, Text } from '@lobehub/ui';
+import { Accordion, AccordionItem, Flexbox, Icon, Text } from '@lobehub/ui';
+import { ShieldCheck } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -52,9 +53,14 @@ const Body = memo(() => {
             paddingBlock={4}
             paddingInline={'8px 4px'}
             title={
-              <Text ellipsis fontSize={12} type={'secondary'} weight={500}>
-                {group.title}
-              </Text>
+              <Flexbox align={'center'} gap={6} horizontal>
+                {group.key === SettingsGroupKey.Admin && (
+                  <Icon icon={ShieldCheck} size={14} style={{ flexShrink: 0 }} />
+                )}
+                <Text ellipsis fontSize={12} type={'secondary'} weight={500}>
+                  {group.title}
+                </Text>
+              </Flexbox>
             }
           >
             <Flexbox gap={1} paddingBlock={1}>

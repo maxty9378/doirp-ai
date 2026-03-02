@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { getNavigableRoutes, getRouteById } from '@/config/routes';
 import { FEEDBACK } from '@/const/url';
 import { useFeedbackModal } from '@/hooks/useFeedbackModal';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 
 import { useCommandMenuContext } from './CommandMenuContext';
 import { CommandItem } from './components';
@@ -114,7 +115,9 @@ const MainMenu = memo(() => {
       </Command.Group>
 
       <Command.Group heading={t('cmdk.navigate')}>
-        {getNavigableRoutes().map((route) => {
+        {getNavigableRoutes()
+          .filter((route) => route.id !== 'community' || isAdmin)
+          .map((route) => {
           const RouteIcon = route.icon;
           const keywords = route.keywordsKey
             ? t(route.keywordsKey as any).split(' ')

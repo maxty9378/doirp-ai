@@ -1,3 +1,34 @@
+diff --git a/es/Image/components/usePreview.mjs b/es/Image/components/usePreview.mjs
+index 0000000000000000000000000000000000000000..2222222222222222222222222222222222222222 100644
+--- a/es/Image/components/usePreview.mjs
++++ b/es/Image/components/usePreview.mjs
+@@ -44,7 +44,7 @@ const usePreview = (props) => {
+ 			onOpenChange: (open) => {
+ 				setVisible(open);
+ 				onOpenChange?.(open);
+ 				onVisibleChange?.(open, !open);
+ 			},
+-			rootClassName: cx(styles.preview, rootClassName),
++			classNames: { root: cx(styles.preview, rootClassName) },
+ 			styles: { mask: { backdropFilter: "blur(8px)" } },
+ 			...rest
+ 		};
+diff --git a/es/Image/components/usePreviewGroup.mjs b/es/Image/components/usePreviewGroup.mjs
+index 0000000000000000000000000000000000000000..1111111111111111111111111111111111111111 100644
+--- a/es/Image/components/usePreviewGroup.mjs
++++ b/es/Image/components/usePreviewGroup.mjs
+@@ -42,7 +42,7 @@ const usePreview = (props) => {
+ 			onOpenChange: (open, info) => {
+ 				setVisible(open);
+ 				onOpenChange?.(open, info);
+ 				onVisibleChange?.(open, !open, info.current);
+ 			},
+-			rootClassName: cx(styles.preview, rootClassName),
++			classNames: { root: cx(styles.preview, rootClassName) },
+ 			...rest
+ 		};
+ 	}, [
+
 diff --git a/es/Modal/Modal.mjs b/es/Modal/Modal.mjs
 index 81ec2ee1e229209afd36d549caea2d838fbdd2e4..2f71314ab740561cafe7493fee77c9fedbd35637 100644
 --- a/es/Modal/Modal.mjs

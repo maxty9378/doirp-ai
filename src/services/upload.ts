@@ -143,6 +143,14 @@ class UploadService {
       pathname?: string;
     },
   ): Promise<FileMetadata> => {
+    // Use server proxy when enabled (avoids S3 CORS, e.g. Timeweb Cloud)
+    if (
+      typeof window !== 'undefined' &&
+      fileEnv.NEXT_PUBLIC_S3_UPLOAD_VIA_SERVER
+    ) {
+      return this.uploadViaServerProxy(file, { directory, onProgress, abortController });
+    }
+
     const xhr = new XMLHttpRequest();
 
     const { preSignUrl, ...result } = await this.getSignedUploadUrl(file, { directory, pathname });
@@ -209,6 +217,77 @@ class UploadService {
    * @param filename
    * @param fileType
    */
+  /**
+   * Upload file via server proxy (POST /api/upload/s3). Use when S3 CORS blocks direct PUT.
+   */
+  private uploadViaServerProxy = async (
+    file: File,
+    {
+      directory,
+      onProgress,
+      abortController,
+    }: {
+      abortController?: AbortController;
+      directory?: string;
+      onProgress?: (status: FileUploadStatus, state: FileUploadState) => void;
+    },
+  ): Promise<FileMetadata> => {
+    const startTime = Date.now();
+    const formData = new FormData();
+    formData.set('file', file);
+    if (directory) formData.set('directory', directory);
+
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+
+      if (abortController) {
+        abortController.signal.addEventListener('abort', () => {
+          xhr.abort();
+        });
+      }
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (event.lengthComputable && onProgress) {
+          const progress = Number(((event.loaded / event.total) * 100).toFixed(1));
+          const speedInByte = event.loaded / ((Date.now() - startTime) / 1000);
+          onProgress('uploading', {
+            progress: progress === 100 ? 99.9 : progress,
+            restTime: (event.total - event.loaded) / speedInByte,
+            speed: speedInByte,
+          });
+        }
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.('success', {
+            progress: 100,
+            restTime: 0,
+            speed: file.size / ((Date.now() - startTime) / 1000),
+          });
+          try {
+            const data = JSON.parse(xhr.responseText) as FileMetadata;
+            resolve(data);
+          } catch {
+            reject(new Error('Invalid server response'));
+          }
+        } else {
+          reject(new Error(xhr.responseText || xhr.statusText));
+        }
+      });
+      xhr.addEventListener('error', () => {
+        reject(new Error(xhr.status === 0 ? UPLOAD_NETWORK_ERROR : xhr.statusText));
+      });
+      xhr.addEventListener('abort', () => {
+        onProgress?.('cancelled', { progress: 0, restTime: 0, speed: 0 });
+        reject(new Error('Upload cancelled by user'));
+      });
+
+      xhr.open('POST', '/api/upload/s3');
+      xhr.send(formData);
+    });
+  };
+
   getImageFileByUrlWithCORS = async (url: string, filename: string, fileType = 'image/png') => {
     const res = await fetch(API_ENDPOINTS.proxy, { body: url, method: 'POST' });
     const data = await res.arrayBuffer();

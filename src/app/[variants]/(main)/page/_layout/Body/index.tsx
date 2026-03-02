@@ -10,11 +10,13 @@ import { pageSelectors, usePageStore } from '@/store/page';
 
 import Actions from './Actions';
 import AllPagesDrawer from './AllPagesDrawer';
+import ArchiveList from './ArchiveList';
 import List from './List';
 import { useDropdownMenu } from './useDropdownMenu';
 
 export enum GroupKey {
   AllPages = 'all-pages',
+  Archive = 'archive',
 }
 
 /**
@@ -68,6 +70,20 @@ const Body = memo(() => {
                 )}
               </Flexbox>
             )}
+          </Suspense>
+        </AccordionItem>
+        <AccordionItem
+          itemKey={GroupKey.Archive}
+          paddingBlock={4}
+          paddingInline={'8px 4px'}
+          title={
+            <Text ellipsis fontSize={12} type={'secondary'} weight={500}>
+              {t('pageList.archive')}
+            </Text>
+          }
+        >
+          <Suspense fallback={<SkeletonList />}>
+            <ArchiveList />
           </Suspense>
         </AccordionItem>
       </Accordion>

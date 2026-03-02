@@ -46,6 +46,7 @@
     "db:studio": "drizzle-kit studio",
     "db:visualize": "dbdocs build docs/development/database-schema.dbml --project lobe-chat",
     "seed:admin": "tsx scripts/seed-admin.ts",
+    "generate:legend-audio": "bun run scripts/generate-legend-audio.mts",
     "desktop:build:all": "npm run desktop:build:renderer:all && npm run desktop:build:main",
     "desktop:build:main": "npm run build:main --prefix=./apps/desktop",
     "desktop:build:renderer": "cross-env NODE_OPTIONS=--max-old-space-size=8192 NEXT_PUBLIC_IS_DESKTOP_APP=1 tsx scripts/electronWorkflow/buildNextApp.mts",
@@ -300,6 +301,9 @@
     "langchain": "^0.3.37",
     "langfuse": "^3.38.6",
     "langfuse-core": "^3.38.6",
+    "livekit-client": "^2.9.0",
+    "@livekit/components-react": "^2.6.0",
+    "livekit-server-sdk": "^2.9.0",
     "lucide-react": "^0.562.0",
     "mammoth": "^1.11.0",
     "marked": "^17.0.1",
@@ -486,6 +490,7 @@
       "ffmpeg-static"
     ],
     "overrides": {
+      "@base-ui/react": "^1.2.0",
       "@types/react": "19.2.13",
       "better-auth": "1.4.6",
       "better-call": "1.1.8",

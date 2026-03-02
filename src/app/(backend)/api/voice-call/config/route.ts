@@ -1,10 +1,40 @@
-import { getLLMConfig } from '@/envs/llm';
-import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 import { VOICE_CALL_PRESETS, VOICE_SIMULATOR_LPR_PRESET } from '@/config/initialAgents';
+import { getLLMConfig } from '@/envs/llm';
+import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
+
+const TP_PRICE_AGENT_ID = 'training-tp-price-objection';
+
+const buildTpPriceVoiceSystem = (preset: {
+  goals?: string[];
+  scenario_context?: string;
+  user_role?: string;
+}) => {
+  const scenario = preset.scenario_context ?? '';
+  const userRole = preset.user_role ?? '';
+  const goals = preset.goals?.length ? preset.goals.map((goal) => `- ${goal}`).join('\n') : '';
+
+  return [
+    'Ты — Марина Ивановна, директор магазина «У дома».',
+    'Идет живой разговор с опытным торговым представителем.',
+    'Говори только от лица Марины Ивановны.',
+    'Отвечай коротко (1-2 предложения), по-русски, без рассуждений и метакомментариев.',
+    'Держи жесткий тон и дави по возражению «Дорого», но реагируй на сильные аргументы о доходности, сервисе и маркетинговой поддержке.',
+    'Нельзя сводить переговоры к прямой скидке как единственному выходу.',
+    'После каждой своей реплики добавляй технический тег в конце: [CURRENT_SCORE: X], где X — накопительный счет.',
+    '',
+    `Легенда:\n${scenario}`,
+    '',
+    `Роль пользователя:\n${userRole}`,
+    '',
+    `Цели тренировки:\n${goals}`,
+  ]
+    .filter(Boolean)
+    .join('\n');
+};
 
 export async function GET(request: Request) {
   try {
@@ -30,17 +60,8 @@ export async function GET(request: Request) {
       );
     }
 
-    // Чистый промпт без тегов [SCORE], чтобы ИИ не зачитывал цифры вслух
-    const VOICE_TP_SYSTEM =
-      'Ты — Марина Ивановна, директор магазина. Идет телефонный разговор с торговым представителем.\n\n' +
-      'ПРАВИЛА:\n' +
-      '1. Отвечай мгновенно. Реплики ОЧЕНЬ короткие (1-2 предложения, руби с плеча).\n' +
-      '2. Говори ТОЛЬКО на русском языке. Никаких размышлений, тегов, звездочек или комментариев на английском. Только прямая речь персонажа вслух.\n' +
-      '3. Если торговый представитель хамит, грубит, спорит или не может ничего предложить, скажи ТОЛЬКО одну фразу: "Всё, я кладу трубку, до свидания!" и больше ничего не добавляй.\n\n' +
-      'Начни разговор прямо сейчас с фразы: "Что у вас с ценами? Конкуренты возят дешевле, я вас из матрицы выведу!"';
-
-    const isTpPrice = agentId === 'training-tp-price-objection';
-    const systemInstruction = isTpPrice ? VOICE_TP_SYSTEM : preset.systemRole;
+    const isTpPrice = agentId === TP_PRICE_AGENT_ID;
+    const systemInstruction = isTpPrice ? buildTpPriceVoiceSystem(preset) : preset.systemRole;
     const voiceName = isTpPrice ? 'Kore' : 'Charon';
 
     return NextResponse.json({

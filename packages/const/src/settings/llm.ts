@@ -1,4 +1,4 @@
-export const DEFAULT_MODEL = 'gemini-2.5-pro';
+export const DEFAULT_MODEL = 'gemini-3-flash-preview';
 export const DEFAULT_MINI_MODEL = 'gpt-5-mini';
 
 export const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';

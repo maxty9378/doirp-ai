@@ -12,6 +12,7 @@ import { ThreadModel } from '@/database/models/thread';
 import { TopicModel } from '@/database/models/topic';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
+import { checkTokenLimit } from '@/server/middleware/trackTokenUsage';
 import { AgentRuntimeService } from '@/server/services/agentRuntime';
 import { AiAgentService } from '@/server/services/aiAgent';
 import { AiChatService } from '@/server/services/aiChat';
@@ -516,6 +517,8 @@ export const aiAgentRouter = router({
     }),
 
   execAgent: aiAgentProcedure.input(ExecAgentSchema).mutation(async ({ input, ctx }) => {
+    await checkTokenLimit(ctx.userId);
+
     const { agentId, slug, prompt, appContext, autoStart = true, existingMessageIds = [] } = input;
 
     log('execAgent: identifier=%s, prompt=%s', agentId || slug, prompt.slice(0, 50));

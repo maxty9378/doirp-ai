@@ -10,6 +10,7 @@ import { auth } from '@/auth';
 import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
 import { ensureUserCodesSchema } from '@/server/services/admin/ensureUserCodesSchema';
+import { syncUserCodesUsage } from '@/server/services/admin/syncUserCodesUsage';
 import { UserService } from '@/server/services/user';
 
 function generateCode(): string {
@@ -39,20 +40,28 @@ export async function GET() {
   }
   try {
     await ensureUserCodesSchema();
+    await syncUserCodesUsage();
 
-    const list = await serverDB
+    const rows = await serverDB
       .select({
         code: userCodes.code,
         createdAt: userCodes.createdAt,
+        dailyImageCount: userCodes.dailyImageCount,
         email: userCodes.email,
         id: userCodes.id,
+        lastImageDate: userCodes.lastImageDate,
+        plainPassword: userCodes.plainPassword,
         tokenQuota: userCodes.tokenQuota,
         tokensUsed: userCodes.tokensUsed,
         userId: userCodes.userId,
       })
       .from(userCodes)
       .orderBy(desc(userCodes.createdAt));
-    return NextResponse.json({ users: list });
+    const usersList = rows.map(({ plainPassword, ...rest }) => ({
+      ...rest,
+      password: plainPassword ?? undefined,
+    }));
+    return NextResponse.json({ users: usersList });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error listing admin users:', error);
@@ -63,10 +72,12 @@ export async function GET() {
   }
 }
 
+const MIN_PASSWORD_LENGTH = 6;
+
 /**
- * POST /api/admin/users — create a user with email + generated code (admin only).
- * Body: { email: string, tokenQuota?: number }
- * Returns: { email: string, code: string, tokenQuota: number }
+ * POST /api/admin/users — create a user with email + password (admin only).
+ * Body: { email: string, password: string, tokenQuota?: number }
+ * Returns: { email: string, tokenQuota: number }
  */
 export async function POST(req: NextRequest) {
   const session = await ensureAdmin();
@@ -81,13 +92,18 @@ export async function POST(req: NextRequest) {
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
+    const password = typeof body?.password === 'string' ? body.password : '';
+    if (!password || password.length < MIN_PASSWORD_LENGTH) {
+      return NextResponse.json(
+        { error: 'Password is required (min 6 characters)' },
+        { status: 400 },
+      );
+    }
     const rawQuota = body?.tokenQuota;
     const tokenQuota =
       typeof rawQuota === 'number' && Number.isInteger(rawQuota) && rawQuota >= 0
         ? rawQuota
         : DEFAULT_USER_TOKEN_QUOTA;
-
-    const code = generateCode();
 
     // Check if user with this email already exists
     const existingUser = await serverDB.query.users.findFirst({
@@ -100,10 +116,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Create user directly in DB (bypassing better-auth admin permission check)
+    // Create user with email + password (no login code)
     const userId = idGenerator('user', 32 - 'user_'.length);
     const now = new Date();
-    const passwordHash = await hashPassword(code);
+    const passwordHash = await hashPassword(password);
     const accountId = createNanoId(12)();
 
     // Insert user
@@ -142,17 +158,19 @@ export async function POST(req: NextRequest) {
       console.error('Admin create user: initUser failed (user created):', initError);
     }
 
-    // Insert user code record
+    // Insert user_codes record (for token quota only; login is email+password)
     const userCodeId = createNanoId(12)();
+    const internalCode = generateCode(); // unique placeholder, not used for login
     await serverDB.insert(userCodes).values({
-      code,
+      code: internalCode,
       email,
       id: userCodeId,
+      plainPassword: password,
       tokenQuota,
       userId,
     });
 
-    return NextResponse.json({ code, email, tokenQuota });
+    return NextResponse.json({ email, tokenQuota, userId });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     const cause = error instanceof Error ? error.cause : undefined;

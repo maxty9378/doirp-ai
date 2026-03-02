@@ -616,6 +616,34 @@
       "when": 1771386090928,
       "tag": "0087_add_eval_benchmark",
       "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1771400000000,
+      "tag": "0088_add_user_codes",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1771400001000,
+      "tag": "0089_add_user_codes_token_quota",
+      "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1771400002000,
+      "tag": "0090_add_user_codes_plain_password",
+      "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "7",
+      "when": 1771400003000,
+      "tag": "0091_add_documents_deleted_at",
+      "breakpoints": true
     }
   ],
   "version": "6"

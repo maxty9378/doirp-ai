@@ -7,7 +7,7 @@ import { drizzle as nodeDrizzle } from 'drizzle-orm/node-postgres';
 import { Pool as NodePool } from 'pg';
 import ws from 'ws';
 
-import { serverDBEnv } from '@/config/db';
+import { getServerDBConfig } from '@/config/db';
 
 import * as schema from '../schemas';
 import type { LobeChatDatabase } from '../type';
@@ -25,7 +25,10 @@ export const getDBInstance = (): LobeChatDatabase => {
   // In test environment, return a mock instance to avoid initialization errors
   if (process.env.NODE_ENV === 'test') return {} as LobeChatDatabase;
 
-  if (!serverDBEnv.KEY_VAULTS_SECRET) {
+  // Read config at call time so env is correct (e.g. in Next.js API routes after .env.local is loaded)
+  const env = getServerDBConfig();
+
+  if (!env.KEY_VAULTS_SECRET) {
     throw new Error(
       ` \`KEY_VAULTS_SECRET\` is not set, please set it in your environment variables.
 
@@ -34,24 +37,27 @@ If you don't have it, please run \`openssl rand -base64 32\` to create one.
     );
   }
 
-  const connectionString = serverDBEnv.DATABASE_URL;
+  const connectionString = env.DATABASE_URL;
 
   if (!connectionString) {
     throw new Error(`You are try to use database, but "DATABASE_URL" is not set correctly`);
   }
 
-  if (serverDBEnv.DATABASE_DRIVER === 'node') {
+  const driver = process.env.DATABASE_DRIVER || env.DATABASE_DRIVER;
+  const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
+  const isTimeweb = connectionString.includes('twc1.net') || connectionString.includes('twc.tech');
+
+  if (driver === 'node') {
     let ssl: { ca?: Buffer; rejectUnauthorized: boolean } | boolean | undefined;
     const rejectUnauthorizedDisabled =
-      serverDBEnv.DATABASE_SSL_REJECT_UNAUTHORIZED === false ||
       process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === '0' ||
-      process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'false';
-    const isLocalhost = connectionString.includes('localhost') || connectionString.includes('127.0.0.1');
-    
-    if (serverDBEnv.DATABASE_SSL_CA) {
-      const caPath = resolveSslCaPath(serverDBEnv.DATABASE_SSL_CA);
+      process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'false' ||
+      env.DATABASE_SSL_REJECT_UNAUTHORIZED === false;
+
+    if (env.DATABASE_SSL_CA) {
+      const caPath = resolveSslCaPath(env.DATABASE_SSL_CA);
       ssl = { ca: readFileSync(caPath), rejectUnauthorized: true };
-    } else if (rejectUnauthorizedDisabled) {
+    } else if (rejectUnauthorizedDisabled || (isTimeweb && !isLocalhost)) {
       ssl = { rejectUnauthorized: false };
     } else if (!isLocalhost) {
       ssl = true;

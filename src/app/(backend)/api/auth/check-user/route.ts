@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 
 import { account } from '@/database/schemas/betterAuth';
 import { users } from '@/database/schemas/user';
-import { serverDB } from '@/database/server';
+import { getServerDB } from '@/database/server';
 
 export interface CheckUserResponseData {
   exists: boolean;
@@ -29,8 +29,10 @@ export async function POST(req: NextRequest) {
 
     const value = normalized(email);
 
+    const db = await getServerDB();
+
     // Query by email or normalized_email (Better Auth may store in either)
-    const [user] = await serverDB
+    const [user] = await db
       .select({
         emailVerified: users.emailVerified,
         id: users.id,
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ exists: false });
     }
 
-    const accounts = await serverDB
+    const accounts = await db
       .select({
         password: account.password,
         providerId: account.providerId,
@@ -60,8 +62,16 @@ export async function POST(req: NextRequest) {
       hasPassword,
     } satisfies CheckUserResponseData);
   } catch (error) {
-    console.error('Error checking user existence:', error);
-    return NextResponse.json({ error: 'Internal server error', exists: false }, { status: 500 });
+    const message = error instanceof Error ? error.message : String(error);
+    const cause = error instanceof Error && error.cause ? String(error.cause) : undefined;
+    console.error('Error checking user existence:', message, cause ?? '', error);
+    return NextResponse.json(
+      {
+        error: process.env.NODE_ENV === 'development' ? message : 'Internal server error',
+        exists: false,
+      },
+      { status: 500 },
+    );
   }
 }
 

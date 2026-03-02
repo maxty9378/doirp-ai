@@ -74,7 +74,13 @@ export const userRouter = router({
       await UserModel.makeSureUserExist(ctx.serverDB, ctx.userId);
     }
 
-    // Run user state fetch and count queries in parallel
+    // Run user state fetch and count queries in parallel; tolerate missing DB tables (e.g. sessions)
+    const safe = <T>(p: Promise<T>, fallback: T): Promise<T> =>
+      p.catch((err) => {
+        console.warn('getUserState: optional query failed, using fallback:', err?.message ?? err);
+        return fallback;
+      });
+
     const [
       state,
       messageCount,
@@ -84,11 +90,11 @@ export const userRouter = router({
       isInviteCodeRequired,
     ] = await Promise.all([
       ctx.userModel.getUserState(KeyVaultsGateKeeper.getUserKeyVaults),
-      ctx.messageModel.countUpTo(5),
-      ctx.sessionModel.hasMoreThanN(1),
-      getReferralStatus(ctx.userId),
-      getSubscriptionPlan(ctx.userId),
-      getIsInviteCodeRequired(ctx.userId),
+      safe(ctx.messageModel.countUpTo(5), 0),
+      safe(ctx.sessionModel.hasMoreThanN(1), false),
+      safe(getReferralStatus(ctx.userId), undefined),
+      safe(getSubscriptionPlan(ctx.userId), undefined),
+      safe(getIsInviteCodeRequired(ctx.userId), false),
     ]);
 
     const hasMoreThan4Messages = messageCount > 4;

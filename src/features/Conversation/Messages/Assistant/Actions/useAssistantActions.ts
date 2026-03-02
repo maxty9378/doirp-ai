@@ -5,6 +5,7 @@ import { css, cx } from 'antd-style';
 import {
   Copy,
   Edit,
+  FileInput,
   LanguagesIcon,
   ListChevronsDownUp,
   ListChevronsUpDown,
@@ -17,6 +18,7 @@ import {
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { useInsertOnPageContext } from '@/features/PageEditor/InsertOnPageContext';
 import { localeOptions } from '@/locales/resources';
 import { type UIChatMessage } from '@/types/index';
 
@@ -42,6 +44,7 @@ export interface AssistantActions {
   divider: { type: 'divider' };
   edit: ActionItem;
   expand: ActionItem;
+  insertOnPage?: ActionItem;
   regenerate: ActionItem;
   share: ActionItem;
   translate: ActionItem;
@@ -64,8 +67,12 @@ export const useAssistantActions = ({
   const { message } = App.useApp();
 
   // Get state from ConversationStore
+  const context = useConversationStore((s) => s.context);
   const isCollapsed = useConversationStore(messageStateSelectors.isMessageCollapsed(id));
   const isRegenerating = useConversationStore(messageStateSelectors.isMessageRegenerating(id));
+  const isPageScope = context?.scope === 'page';
+  const insertOnPageContext = useInsertOnPageContext();
+  const canInsertOnPage = isPageScope && !!insertOnPageContext;
 
   // Get actions from ConversationStore
   const [
@@ -134,6 +141,32 @@ export const useAssistantActions = ({
         key: 'expand',
         label: t('messageAction.expand', { ns: 'chat' }),
       },
+      ...(canInsertOnPage && {
+        insertOnPage: {
+          handleClick: () => {
+            const editor = insertOnPageContext!.getEditor();
+            if (!editor) {
+              message.warning(t('pageEditor.editorNotReady', { ns: 'file' }));
+              return;
+            }
+            const content = (data.content || '').trim();
+            if (!content) return;
+            try {
+              const current = (editor.getDocument('markdown') as unknown as string) || '';
+              const newContent = current.trim() ? `${current}\n\n${content}` : content;
+              editor.setDocument('markdown', newContent);
+              message.success(t('pageEditor.insertSuccess', { ns: 'file' }));
+              editor.focus?.();
+            } catch (err) {
+              console.error('[insertOnPage]', err);
+              message.error(t('pageEditor.insertError', { ns: 'file' }));
+            }
+          },
+          icon: FileInput,
+          key: 'insertOnPage',
+          label: t('messageAction.insertOnPage', { ns: 'chat' }),
+        },
+      }),
       regenerate: {
         disabled: isRegenerating,
         handleClick: () => {
@@ -174,6 +207,9 @@ export const useAssistantActions = ({
       id,
       data.content,
       data.error,
+      canInsertOnPage,
+      insertOnPageContext,
+      isPageScope,
       isRegenerating,
       isCollapsed,
       toggleMessageEditing,

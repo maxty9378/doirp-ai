@@ -1,7 +1,28 @@
 'use client';
 
+import {
+  DeleteOutlined,
+  EyeInvisibleOutlined,
+  EyeOutlined,
+  PlusOutlined,
+  ReloadOutlined,
+} from '@ant-design/icons';
 import { Flexbox, FormGroup } from '@lobehub/ui';
-import { App, Button, Input, Progress, Space, Table, Tag, Typography } from 'antd';
+import {
+  App,
+  Button,
+  Input,
+  InputNumber,
+  Popconfirm,
+  Popover,
+  Progress,
+  Space,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from 'antd';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 
@@ -11,13 +32,25 @@ const { Text } = Typography;
 
 const ADMIN_USERS_API = '/api/admin/users';
 
-const DEFAULT_TOKEN_QUOTA = 100_000;
+const DEFAULT_TOKEN_QUOTA = 1_000_000;
+const UNLIMITED_QUOTA = 100_000_000;
+
+const CHARS = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+function generatePassword(length = 10): string {
+  let s = '';
+  for (let i = 0; i < length; i++) s += CHARS[Math.floor(Math.random() * CHARS.length)];
+  return s;
+}
 
 interface UserCodeRow {
   code: string;
   createdAt: string;
+  dailyImageCount?: number;
   email: string;
   id: string;
+  lastImageDate?: string | null;
+  password?: string;
   tokenQuota?: number;
   tokensUsed?: number;
   userId: string;
@@ -40,33 +73,120 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
   const users = data?.users ?? [];
   const errorMessage = error?.message ?? null;
 
-  const handleSimulateUsage = async (userId: string, tokens: number) => {
+  const [addEmail, setAddEmail] = useState('');
+  const [generatedPassword, setGeneratedPassword] = useState('');
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, string>>({});
+  const [passwordRevealed, setPasswordRevealed] = useState<Record<string, boolean>>({});
+  const [addTokensUserId, setAddTokensUserId] = useState<string | null>(null);
+  const [addTokensAmount, setAddTokensAmount] = useState(1000);
+
+  useEffect(() => {
+    if (!data?.users) return;
+    setVisiblePasswords((prev) => {
+      const next = { ...prev };
+      for (const u of data.users) {
+        if (u.password) next[u.userId] = u.password;
+      }
+      return next;
+    });
+  }, [data?.users]);
+
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value?.trim() ?? '';
+    setAddEmail(v);
+    if (v) setGeneratedPassword(generatePassword());
+    else setGeneratedPassword('');
+  };
+
+  const handleIncreaseQuota = async (userId: string, currentQuota: number, addAmount: number) => {
     try {
-      const res = await fetch('/api/admin/users/simulate-usage', {
+      const newQuota = currentQuota + addAmount;
+      const res = await fetch('/api/admin/users/set-quota', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, tokens }),
+        body: JSON.stringify({ userId, tokenQuota: newQuota }),
       });
       const json = await res.json();
       if (!res.ok) {
-        message.error(json.error || 'Failed to simulate usage');
+        message.error(json.error || 'Не удалось увеличить лимит');
         return;
       }
-      message.success(`Added ${tokens.toLocaleString()} tokens`);
+      message.success(
+        t('users.increaseQuotaSuccess', {
+          defaultValue: 'Лимит увеличен на {{count}}',
+          count: addAmount.toLocaleString(),
+        }),
+      );
+      setAddTokensUserId(null);
       mutate();
     } catch {
-      message.error('Failed to simulate usage');
+      message.error('Не удалось увеличить лимит');
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    try {
+      const res = await fetch('/api/admin/users/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        message.error(json.error || 'Не удалось удалить пользователя');
+        return;
+      }
+      message.success(t('users.deleteSuccess', { defaultValue: 'Пользователь удалён' }));
+      setVisiblePasswords((prev) => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+      setPasswordRevealed((prev) => {
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+      mutate();
+    } catch {
+      message.error('Не удалось удалить пользователя');
+    }
+  };
+
+  const handleResetPassword = async (userId: string) => {
+    try {
+      const res = await fetch('/api/admin/users/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        message.error(json.error || 'Не удалось сбросить пароль');
+        return;
+      }
+      const password = json.password as string;
+      setVisiblePasswords((prev) => ({ ...prev, [userId]: password }));
+      setPasswordRevealed((prev) => ({ ...prev, [userId]: true }));
+      void navigator.clipboard.writeText(password);
+      message.success(t('users.passwordCopied', { defaultValue: 'Скопировано' }));
+    } catch {
+      message.error('Не удалось сбросить пароль');
     }
   };
 
   const handleAddUser = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = e.currentTarget;
-    const emailInput = form.querySelector<HTMLInputElement>('input[name="email"]');
     const quotaInput = form.querySelector<HTMLInputElement>('input[name="tokenQuota"]');
-    const email = emailInput?.value?.trim();
+    const email = addEmail.trim();
     if (!email) {
       message.error(t('users.emailRequired'));
+      return;
+    }
+    const password = generatedPassword;
+    if (!password || password.length < 6) {
+      message.error(t('users.passwordRequired'));
       return;
     }
     const tokenQuota =
@@ -75,17 +195,28 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
         : DEFAULT_TOKEN_QUOTA;
     try {
       const res = await fetch(ADMIN_USERS_API, {
-        body: JSON.stringify({ email, tokenQuota }),
+        body: JSON.stringify({ email, password, tokenQuota }),
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
       const json = await res.json();
       if (!res.ok) {
-        message.error(json.details || json.error || t('users.addError'));
+        const errorMsg =
+          json.error === 'Email already registered'
+            ? t('users.emailAlreadyRegistered')
+            : json.error?.includes('Password')
+              ? t('users.passwordRequired')
+              : json.details || json.error || t('users.addError');
+        message.error(errorMsg);
         return;
       }
-      message.success(t('users.addSuccess', { email: json.email, code: json.code }));
-      if (emailInput) emailInput.value = '';
+      message.success(t('users.addSuccessEmailPassword'));
+      if (json.userId) {
+        setVisiblePasswords((prev) => ({ ...prev, [json.userId]: password }));
+        setPasswordRevealed((prev) => ({ ...prev, [json.userId]: true }));
+      }
+      setAddEmail('');
+      setGeneratedPassword('');
       if (quotaInput) quotaInput.value = String(DEFAULT_TOKEN_QUOTA);
       mutate();
     } catch {
@@ -102,57 +233,37 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
       <SettingHeader
         title={t('tab.users')}
         extra={
-          <Space>
-            <Button
-              onClick={async () => {
-                try {
-                  const res = await fetch('/api/admin/users/sync-usage', { method: 'POST' });
-                  const json = await res.json();
-                  if (!res.ok) {
-                    message.error(json.error || 'Sync failed');
-                    return;
-                  }
-                  message.success(
-                    `Synced ${json.syncedUsers} user(s)`,
-                  );
-                  mutate();
-                } catch {
-                  message.error('Sync failed');
-                }
-              }}
-            >
-              {t('users.syncUsage', { defaultValue: 'Sync Usage' })}
-            </Button>
-            <Button loading={isLoading} onClick={() => mutate()}>
-              {t('common.refresh', { defaultValue: 'Refresh' })}
-            </Button>
-          </Space>
+          <Button loading={isLoading} onClick={() => mutate()}>
+            {t('common.refresh', { defaultValue: 'Обновить' })}
+          </Button>
         }
       />
 
       {users.length > 0 && (
         <FormGroup
           collapsible={false}
-          title={t('users.statistics', { defaultValue: 'Statistics' })}
+          title={t('users.statistics', { defaultValue: 'Статистика' })}
           variant="filled"
         >
           <Space orientation="vertical" size="large" style={{ width: '100%' }}>
             <Space wrap size="large">
               <div>
                 <Text style={{ fontSize: 12 }} type="secondary">
-                  {t('users.totalUsers', { defaultValue: 'Total Users' })}
+                  {t('users.totalUsers', { defaultValue: 'Всего пользователей' })}
                 </Text>
                 <div style={{ fontSize: 24, fontWeight: 600 }}>{users.length}</div>
               </div>
               <div>
                 <Text style={{ fontSize: 12 }} type="secondary">
-                  {t('users.totalQuota', { defaultValue: 'Total Token Quota' })}
+                  {t('users.totalQuota', { defaultValue: 'Общий лимит токенов' })}
                 </Text>
                 <div style={{ fontSize: 24, fontWeight: 600 }}>{totalTokens.toLocaleString()}</div>
               </div>
               <div>
                 <Text style={{ fontSize: 12 }} type="secondary">
-                  {t('users.usedTokens', { defaultValue: 'Used Tokens' })}
+                  {t('users.usedTokens', {
+                    defaultValue: 'Всего сожжено токенов по отделу',
+                  })}
                 </Text>
                 <div
                   style={{
@@ -166,7 +277,7 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
               </div>
               <div>
                 <Text style={{ fontSize: 12 }} type="secondary">
-                  {t('users.overallUsage', { defaultValue: 'Overall Usage' })}
+                  {t('users.overallUsage', { defaultValue: 'Общее использование' })}
                 </Text>
                 <div style={{ fontSize: 24, fontWeight: 600 }}>{usagePercent}%</div>
               </div>
@@ -188,6 +299,28 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
               placeholder={t('users.emailPlaceholder')}
               style={{ minWidth: 200, maxWidth: 320 }}
               type="email"
+              value={addEmail}
+              onChange={handleEmailChange}
+            />
+            <Input
+              addonAfter={
+                <Button
+                  size="small"
+                  type="link"
+                  onClick={() => {
+                    if (generatedPassword) {
+                      void navigator.clipboard.writeText(generatedPassword);
+                      message.success(t('users.passwordCopied', { defaultValue: 'Скопировано' }));
+                    }
+                  }}
+                >
+                  {t('users.copy', { defaultValue: 'Скопировать' })}
+                </Button>
+              }
+              readOnly
+              style={{ minWidth: 180, maxWidth: 240 }}
+              value={generatedPassword}
+              placeholder={t('users.passwordPlaceholder')}
             />
             <Input
               defaultValue={DEFAULT_TOKEN_QUOTA}
@@ -229,21 +362,109 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                   ellipsis: true,
                 },
                 {
-                  dataIndex: 'code',
-                  key: 'code',
+                  key: 'password',
                   title: t('users.codeColumn'),
-                  width: 180,
-                  render: (code: string) => (
-                    <Space size="small">
-                      <Text code copyable={{ text: code, tooltips: ['Copy', 'Copied!'] }}>
-                        {code}
-                      </Text>
-                    </Space>
-                  ),
+                  width: 220,
+                  render: (_: unknown, record: UserCodeRow) => {
+                    const pwd = visiblePasswords[record.userId];
+                    const revealed = passwordRevealed[record.userId];
+                    const showPassword = pwd && revealed;
+                    return (
+                      <Space size="small" align="center">
+                        {pwd ? (
+                          <>
+                            <Text
+                              code
+                              copyable={
+                                showPassword
+                                  ? { text: pwd, tooltips: ['Скопировать', 'Скопировано'] }
+                                  : false
+                              }
+                            >
+                              {showPassword ? pwd : '••••••••'}
+                            </Text>
+                            <Tooltip
+                              title={
+                                showPassword
+                                  ? t('users.hidePassword', { defaultValue: 'Скрыть' })
+                                  : t('users.showPassword', { defaultValue: 'Показать' })
+                              }
+                            >
+                              <Button
+                                size="small"
+                                type="text"
+                                icon={showPassword ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                                onClick={() =>
+                                  setPasswordRevealed((prev) => ({
+                                    ...prev,
+                                    [record.userId]: !prev[record.userId],
+                                  }))
+                                }
+                              />
+                            </Tooltip>
+                          </>
+                        ) : null}
+                        <Popconfirm
+                          cancelText={t('common.cancel', { defaultValue: 'Отмена' })}
+                          okText={t('users.resetPasswordConfirmOk', { defaultValue: 'Да, сбросить' })}
+                          title={t('users.resetPasswordConfirmTitle', { defaultValue: 'Вы уверены? Пароль будет сброшен, пользователю нужно будет сообщить новый.' })}
+                          onConfirm={() => handleResetPassword(record.userId)}
+                        >
+                          <Tooltip title={t('users.resetPassword')}>
+                            <Button
+                              size="small"
+                              type="text"
+                              icon={<ReloadOutlined />}
+                            />
+                          </Tooltip>
+                        </Popconfirm>
+                      </Space>
+                    );
+                  },
+                },
+                {
+                  key: 'images',
+                  title: t('users.imagesColumn', { defaultValue: 'Картинки (день)' }),
+                  width: 120,
+                  render: (_: unknown, record: UserCodeRow) => {
+                    const now = new Date();
+                    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    const lastDate = record.lastImageDate ? new Date(record.lastImageDate) : null;
+                    const count =
+                      lastDate && lastDate >= todayStart ? (record.dailyImageCount ?? 0) : 0;
+                    const handleReset = async () => {
+                      try {
+                        const res = await fetch('/api/admin/users/reset-image-count', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ userId: record.userId }),
+                        });
+                        if (!res.ok) {
+                          const j = await res.json();
+                          message.error(j.error || 'Ошибка');
+                          return;
+                        }
+                        message.success(t('users.imageCountReset', { defaultValue: 'Счётчик обнулён' }));
+                        mutate();
+                      } catch {
+                        message.error('Ошибка');
+                      }
+                    };
+                    return (
+                      <Space size="small">
+                        <Text>{count}/5</Text>
+                        {(count > 0) && (
+                          <Tooltip title={t('users.resetImageCount', { defaultValue: 'Обнулить счётчик картинок' })}>
+                            <Button size="small" type="text" icon={<ReloadOutlined />} onClick={handleReset} />
+                          </Tooltip>
+                        )}
+                      </Space>
+                    );
+                  },
                 },
                 {
                   key: 'usage',
-                  title: t('users.usageColumn', { defaultValue: 'Token Usage' }),
+                  title: t('users.usageColumn', { defaultValue: 'Использование токенов' }),
                   width: 280,
                   render: (_: any, record: UserCodeRow) => {
                     const quota = record.tokenQuota ?? DEFAULT_TOKEN_QUOTA;
@@ -267,14 +488,93 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                           </Text>
                           <Space size={4}>
                             <Text type={percent >= 90 ? 'danger' : 'secondary'}>{percent}%</Text>
-                            <Button
-                              size="small"
-                              style={{ padding: '0 4px', fontSize: '11px', height: '20px' }}
-                              type="text"
-                              onClick={() => handleSimulateUsage(record.userId, 1000)}
+                            <Popover
+                              open={addTokensUserId === record.userId}
+                              trigger="click"
+                              onOpenChange={(open) => {
+                                if (!open) setAddTokensUserId(null);
+                              }}
+                              content={
+                                <Space direction="vertical" size="small" style={{ width: 200 }}>
+                                  <div>
+                                    <div style={{ fontSize: 12, marginBottom: 4 }}>
+                                      {t('users.increaseQuotaTitle', {
+                                        defaultValue: 'Увеличить лимит на',
+                                      })}
+                                    </div>
+                                    <InputNumber
+                                      min={1}
+                                      max={100_000_000}
+                                      value={
+                                        addTokensUserId === record.userId ? addTokensAmount : 1000
+                                      }
+                                      onChange={(v) => setAddTokensAmount(v ?? 1000)}
+                                      style={{ width: '100%' }}
+                                      addonAfter={t('users.tokensShort', { defaultValue: 'шт.' })}
+                                    />
+                                  </div>
+                                  <Space wrap size="small" style={{ width: '100%' }}>
+                                    <Button
+                                      size="small"
+                                      onClick={() => {
+                                        setAddTokensAmount(500_000);
+                                        handleIncreaseQuota(
+                                          record.userId,
+                                          quota,
+                                          500_000,
+                                        );
+                                        setAddTokensUserId(null);
+                                      }}
+                                    >
+                                      +500k
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      onClick={() => {
+                                        handleIncreaseQuota(
+                                          record.userId,
+                                          quota,
+                                          UNLIMITED_QUOTA - quota,
+                                        );
+                                        setAddTokensUserId(null);
+                                      }}
+                                    >
+                                      Безлимит
+                                    </Button>
+                                  </Space>
+                                  <Button
+                                    type="primary"
+                                    size="small"
+                                    block
+                                    onClick={() => {
+                                      handleIncreaseQuota(
+                                        record.userId,
+                                        quota,
+                                        addTokensAmount,
+                                      );
+                                    }}
+                                  >
+                                    {t('users.addTokensButton', { defaultValue: 'Начислить' })}
+                                  </Button>
+                                </Space>
+                              }
                             >
-                              +1k
-                            </Button>
+                              <Tooltip
+                                title={t('users.addTokensTooltip', {
+                                  defaultValue: 'Увеличить лимит токенов',
+                                })}
+                              >
+                                <Button
+                                  size="small"
+                                  type="text"
+                                  icon={<PlusOutlined />}
+                                  onClick={() => {
+                                    setAddTokensUserId(record.userId);
+                                    setAddTokensAmount(1000);
+                                  }}
+                                />
+                              </Tooltip>
+                            </Popover>
                           </Space>
                         </div>
                         <Progress percent={percent} showInfo={false} size="small" status={status} />
@@ -295,17 +595,17 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
 
                     let tag = null;
                     if (diffDays === 0)
-                      tag = <Tag color="green">{t('users.today', { defaultValue: 'Today' })}</Tag>;
+                      tag = <Tag color="green">{t('users.today', { defaultValue: 'Сегодня' })}</Tag>;
                     else if (diffDays === 1)
                       tag = (
                         <Tag color="blue">
-                          {t('users.yesterday', { defaultValue: 'Yesterday' })}
+                          {t('users.yesterday', { defaultValue: 'Вчера' })}
                         </Tag>
                       );
                     else if (diffDays <= 7)
                       tag = (
                         <Tag>
-                          {t('users.daysAgo', { defaultValue: '{{count}}d ago', count: diffDays })}
+                          {t('users.daysAgo', { defaultValue: '{{count}} дн. назад', count: diffDays })}
                         </Tag>
                       );
 
@@ -324,12 +624,36 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                   title: t('users.createdColumn'),
                   width: 140,
                 },
+                {
+                  key: 'actions',
+                  title: '',
+                  width: 56,
+                  fixed: 'right',
+                  render: (_: unknown, record: UserCodeRow) => (
+                    <Popconfirm
+                      cancelText={t('common.cancel', { defaultValue: 'Отмена' })}
+                      okButtonProps={{ danger: true }}
+                      okText={t('users.deleteConfirmOk', { defaultValue: 'Удалить' })}
+                      title={t('users.deleteConfirmTitle', { defaultValue: 'Удалить пользователя? Это действие нельзя отменить.' })}
+                      onConfirm={() => handleDeleteUser(record.userId)}
+                    >
+                      <Tooltip title={t('users.deleteUser', { defaultValue: 'Удалить пользователя' })}>
+                        <Button
+                          danger
+                          size="small"
+                          type="text"
+                          icon={<DeleteOutlined />}
+                        />
+                      </Tooltip>
+                    </Popconfirm>
+                  ),
+                },
               ]}
               pagination={{
                 pageSize: 10,
                 showSizeChanger: true,
                 showTotal: (total) =>
-                  t('users.totalCount', { defaultValue: 'Total: {{count}} users', count: total }),
+                  t('users.totalCount', { defaultValue: 'Всего: {{count}} польз.', count: total }),
               }}
             />
           </div>

@@ -1,0 +1,2 @@
+# Озвучка легенды: legend-polevoi-boez.wav (generate: POST /api/voice-call/generate-legend-audio)
+# Фон торговой точки (опционально): ambient-store.mp3 — зацикленный шум супермаркета для погружения во время звонка

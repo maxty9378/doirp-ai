@@ -27,7 +27,7 @@ export const FileUploading = memo<FileUploadingProps>(({ progress = 0, speed = 0
             showInfo
             percent={progress}
             strokeColor={cssVar.colorSuccess}
-            trailColor={cssVar.colorSuccessBg}
+            railColor={cssVar.colorSuccessBg}
           />
           <Flexbox
             horizontal

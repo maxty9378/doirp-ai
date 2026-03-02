@@ -17,7 +17,9 @@ const getJwksKey = () => {
     throw new Error('JWKS_KEY environment variable is not set');
   }
 
-  const jwks = JSON.parse(jwksString);
+  // Some env loaders include surrounding quotes; strip them so we always parse raw JSON
+  const trimmed = jwksString.trim().replace(/^['"]|['"]$/g, '');
+  const jwks = JSON.parse(trimmed);
   const rsaKey = jwks.keys.find((key: any) => key.alg === 'RS256' && key.kty === 'RSA');
 
   if (!rsaKey) {

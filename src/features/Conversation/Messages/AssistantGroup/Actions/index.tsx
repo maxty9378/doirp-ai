@@ -108,22 +108,31 @@ const WithContentId = memo<GroupActionsProps>(({ actionsConfig, id, data, conten
   // Get collapse/expand action based on current state
   const collapseAction = isCollapsed ? defaultActions.expand : defaultActions.collapse;
 
-  // Use external config if provided, otherwise use defaults
-  const barItems =
+  // Use external config if provided, otherwise use defaults (insertOnPage first when in page scope)
+  const baseBar =
     actionsConfig?.bar ??
     (hasTools
       ? [defaultActions.delAndRegenerate, defaultActions.copy]
       : [defaultActions.edit, defaultActions.copy]);
+  const barItems = [
+    ...(defaultActions.insertOnPage ? [defaultActions.insertOnPage] : []),
+    ...baseBar,
+  ];
 
-  const menuItems = actionsConfig?.menu ?? [
-    defaultActions.edit,
-    defaultActions.copy,
-    collapseAction,
-    defaultActions.divider,
-    defaultActions.share,
-    defaultActions.divider,
-    defaultActions.regenerate,
-    defaultActions.del,
+  const baseMenu =
+    actionsConfig?.menu ?? [
+      defaultActions.edit,
+      defaultActions.copy,
+      collapseAction,
+      defaultActions.divider,
+      defaultActions.share,
+      defaultActions.divider,
+      defaultActions.regenerate,
+      defaultActions.del,
+    ];
+  const menuItems = [
+    ...(defaultActions.insertOnPage ? [defaultActions.insertOnPage, defaultActions.divider] : []),
+    ...baseMenu,
   ];
 
   // Strip handleClick for DOM safety

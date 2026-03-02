@@ -81,20 +81,37 @@ describe('POST /api/admin/users', () => {
     const { POST } = await import('../route');
     const req = new NextRequest('http://localhost/api/admin/users', {
       method: 'POST',
-      body: JSON.stringify({ email: '   ' }),
+      body: JSON.stringify({ email: '   ', password: 'password123' }),
       headers: { 'Content-Type': 'application/json' },
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
   });
 
-  it('returns 200 with code, email, tokenQuota when user is created', async () => {
+  it('returns 400 when password is missing or too short', async () => {
+    const { POST } = await import('../route');
+    const req = new NextRequest('http://localhost/api/admin/users', {
+      method: 'POST',
+      body: JSON.stringify({ email: 'test@example.com' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const res = await POST(req);
+    expect(res.status).toBe(400);
+    const json = await res.json();
+    expect(json.error).toMatch(/password/i);
+  });
+
+  it('returns 200 with email, tokenQuota when user is created (email+password)', async () => {
     mockQueryUsersFindFirst.mockResolvedValueOnce(undefined);
 
     const { POST } = await import('../route');
     const req = new NextRequest('http://localhost/api/admin/users', {
       method: 'POST',
-      body: JSON.stringify({ email: 'testuser@example.com', tokenQuota: 50000 }),
+      body: JSON.stringify({
+        email: 'testuser@example.com',
+        password: 'securePass6',
+        tokenQuota: 50000,
+      }),
       headers: { 'Content-Type': 'application/json' },
     });
     const res = await POST(req);
@@ -102,8 +119,7 @@ describe('POST /api/admin/users', () => {
     const json = await res.json();
     expect(json.email).toBe('testuser@example.com');
     expect(json.tokenQuota).toBe(50000);
-    expect(typeof json.code).toBe('string');
-    expect(json.code.length).toBeGreaterThan(0);
+    expect(json.code).toBeUndefined();
   });
 
   it('returns 400 when email already registered', async () => {
@@ -115,7 +131,7 @@ describe('POST /api/admin/users', () => {
     const { POST } = await import('../route');
     const req = new NextRequest('http://localhost/api/admin/users', {
       method: 'POST',
-      body: JSON.stringify({ email: 'existing@example.com' }),
+      body: JSON.stringify({ email: 'existing@example.com', password: 'anypass6' }),
       headers: { 'Content-Type': 'application/json' },
     });
     const res = await POST(req);

@@ -1,13 +1,14 @@
 'use client';
 
-import { Flexbox, Tag } from '@lobehub/ui';
-import { HomeIcon, SearchIcon } from 'lucide-react';
+import { Flexbox, Icon, Tag } from '@lobehub/ui';
+import { HomeIcon, SearchIcon, ShieldCheck } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 
 import { getRouteById } from '@/config/routes';
 import { useActiveTabKey } from '@/hooks/useActiveTabKey';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useGlobalStore } from '@/store/global';
 import { SidebarTabKey } from '@/store/global/initialState';
 import {
@@ -20,6 +21,7 @@ import { type NavItemProps } from '../../../../../../../features/NavPanel/compon
 import NavItem from '../../../../../../../features/NavPanel/components/NavItem';
 
 interface Item {
+  adminOnly?: boolean;
   hidden?: boolean | undefined;
   icon: NavItemProps['icon'];
   isNew?: boolean;
@@ -33,6 +35,7 @@ const Nav = memo(() => {
   const tab = useActiveTabKey();
   const navigate = useNavigate();
   const { t } = useTranslation('common');
+  const isAdmin = useIsAdmin();
   const toggleCommandMenu = useGlobalStore((s) => s.toggleCommandMenu);
   const { showMarket, showAiImage } = useServerConfigStore(featureFlagsSelectors);
   const enableBusinessFeatures = useServerConfigStore(serverConfigSelectors.enableBusinessFeatures);
@@ -75,14 +78,14 @@ const Nav = memo(() => {
         url: '/image',
       },
       {
-        hidden: !showMarket,
+        hidden: !showMarket || !isAdmin,
         icon: getRouteById('community')!.icon,
         key: SidebarTabKey.Community,
         title: t('tab.community'),
         url: '/community',
       },
     ],
-    [t],
+    [isAdmin, t],
   );
 
   const newBadge = (
@@ -91,10 +94,14 @@ const Nav = memo(() => {
     </Tag>
   );
 
+  const adminBadge = (
+    <Icon icon={ShieldCheck} size={12} style={{ opacity: 0.8 }} />
+  );
+
   return (
     <Flexbox gap={1} paddingInline={4}>
       {items.map((item) => {
-        const extra = item.isNew ? newBadge : undefined;
+        const extra = item.isNew ? newBadge : item.adminOnly ? adminBadge : undefined;
         const content = (
           <NavItem
             active={tab === item.key}

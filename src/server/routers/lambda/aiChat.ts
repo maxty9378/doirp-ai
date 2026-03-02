@@ -10,7 +10,7 @@ import { ThreadModel } from '@/database/models/thread';
 import { TopicModel } from '@/database/models/topic';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
-import { trackTokenUsage } from '@/server/middleware/trackTokenUsage';
+import { checkTokenLimit, trackTokenUsage } from '@/server/middleware/trackTokenUsage';
 import { initModelRuntimeFromDB } from '@/server/modules/ModelRuntime';
 import { resolveContext } from '@/server/routers/lambda/_helpers/resolveContext';
 import { AiChatService } from '@/server/services/aiChat';
@@ -99,6 +99,8 @@ export const aiChatRouter = router({
   sendMessageInServer: aiChatProcedure
     .input(AiSendMessageServerSchema)
     .mutation(async ({ input, ctx }) => {
+      await checkTokenLimit(ctx.userId);
+
       log('sendMessageInServer called for agentId: %s', input.agentId);
       log(
         'topicId: %s, newTopic: %O, newThread: %O',

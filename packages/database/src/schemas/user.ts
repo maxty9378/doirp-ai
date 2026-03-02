@@ -14,7 +14,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
-import { timestamps, timestamptz, varchar255 } from './_helpers';
+import { createdAt, timestamps, timestamptz, updatedAt, varchar255 } from './_helpers';
 
 export const users = pgTable(
   'users',
@@ -121,8 +121,11 @@ export type InstalledPluginItem = typeof userInstalledPlugins.$inferSelect;
  * Invite codes for code-only login. Admin creates users with email + auto-generated code.
  * Users sign in with code only (no registration).
  */
-/** Default token quota per user when not specified (100k tokens). */
-export const DEFAULT_USER_TOKEN_QUOTA = 100_000;
+/** Default token quota per user when not specified (1M tokens = 100k credits at 10 tokens/credit). */
+export const DEFAULT_USER_TOKEN_QUOTA = 1_000_000;
+
+/** Daily image generation limit per user (ОДО Creative focus). */
+export const DAILY_IMAGE_LIMIT = 5;
 
 export const userCodes = pgTable(
   'user_codes',
@@ -137,7 +140,14 @@ export const userCodes = pgTable(
     tokenQuota: integer('token_quota').notNull().default(DEFAULT_USER_TOKEN_QUOTA),
     /** Tokens consumed so far. */
     tokensUsed: integer('tokens_used').notNull().default(0),
-    ...timestamps,
+    /** Plain password stored for admin view only (create/reset). */
+    plainPassword: text('plain_password'),
+    /** Daily image generations count (lazy reset by last_image_date). */
+    dailyImageCount: integer('daily_image_count').notNull().default(0),
+    /** Date of last image generation (for lazy reset at day boundary). */
+    lastImageDate: timestamptz('last_image_date'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
   },
   (table) => [
     index('user_codes_code_idx').on(table.code),

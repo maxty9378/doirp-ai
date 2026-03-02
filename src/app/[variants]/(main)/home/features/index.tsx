@@ -12,8 +12,6 @@ import RecentPage from './RecentPage';
 import RecentResource from './RecentResource';
 import RecentTopic from './RecentTopic';
 import TrainingAgents from './TrainingAgents';
-import VoiceCallFieldFighterWidget from './VoiceCallFieldFighterWidget';
-import VoiceSimulatorWidget from './VoiceSimulatorWidget';
 import WelcomeText from './WelcomeText';
 
 const Home = memo(() => {
@@ -26,12 +24,6 @@ const Home = memo(() => {
   return (
     <Flexbox gap={40}>
       <WelcomeText />
-      {isLogin && (
-        <>
-          <VoiceSimulatorWidget />
-          <VoiceCallFieldFighterWidget />
-        </>
-      )}
       <InputArea />
       {/* Use CSS visibility to hide instead of unmounting to prevent data re-fetching */}
       <Flexbox gap={40} style={{ display: hideOtherModules ? 'none' : undefined }}>

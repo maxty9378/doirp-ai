@@ -19,6 +19,10 @@ export interface PageState {
    */
   currentPage: number;
   /**
+   * Soft-deleted (archived) documents. Shown in archive; purged after 24h if not restored.
+   */
+  deletedDocuments?: LobeDocument[];
+  /**
    * Server documents fetched from document service
    * undefined means not yet loaded (loading state)
    */
@@ -71,6 +75,8 @@ export const initialState: PageState = {
 
   // List Management
   currentPage: 0,
+
+  deletedDocuments: undefined,
 
   documents: undefined,
 

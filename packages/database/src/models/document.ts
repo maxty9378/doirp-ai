@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 
 import type { DocumentItem, NewDocument } from '../schemas';
 import { documents } from '../schemas';
@@ -29,14 +29,26 @@ export class DocumentModel {
     return result[0]!;
   };
 
+  /** Soft-delete (archive): set deleted_at. Document stays in DB until purged after 24h. */
   delete = async (id: string) => {
+    return this.db
+      .update(documents)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(documents.id, id), eq(documents.userId, this.userId), isNull(documents.deletedAt)));
+  };
+
+  /** Permanently remove a document (e.g. after 24h in archive). Use with care. */
+  hardDelete = async (id: string) => {
     return this.db
       .delete(documents)
       .where(and(eq(documents.id, id), eq(documents.userId, this.userId)));
   };
 
   deleteAll = async () => {
-    return this.db.delete(documents).where(eq(documents.userId, this.userId));
+    return this.db
+      .update(documents)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(documents.userId, this.userId), isNull(documents.deletedAt)));
   };
 
   query = async ({
@@ -49,7 +61,7 @@ export class DocumentModel {
     total: number;
   }> => {
     const offset = current * pageSize;
-    const conditions = [eq(documents.userId, this.userId)];
+    const conditions = [eq(documents.userId, this.userId), isNull(documents.deletedAt)];
 
     if (fileTypes?.length) {
       conditions.push(inArray(documents.fileType, fileTypes));
@@ -107,9 +119,72 @@ export class DocumentModel {
     return { items, total: totalResult[0].count };
   };
 
+  /** List only soft-deleted (archived) documents for the current user. */
+  queryDeleted = async ({
+    current = 0,
+    pageSize = 50,
+    fileTypes,
+    sourceTypes,
+  }: QueryDocumentParams = {}): Promise<{ items: DocumentItem[]; total: number }> => {
+    const offset = current * pageSize;
+    const conditions = [eq(documents.userId, this.userId), isNotNull(documents.deletedAt)];
+
+    if (fileTypes?.length) {
+      conditions.push(inArray(documents.fileType, fileTypes));
+    }
+    if (sourceTypes?.length) {
+      conditions.push(inArray(documents.sourceType, sourceTypes as ('file' | 'web' | 'api')[]));
+    }
+
+    const whereCondition = and(...conditions);
+
+    const [rawItems, totalResult] = await Promise.all([
+      this.db
+        .select({
+          accessedAt: documents.accessedAt,
+          clientId: documents.clientId,
+          createdAt: documents.createdAt,
+          deletedAt: documents.deletedAt,
+          fileId: documents.fileId,
+          fileType: documents.fileType,
+          filename: documents.filename,
+          id: documents.id,
+          metadata: documents.metadata,
+          parentId: documents.parentId,
+          slug: documents.slug,
+          source: documents.source,
+          sourceType: documents.sourceType,
+          title: documents.title,
+          totalCharCount: documents.totalCharCount,
+          totalLineCount: documents.totalLineCount,
+          updatedAt: documents.updatedAt,
+          userId: documents.userId,
+        })
+        .from(documents)
+        .where(whereCondition)
+        .orderBy(desc(documents.deletedAt))
+        .limit(pageSize)
+        .offset(offset),
+      this.db.select({ count: count(documents.id) }).from(documents).where(whereCondition),
+    ]);
+
+    const items = rawItems.map((item) => ({
+      ...item,
+      content: null,
+      editorData: null,
+      pages: null,
+    })) as DocumentItem[];
+
+    return { items, total: totalResult[0].count };
+  };
+
   findById = async (id: string): Promise<DocumentItem | undefined> => {
     return this.db.query.documents.findFirst({
-      where: and(eq(documents.userId, this.userId), eq(documents.id, id)),
+      where: and(
+        eq(documents.userId, this.userId),
+        eq(documents.id, id),
+        isNull(documents.deletedAt),
+      ),
     });
   };
 
@@ -130,5 +205,23 @@ export class DocumentModel {
       .update(documents)
       .set({ ...value, updatedAt: new Date() })
       .where(and(eq(documents.userId, this.userId), eq(documents.id, id)));
+  };
+
+  /** Restore a soft-deleted document (clear deleted_at). */
+  restore = async (id: string) => {
+    return this.db
+      .update(documents)
+      .set({ deletedAt: null, updatedAt: new Date() })
+      .where(and(eq(documents.id, id), eq(documents.userId, this.userId), isNotNull(documents.deletedAt)));
+  };
+
+  /** Permanently delete documents that were soft-deleted before cutoff (e.g. 24h ago). */
+  purgeDeletedOlderThan = async (cutoff: Date): Promise<number> => {
+    const result = await this.db
+      .delete(documents)
+      .where(
+        and(eq(documents.userId, this.userId), isNotNull(documents.deletedAt), lt(documents.deletedAt, cutoff)),
+      );
+    return result.rowCount ?? 0;
   };
 }

@@ -1,11 +1,11 @@
 'use client';
 
 import { Avatar, Flexbox, Text } from '@lobehub/ui';
-import { createStaticStyles, cssVar } from 'antd-style';
-import { Store, Mic, Volume2, BookOpen, User, Target } from 'lucide-react';
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Button } from 'antd';
+import { createStaticStyles } from 'antd-style';
 import isEqual from 'fast-deep-equal';
+import { BookOpen, Mic, Store, Target,User, Volume2 } from 'lucide-react';
+import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
@@ -24,9 +24,6 @@ const LEGEND_FALLBACK =
   'Вы — торговый представитель. Заходите в локальную розничную точку. ' +
   'ЛПР — Марина Ивановна, директор магазина. Она недовольна новым прайсом и готова вывести вашу позицию из матрицы. ' +
   'Ваша задача — отработать возражение «Дорого» в живом голосовом диалоге.';
-
-/** Озвучка легенды через Gemini (мужской голос, трейлер) — сохраняется в public/audio/legend-polevoi-boez.wav */
-const LEGEND_AUDIO_URL = '/audio/legend-polevoi-boez.wav';
 
 function speakLegendFallback(text: string) {
   if (typeof window === 'undefined' || !window.speechSynthesis) return;
@@ -126,8 +123,8 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
 }));
 
 interface TranscriptMessage {
-  role: 'user' | 'assistant';
   content: string;
+  role: 'user' | 'assistant';
 }
 
 const VoiceCallOnboarding = memo(() => {
@@ -151,14 +148,16 @@ const VoiceCallOnboarding = memo(() => {
   const legendForTts =
     [scenarioContext, userRole, goals?.length ? goals.join('. ') : ''].filter(Boolean).join(' ') ||
     LEGEND_FALLBACK;
+  const legendAudioUrl = `/audio/legend-${VOICE_CALL_AGENT_ID}.wav?v=${encodeURIComponent(`${legendForTts.length}`)}`;
 
   const playLegendAudio = useCallback(() => {
-    const audio = legendAudioRef.current || new Audio(LEGEND_AUDIO_URL);
+    const audio = legendAudioRef.current || new Audio(legendAudioUrl);
     if (!legendAudioRef.current) legendAudioRef.current = audio;
+    audio.src = legendAudioUrl;
     audio.onerror = () => speakLegendFallback(legendForTts);
     audio.currentTime = 0;
     audio.play().catch(() => speakLegendFallback(legendForTts));
-  }, [legendForTts]);
+  }, [legendAudioUrl, legendForTts]);
 
   // Озвучить легенду один раз при показе шага «легенда» (Gemini WAV или fallback TTS)
   useEffect(() => {
@@ -214,8 +213,8 @@ const VoiceCallOnboarding = memo(() => {
           ) : null}
           {!reportLoading && (
           <button
-            type="button"
             className={styles.reportCloseBtn}
+            type="button"
             onClick={() => {
               setReportData(null);
               setReportError(null);
@@ -236,9 +235,9 @@ const VoiceCallOnboarding = memo(() => {
       <Flexbox align={'center'} gap={16} style={{ padding: 16, flexDirection: 'column', width: '100%' }}>
         <div className={styles.callWrap}>
           <GeminiLiveCall
-            agentId={VOICE_CALL_AGENT_ID}
             autoConnect
             embedded
+            agentId={VOICE_CALL_AGENT_ID}
             onEnd={() => {
               setTranscriptMessages([]);
               setStreamingContent('');
@@ -254,10 +253,10 @@ const VoiceCallOnboarding = memo(() => {
     <>
       <Flexbox flex={1} />
       <Flexbox
-        gap={16}
-        width={'100%'}
-        style={{ paddingBottom: 'max(10vh, 32px)', flexDirection: 'column' }}
         align={'center'}
+        gap={16}
+        style={{ paddingBottom: 'max(10vh, 32px)', flexDirection: 'column' }}
+        width={'100%'}
       >
         <Avatar
           avatar={meta.avatar || DEFAULT_AVATAR}
@@ -270,7 +269,7 @@ const VoiceCallOnboarding = memo(() => {
         </Text>
 
         {step === 'enter' && (
-          <Flexbox className={styles.wrap} gap={16} style={{ flexDirection: 'column' }} align={'center'}>
+          <Flexbox align={'center'} className={styles.wrap} gap={16} style={{ flexDirection: 'column' }}>
             <Button
               className={styles.btn}
               icon={<Store />}
@@ -284,7 +283,7 @@ const VoiceCallOnboarding = memo(() => {
         )}
 
         {step === 'legend' && (
-          <Flexbox className={styles.wrap} gap={16} style={{ flexDirection: 'column' }} align={'center'}>
+          <Flexbox align={'center'} className={styles.wrap} gap={16} style={{ flexDirection: 'column' }}>
             {scenarioContext && (
               <div className={styles.card}>
                 <div className={styles.cardTitle}>
@@ -311,7 +310,7 @@ const VoiceCallOnboarding = memo(() => {
                 </div>
                 <ul className={styles.goalsList}>
                   {goals.map((g, i) => (
-                    <li key={i} className={styles.goalsItem}>
+                    <li className={styles.goalsItem} key={i}>
                       {g}
                     </li>
                   ))}
@@ -321,7 +320,7 @@ const VoiceCallOnboarding = memo(() => {
             {!scenarioContext && !userRole && (!goals || goals.length === 0) ? (
               <div className={styles.legend}>{LEGEND_FALLBACK}</div>
             ) : null}
-            <Flexbox gap={8} horizontal wrap="wrap">
+            <Flexbox horizontal gap={8} wrap="wrap">
               <Button icon={<Volume2 />} size="large" onClick={handlePlayLegend}>
                 Прослушать ещё раз
               </Button>

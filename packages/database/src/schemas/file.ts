@@ -19,7 +19,7 @@ import type { LobeDocumentPage } from '@/types/document';
 import type { FileSource } from '@/types/files';
 
 import { idGenerator, randomSlug } from '../utils/idGenerator';
-import { accessedAt, createdAt, timestamps } from './_helpers';
+import { accessedAt, createdAt, timestamps, timestamptz } from './_helpers';
 import { asyncTasks } from './asyncTask';
 import { users } from './user';
 
@@ -100,10 +100,14 @@ export const documents = pgTable(
 
     slug: varchar('slug', { length: 255 }).$defaultFn(() => randomSlug(3)),
 
+    /** Set when document is soft-deleted (archived). Null = active. Purged after 24h if not restored. */
+    deletedAt: timestamptz('deleted_at'),
+
     // Timestamps
     ...timestamps,
   },
   (table) => [
+    index('documents_deleted_at_idx').on(table.deletedAt),
     index('documents_source_idx').on(table.source),
     index('documents_file_type_idx').on(table.fileType),
     index('documents_source_type_idx').on(table.sourceType),

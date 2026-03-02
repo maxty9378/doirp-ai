@@ -49,6 +49,9 @@ export const SESSION_CHAT_URL = (agentId: string, mobile?: boolean) => {
 
 export const AGENT_PROFILE_URL = (agentId: string) => `/agent/${agentId}/profile`;
 
+export const VOICE_CALL_URL = (agentId?: string) =>
+  agentId ? `/voice-call?agentId=${agentId}` : '/voice-call';
+
 export const GROUP_CHAT_URL = (groupId: string) => `/group/${groupId}`;
 
 export const LIBRARY_URL = (id: string) => urlJoin('/resource/library', id);

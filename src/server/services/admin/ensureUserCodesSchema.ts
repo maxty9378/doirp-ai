@@ -32,6 +32,21 @@ export const ensureUserCodesSchema = async () => {
   `);
 
   await serverDB.execute(sql`
+    ALTER TABLE "user_codes"
+      ADD COLUMN IF NOT EXISTS "plain_password" text;
+  `);
+
+  await serverDB.execute(sql`
+    ALTER TABLE "user_codes"
+      ADD COLUMN IF NOT EXISTS "daily_image_count" integer NOT NULL DEFAULT 0;
+  `);
+
+  await serverDB.execute(sql`
+    ALTER TABLE "user_codes"
+      ADD COLUMN IF NOT EXISTS "last_image_date" timestamp with time zone;
+  `);
+
+  await serverDB.execute(sql`
     CREATE UNIQUE INDEX IF NOT EXISTS "user_codes_code_unique" ON "user_codes" ("code");
   `);
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { DEFAULT_PROVIDER } from '@lobechat/business-const';
+import { DEFAULT_MODEL } from '@lobechat/const';
 import { Flexbox } from '@lobehub/ui';
 import { memo, useEffect } from 'react';
 
@@ -11,24 +13,32 @@ import { useAgentStore } from '@/store/agent';
 import { agentByIdSelectors, builtinAgentSelectors } from '@/store/agent/selectors';
 import { useChatStore } from '@/store/chat';
 
-const actions: ActionKeys[] = ['model', 'search'];
+// Не показываем выбор модели пользователю — всегда используем Gemini по умолчанию
+const actions: ActionKeys[] = ['search'];
 
 /**
  * Help analyze and work with files
  */
 const FileCopilot = memo(() => {
   const pageAgentId = useAgentStore(builtinAgentSelectors.pageAgentId);
-  const [activeAgentId, setActiveAgentId, useFetchAgentConfig] = useAgentStore((s) => [
-    s.activeAgentId,
-    s.setActiveAgentId,
-    s.useFetchAgentConfig,
-  ]);
+  const [activeAgentId, setActiveAgentId, useFetchAgentConfig, updateAgentConfigById] =
+    useAgentStore((s) => [
+      s.activeAgentId,
+      s.setActiveAgentId,
+      s.useFetchAgentConfig,
+      s.updateAgentConfigById,
+    ]);
 
   useEffect(() => {
     setActiveAgentId(pageAgentId);
-    // Also set the chat store's activeAgentId so topic selectors can work correctly
     useChatStore.setState({ activeAgentId: pageAgentId });
   }, [pageAgentId, setActiveAgentId]);
+
+  // По умолчанию агент страницы использует Gemini; приводим конфиг в сторе к этому
+  useEffect(() => {
+    if (!pageAgentId) return;
+    updateAgentConfigById(pageAgentId, { model: DEFAULT_MODEL, provider: DEFAULT_PROVIDER });
+  }, [pageAgentId, updateAgentConfigById]);
 
   const currentAgentId = activeAgentId || pageAgentId;
 

@@ -83,7 +83,7 @@ const OllamaModelDownloader = memo<OllamaModelDownloaderProps>(
               showInfo
               percent={percent}
               strokeColor={cssVar.colorSuccess}
-              trailColor={cssVar.colorSuccessBg}
+              railColor={cssVar.colorSuccessBg}
             />
             <Flexbox
               horizontal

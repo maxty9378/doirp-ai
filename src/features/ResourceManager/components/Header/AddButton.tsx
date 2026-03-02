@@ -241,10 +241,17 @@ const AddButton = () => {
       {
         children: [
           {
+            disabled: true,
             icon: <Notion />,
             key: 'connect-notion',
-            label: 'Notion',
-            onClick: handleOpenNotionGuide,
+            label: (
+              <span style={{ display: 'block' }}>
+                Notion
+                <span style={{ display: 'block', fontSize: 11, opacity: 0.45 }}>
+                  В разработке
+                </span>
+              </span>
+            ),
           },
         ],
         icon: <Icon icon={Link} />,

@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { chargeBeforeGenerate } from '@/business/server/image-generation/chargeBeforeGenerate';
+import { checkImageLimit, incrementImageUsage } from '@/server/middleware/imageLimit';
 import { AsyncTaskModel } from '@/database/models/asyncTask';
 import { type NewGeneration, type NewGenerationBatch } from '@/database/schemas';
 import { asyncTasks, generationBatches, generations } from '@/database/schemas';
@@ -233,6 +234,8 @@ export const imageRouter = router({
     });
 
     log('Database transaction completed successfully. Starting async task triggers directly.');
+
+    await incrementImageUsage(userId, imageNum);
 
     // Step 2: Trigger background image generation tasks using after() API
     log('Starting async image generation tasks with after()');
