@@ -14,6 +14,9 @@ import { userGeneralSettingsSelectors } from '@/store/user/selectors';
 
 import OpeningQuestions from './OpeningQuestions';
 import ToolAuthAlert from './ToolAuthAlert';
+import VoiceCallOnboarding from './VoiceCallOnboarding';
+
+const VOICE_CALL_MARKET_ID = 'training-tp-price-objection';
 
 const InboxWelcome = memo(() => {
   const { t } = useTranslation(['welcome', 'chat']);
@@ -69,4 +72,14 @@ const InboxWelcome = memo(() => {
   );
 });
 
-export default InboxWelcome;
+const AgentWelcome = memo(() => {
+  const meta = useAgentStore(agentSelectors.currentAgentMeta, isEqual);
+  if (meta.marketIdentifier === VOICE_CALL_MARKET_ID) {
+    return <VoiceCallOnboarding />;
+  }
+  return <InboxWelcome />;
+});
+
+AgentWelcome.displayName = 'AgentWelcome';
+
+export default AgentWelcome;

@@ -55,7 +55,7 @@ const RemainingLimit = memo(() => {
                 showInfo={false}
                 size="small"
                 strokeColor={isCritical ? '#ff4d4f' : isLow ? '#ffa34d' : '#1890ff'}
-                trailColor="rgba(0, 0, 0, 0.06)"
+                railColor="rgba(0, 0, 0, 0.06)"
               />
             )}
           </Flexbox>

@@ -1,4 +1,8 @@
-import { DEFAULT_USER_TOKEN_QUOTA, userCodes } from '@lobechat/database/schemas';
+import {
+  DAILY_IMAGE_LIMIT,
+  DEFAULT_USER_TOKEN_QUOTA,
+  userCodes,
+} from '@lobechat/database/schemas';
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
@@ -6,6 +10,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { messages } from '@/database/schemas';
 import { serverDB } from '@/database/server';
+import { TOKEN_OVERDRAFT_LIMIT } from '@/server/middleware/trackTokenUsage';
 
 /**
  * Calculate total tokens used from messages metadata
@@ -54,35 +59,60 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user has a userCodes entry
-    const result = await serverDB
-      .select({
-        tokenQuota: userCodes.tokenQuota,
-        tokensUsed: userCodes.tokensUsed,
-      })
-      .from(userCodes)
-      .where(eq(userCodes.userId, userId))
-      .limit(1);
+    let result: Array<{
+      dailyImageCount: number | null;
+      lastImageDate: Date | null;
+      tokenQuota: number;
+      tokensUsed: number;
+    }> = [];
+
+    try {
+      result = await serverDB
+        .select({
+          dailyImageCount: userCodes.dailyImageCount,
+          lastImageDate: userCodes.lastImageDate,
+          tokenQuota: userCodes.tokenQuota,
+          tokensUsed: userCodes.tokensUsed,
+        })
+        .from(userCodes)
+        .where(eq(userCodes.userId, userId))
+        .limit(1);
+    } catch (dbError) {
+      // user_codes table may not exist yet (migrations not run)
+      console.warn('token-limits: userCodes query failed, using defaults:', dbError);
+    }
 
     let tokenQuota: number;
     let tokensUsed: number;
+    let dailyImageCount = 0;
 
     if (result.length > 0) {
-      // User has userCodes entry - use stored values
       tokenQuota = result[0].tokenQuota;
       tokensUsed = result[0].tokensUsed;
+      // Lazy reset: only count today's images
+      const now = new Date();
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const lastDate = result[0].lastImageDate ? new Date(result[0].lastImageDate) : null;
+      dailyImageCount =
+        lastDate && lastDate >= todayStart ? (result[0].dailyImageCount ?? 0) : 0;
     } else {
-      // No userCodes entry - calculate from messages, use default quota
       tokenQuota = DEFAULT_USER_TOKEN_QUOTA;
-      tokensUsed = await calculateTokensFromMessages(userId);
+      try {
+        tokensUsed = await calculateTokensFromMessages(userId);
+      } catch {
+        tokensUsed = 0;
+      }
     }
 
-    const remaining = Math.max(0, tokenQuota - tokensUsed);
+    const remaining = tokenQuota - tokensUsed;
 
     return NextResponse.json({
+      dailyImageCount,
+      imageLimit: DAILY_IMAGE_LIMIT,
+      overdraftLimit: TOKEN_OVERDRAFT_LIMIT,
+      remaining,
       tokenQuota,
       tokensUsed,
-      remaining,
     });
   } catch (error) {
     console.error('Error fetching token limits:', error);

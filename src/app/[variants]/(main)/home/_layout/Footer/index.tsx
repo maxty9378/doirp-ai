@@ -4,6 +4,7 @@ import { BRANDING_EMAIL, SOCIAL_URL } from '@lobechat/business-const';
 import { useAnalytics } from '@lobehub/analytics/react';
 import { type MenuProps } from '@lobehub/ui';
 import { ActionIcon, DropdownMenu, Flexbox, Icon } from '@lobehub/ui';
+import { createStaticStyles, keyframes } from 'antd-style';
 import { DiscordIcon } from '@lobehub/ui/icons';
 import {
   Book,
@@ -24,12 +25,51 @@ import HighlightNotification from '@/components/HighlightNotification';
 import LabsModal from '@/components/LabsModal';
 import { DOCUMENTS_REFER_URL, GITHUB, mailTo } from '@/const/url';
 import ThemeButton from '@/features/User/UserPanel/ThemeButton';
+import ResourceWidget from '@/app/[variants]/(main)/home/features/ResourceWidget';
 import { useFeedbackModal } from '@/hooks/useFeedbackModal';
 import { useGlobalStore } from '@/store/global';
 import { systemStatusSelectors } from '@/store/global/selectors/systemStatus';
 import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
 import { useUserStore } from '@/store/user';
+import { authSelectors } from '@/store/user/slices/auth/selectors';
 import { userGeneralSettingsSelectors } from '@/store/user/slices/settings/selectors';
+
+const gradientShift = keyframes`
+  0% { background-position: 0% 0%; }
+  25% { background-position: 100% 50%; }
+  50% { background-position: 50% 100%; }
+  75% { background-position: 0% 50%; }
+  100% { background-position: 0% 0%; }
+`;
+
+const styles = createStaticStyles(({ css, cssVar }) => ({
+  tokenContainer: css`
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    padding: 12px;
+    width: 100%;
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    background: linear-gradient(
+      135deg,
+      ${cssVar.colorBgContainer} 0%,
+      rgba(99, 102, 241, 0.15) 8%,
+      rgba(124, 58, 237, 0.18) 16%,
+      rgba(139, 92, 246, 0.16) 24%,
+      rgba(192, 132, 252, 0.14) 32%,
+      rgba(236, 72, 153, 0.12) 40%,
+      rgba(59, 130, 246, 0.15) 48%,
+      rgba(6, 182, 212, 0.18) 56%,
+      rgba(20, 184, 166, 0.14) 64%,
+      rgba(34, 211, 238, 0.12) 72%,
+      rgba(99, 102, 241, 0.16) 80%,
+      rgba(139, 92, 246, 0.14) 88%,
+      ${cssVar.colorBgContainer} 100%
+    );
+    background-size: 300% 300%;
+    animation: ${gradientShift} 10s ease-in-out infinite;
+  `,
+}));
 
 const PRODUCT_HUNT_NOTIFICATION = {
   actionHref: 'https://www.producthunt.com/products/lobehub?launch=lobehub',
@@ -43,6 +83,7 @@ const Footer = memo(() => {
   const { t } = useTranslation('common');
   const { analytics } = useAnalytics();
   const { hideGitHub } = useServerConfigStore(featureFlagsSelectors);
+  const isLogin = useUserStore(authSelectors.isLogin);
   const isDevMode = useUserStore((s) => userGeneralSettingsSelectors.config(s).isDevMode);
   const [isLabsModalOpen, setIsLabsModalOpen] = useState(false);
   const [shouldLoadChangelog, setShouldLoadChangelog] = useState(false);
@@ -196,6 +237,13 @@ const Footer = memo(() => {
 
   return (
     <>
+      {isLogin && (
+        <Flexbox gap={8} style={{ padding: '0 8px 8px' }}>
+          <div className={styles.tokenContainer}>
+            <ResourceWidget />
+          </div>
+        </Flexbox>
+      )}
       <Flexbox horizontal align={'center'} gap={2} justify={'space-between'} padding={8}>
         <Flexbox horizontal align={'center'} flex={1} gap={2}>
           <DropdownMenu items={helpMenuItems} placement="topLeft">
