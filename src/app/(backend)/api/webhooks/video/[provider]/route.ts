@@ -19,7 +19,6 @@ import { AsyncTaskModel } from '@/database/models/asyncTask';
 import { GenerationModel } from '@/database/models/generation';
 import { generationBatches } from '@/database/schemas';
 import { getServerDB } from '@/database/server';
-import { VideoGenerationService } from '@/server/services/generation/video';
 import { sanitizeFileName } from '@/utils/sanitizeFileName';
 
 const log = debug('lobe-video:webhook');
@@ -166,6 +165,13 @@ export const POST = async (req: Request, { params }: { params: Promise<{ provide
     }
 
     // Handle success result: download video → process → upload S3 → create asset and file
+    if (process.env.VERCEL) {
+      throw new Error(
+        'Video post-processing is disabled on Vercel serverless due function size limits. Use a worker service.',
+      );
+    }
+
+    const { VideoGenerationService } = await import('@/server/services/generation/video');
     const videoService = new VideoGenerationService(db, asyncTask.userId);
     const processResult = await videoService.processVideoForGeneration(result.videoUrl);
 

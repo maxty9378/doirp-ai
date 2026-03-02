@@ -32,7 +32,7 @@ const MONOLOGUE_DURATION_MS = 15_000;
 const MONOLOGUE_VOLUME_THRESHOLD = 10;
 const AMBIENT_AUDIO_URL = '/audio/ambient-store.mp3?v=20260302';
 
-/** РћС‡РёС‰Р°РµС‚ Р°РЅРіР»РёР№СЃРєРёРµ СЂР°Р·РјС‹С€Р»РµРЅРёСЏ Рё С‚РµРіРё */
+/** Очищает служебные теги в тексте от модели */
 function cleanAiText(text: string): string {
   let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
   cleaned = cleaned.replace(/\[CURRENT_SCORE:\s*-?\d+\]/gi, '');
@@ -117,7 +117,7 @@ export function useGeminiLive({
   const [subtitle, setSubtitle] = useState('');
   const [checkpoints, setCheckpoints] = useState<VoiceCallCheckpoint[]>(CHECKPOINTS_TEMPLATE);
 
-  // Р’РЅСѓС‚СЂРµРЅРЅРёР№ С‡Р°С‚ С‚СЂРµРЅР°Р¶РµСЂР°
+  // Внутренний чат тренажера
   const [liveTranscript, setLiveTranscript] = useState<TranscriptEntry[]>([]);
 
   const wsRef = useRef<WebSocket | null>(null);
@@ -159,6 +159,7 @@ export function useGeminiLive({
   const hangupScheduledRef = useRef(false);
   const isSetupCompleteRef = useRef(false);
   const autoFinishTriggeredRef = useRef(false);
+  const aiSpeakingSinceRef = useRef<number>(0);
 
   const playTone = useCallback((freq: number, duration: number, startTime: number) => {
     const ctx = playContextRef.current;
@@ -293,6 +294,7 @@ export function useGeminiLive({
       pendingScoreDeltaRef.current = 0;
       hangupScheduledRef.current = false;
       autoFinishTriggeredRef.current = false;
+      aiSpeakingSinceRef.current = 0;
       silenceNudgeCountRef.current = 0;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -343,14 +345,14 @@ export function useGeminiLive({
         const res = await fetch(`/api/voice-call/config?agentId=${encodeURIComponent(agentId)}`, {
           credentials: 'include',
         });
-        if (!res.ok) throw new Error(`РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё РєРѕРЅС„РёРіР°: ${res.status}`);
+        if (!res.ok) throw new Error(`Ошибка загрузки конфига: ${res.status}`);
         lastAgentIdRef.current = agentId;
         configRef.current = await res.json();
         configFetchedRef.current = true;
       }
 
       const config = configRef.current;
-      if (!config?.apiKey) throw new Error('РќРµС‚ API-РєР»СЋС‡Р° Google.');
+      if (!config?.apiKey) throw new Error('Нет API-ключа Google.');
 
       const url = `${GEMINI_LIVE_WS}?key=${encodeURIComponent(config.apiKey)}`;
       const ws = new WebSocket(url);
@@ -364,7 +366,7 @@ export function useGeminiLive({
                 turns: [
                   {
                     role: 'user',
-                    parts: [{ text: 'РќР°С‡РёРЅР°Р№ РґРёР°Р»РѕРі. РЎРєР°Р¶Рё РїРµСЂРІСѓСЋ СЂРµРїР»РёРєСѓ РѕС‚ Р»РёС†Р° РњР°СЂРёРЅС‹ РРІР°РЅРѕРІРЅС‹.' }],
+                    parts: [{ text: 'Начинай диалог. Скажи первую реплику от лица Марины Ивановны.' }],
                   },
                 ],
                 turnComplete: true,
@@ -487,17 +489,17 @@ export function useGeminiLive({
             currentAiTurnTextRef.current = '';
           }
         } catch (e) {
-          console.warn('РћС€РёР±РєР° РїР°СЂСЃРёРЅРіР°:', e);
+          console.warn('Ошибка парсинга:', e);
         }
       };
 
-      ws.onerror = () => reportError('РћС€РёР±РєР° WebSocket. РџСЂРѕРІРµСЂСЊС‚Рµ РёРЅС‚РµСЂРЅРµС‚.');
+      ws.onerror = () => reportError('Ошибка WebSocket. Проверьте интернет.');
       ws.onclose = (event) => {
         wsRef.current = null;
         if (!isSetupCompleteRef.current) {
           connectionLockRef.current = false;
           reportError(
-            `Live-СЃРѕРµРґРёРЅРµРЅРёРµ Р·Р°РєСЂС‹С‚Рѕ РґРѕ СЃС‚Р°СЂС‚Р° (code: ${event.code}). РџСЂРѕРІРµСЂСЊС‚Рµ VPN/Р°РЅС‚РёРІРёСЂСѓСЃ/РїСЂРѕРєСЃРё Рё РґРѕСЃС‚СѓРї Рє generativelanguage.googleapis.com.`,
+            `Live-соединение закрыто до старта (code: ${event.code}). Проверьте VPN/антивирус/прокси и доступ к generativelanguage.googleapis.com.`,
           );
           return;
         }
@@ -529,7 +531,7 @@ export function useGeminiLive({
       source.connect(workletNode);
     } catch (err) {
       connectionLockRef.current = false;
-      reportError(err instanceof Error ? err.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ');
+      reportError(err instanceof Error ? err.message : 'Не удалось подключиться');
     }
   }, [
     agentId,
@@ -597,6 +599,7 @@ export function useGeminiLive({
     connectionLockRef.current = false;
     hangupScheduledRef.current = false;
     autoFinishTriggeredRef.current = false;
+    aiSpeakingSinceRef.current = 0;
 
     setStatus('idle');
     setErrorMessage(null);
@@ -623,10 +626,27 @@ export function useGeminiLive({
       const now = Date.now();
 
       if (isPlayingRef.current) {
+        if (aiVolumeCurrentRef.current >= MONOLOGUE_VOLUME_THRESHOLD) {
+          if (aiSpeakingSinceRef.current === 0) aiSpeakingSinceRef.current = now;
+
+          const monologueDuration = now - aiSpeakingSinceRef.current;
+          if (monologueDuration >= MONOLOGUE_DURATION_MS && !monologueTriggeredRef.current) {
+            monologueTriggeredRef.current = true;
+            streamerRef.current?.stop();
+            sendClientText('Отвечай короче: 1-2 предложения и по сути, затем жди ответ собеседника.');
+          }
+        }
+
         lowVolumeSinceRef.current = 0;
         silenceSinceRef.current = 0;
         silenceNudgeCountRef.current = 0;
         return;
+      }
+
+      if (aiSpeakingSinceRef.current > 0) {
+        aiSpeakingSinceRef.current = 0;
+        lastBotEndRef.current = now;
+        monologueTriggeredRef.current = false;
       }
 
       if (vol < 3) {
@@ -653,7 +673,7 @@ export function useGeminiLive({
           now - lowVolumeSinceRef.current >= MUMBLE_DURATION_MS &&
           now >= mumbleCooldownRef.current
         ) {
-          sendClientText('РЎРѕР±РµСЃРµРґРЅРёРє РіРѕРІРѕСЂРёС‚ РѕС‡РµРЅСЊ С‚РёС…Рѕ, РјСЏРјР»РёС‚. РЎРґРµР»Р°Р№ РµРјСѓ Р¶РµСЃС‚РєРѕРµ Р·Р°РјРµС‡Р°РЅРёРµ.');
+          sendClientText('Собеседник говорит очень тихо и неуверенно. Сделай ему жесткое замечание.');
           mumbleCooldownRef.current = now + MUMBLE_COOLDOWN_MS;
           lowVolumeSinceRef.current = 0;
         }
