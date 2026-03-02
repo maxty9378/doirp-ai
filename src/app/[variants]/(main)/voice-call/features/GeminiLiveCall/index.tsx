@@ -158,11 +158,13 @@ const GeminiLiveCall = memo(({ agentId, autoConnect, embedded, onEnd }: GeminiLi
   );
 
   const {
+    checkpoints,
     connect,
     disconnect,
     errorMessage,
     getTranscript,
     hangUpByLpr,
+    hangUpReason,
     status,
     userVolume,
     aiVolume,
@@ -178,6 +180,14 @@ const GeminiLiveCall = memo(({ agentId, autoConnect, embedded, onEnd }: GeminiLi
   const isCallActive = status === 'connecting' || status === 'ready';
   const aiIsSpeaking = aiVolume > 5;
   const userIsSpeaking = userVolume > 10;
+  const hangupBannerText =
+    hangUpReason === 'success'
+      ? 'ЛПР подтвердил следующий шаг и сам завершил звонок.'
+      : hangUpReason === 'abuse'
+        ? 'ЛПР услышал оскорбление, пригрозил последствиями и бросил трубку.'
+        : hangUpReason === 'silence'
+          ? 'ЛПР завершил звонок из-за долгого молчания.'
+          : 'ЛПР завершил звонок.';
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -214,9 +224,7 @@ const GeminiLiveCall = memo(({ agentId, autoConnect, embedded, onEnd }: GeminiLi
         </button>
       )}
 
-      {hangUpByLpr && (
-        <div className={styles.hangUpBanner}>Марина Ивановна бросила трубку. Вы потеряли клиента.</div>
-      )}
+      {hangUpByLpr && <div className={styles.hangUpBanner}>{hangupBannerText}</div>}
 
       {errorMessage && (
         <div
@@ -294,6 +302,7 @@ const GeminiLiveCall = memo(({ agentId, autoConnect, embedded, onEnd }: GeminiLi
           transcript={liveTranscript} 
           score={score} 
           agentId={agentId} 
+          checkpoints={checkpoints}
         />
       )}
 

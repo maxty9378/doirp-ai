@@ -45,6 +45,52 @@ export interface TranscriptEntry {
   text: string;
 }
 
+export type HangUpReason = 'abuse' | 'silence' | 'ai' | 'success' | null;
+
+export interface VoiceCallCheckpoint {
+  done: boolean;
+  id: 'empathy' | 'value' | 'nextStep';
+  label: string;
+}
+
+const CHECKPOINTS_TEMPLATE: VoiceCallCheckpoint[] = [
+  { done: false, id: 'empathy', label: 'Снять напряжение: признать эмоции клиента' },
+  { done: false, id: 'value', label: 'Дать аргумент выгоды без прямой скидки' },
+  { done: false, id: 'nextStep', label: 'Зафиксировать следующий шаг (встреча/пробная поставка)' },
+];
+
+const EMPATHY_RE = /\b(понима(ю|ем)|слышу вас|вы правы|согласен|да, неприятно|понимаю вашу позицию)\b/i;
+const VALUE_RE = /\b(марж|прибыл|оборот|доход|выручк|фейсинг|полк|оборачиваем|трафик|чек|без скидк)\b/i;
+const NEXT_STEP_RE = /\b(давайте|предлагаю|встреч|созвон|тест|пробн(ая|ую)? поставк|заказ|следующ(ий|ая) шаг)\b/i;
+const INSULT_RE = /\b(дура|идиот|туп(ая|ой|ой)|заткнись|пош(е|ё)л|урод|дебил|клоун)\b/i;
+const HANGUP_PHRASE_RE = /кладу\s+трубку/i;
+
+const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+const evaluateCheckpoints = (transcript: TranscriptEntry[]): VoiceCallCheckpoint[] => {
+  const userText = transcript
+    .filter((entry) => entry.role === 'user')
+    .map((entry) => entry.text.toLowerCase())
+    .join(' ');
+
+  return CHECKPOINTS_TEMPLATE.map((checkpoint) => {
+    if (checkpoint.id === 'empathy') return { ...checkpoint, done: EMPATHY_RE.test(userText) };
+    if (checkpoint.id === 'value') return { ...checkpoint, done: VALUE_RE.test(userText) };
+    return { ...checkpoint, done: NEXT_STEP_RE.test(userText) };
+  });
+};
+
+const estimateUserScoreDelta = (text: string) => {
+  const lower = text.toLowerCase();
+  let delta = 0;
+  if (EMPATHY_RE.test(lower)) delta += 4;
+  if (VALUE_RE.test(lower)) delta += 5;
+  if (NEXT_STEP_RE.test(lower)) delta += 6;
+  if (/\b(скидк|дешевл|сбросим цену)\b/i.test(lower) && !/\bбез скидк\b/i.test(lower)) delta -= 4;
+  if (INSULT_RE.test(lower)) delta -= 20;
+  return clamp(delta, -20, 12);
+};
+
 export interface UseGeminiLiveOptions {
   agentId?: string;
   onCallEnd?: (transcript: TranscriptEntry[]) => void;
@@ -67,7 +113,9 @@ export function useGeminiLive({
   const [score, setScore] = useState(0);
   const [patience, setPatience] = useState(PATIENCE_INITIAL);
   const [hangUpByLpr, setHangUpByLpr] = useState(false);
+  const [hangUpReason, setHangUpReason] = useState<HangUpReason>(null);
   const [subtitle, setSubtitle] = useState('');
+  const [checkpoints, setCheckpoints] = useState<VoiceCallCheckpoint[]>(CHECKPOINTS_TEMPLATE);
 
   // Р’РЅСѓС‚СЂРµРЅРЅРёР№ С‡Р°С‚ С‚СЂРµРЅР°Р¶РµСЂР°
   const [liveTranscript, setLiveTranscript] = useState<TranscriptEntry[]>([]);
@@ -110,6 +158,7 @@ export function useGeminiLive({
   const hangUpToneRef = useRef<() => void>(() => {});
   const hangupScheduledRef = useRef(false);
   const isSetupCompleteRef = useRef(false);
+  const autoFinishTriggeredRef = useRef(false);
 
   const playTone = useCallback((freq: number, duration: number, startTime: number) => {
     const ctx = playContextRef.current;
@@ -164,6 +213,64 @@ export function useGeminiLive({
     [onError],
   );
 
+  const sendClientText = useCallback((text: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(
+      JSON.stringify({
+        clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true },
+      }),
+    );
+  }, []);
+
+  const finalizeByLpr = useCallback(
+    (reason: Exclude<HangUpReason, null>, message: string, delayMs = 1200, markAsError = true) => {
+      if (hangupScheduledRef.current) return;
+      hangupScheduledRef.current = true;
+      setHangUpReason(reason);
+      setHangUpByLpr(true);
+      if (markAsError) {
+        reportError(message);
+      } else {
+        setErrorMessage(message);
+        setSubtitle(message);
+      }
+      setTimeout(() => {
+        hangUpToneRef.current();
+        disconnectRef.current();
+      }, delayMs);
+    },
+    [reportError],
+  );
+
+  const recalcCheckpoints = useCallback(() => {
+    const next = evaluateCheckpoints(transcriptRef.current);
+    setCheckpoints(next);
+    return next;
+  }, []);
+
+  const maybeAutoFinish = useCallback(
+    (latestScore: number) => {
+      if (status !== 'ready' || autoFinishTriggeredRef.current || hangupScheduledRef.current) return;
+
+      const next = recalcCheckpoints();
+      const allDone = next.every((item) => item.done);
+      const enoughDialogue = transcriptRef.current.length >= 6;
+      if (!allDone || !enoughDialogue || latestScore < 12) return;
+
+      autoFinishTriggeredRef.current = true;
+      sendClientText(
+        'Клиент убедил тебя. Коротко зафиксируй следующий шаг, скажи что работа продолжается и закончи фразой "кладу трубку".',
+      );
+
+      setTimeout(() => {
+        if (hangupScheduledRef.current || status !== 'ready') return;
+        finalizeByLpr('success', 'Звонок завершен: клиент согласился на следующий шаг.', 1200, false);
+      }, 9000);
+    },
+    [finalizeByLpr, recalcCheckpoints, sendClientText, status],
+  );
+
   const connect = useCallback(async () => {
     if (connectionLockRef.current) return;
     connectionLockRef.current = true;
@@ -175,7 +282,9 @@ export function useGeminiLive({
       setScore(0);
       setPatience(PATIENCE_INITIAL);
       setHangUpByLpr(false);
+      setHangUpReason(null);
       setSubtitle('');
+      setCheckpoints(CHECKPOINTS_TEMPLATE);
 
       transcriptRef.current = [];
       setLiveTranscript([]);
@@ -183,6 +292,7 @@ export function useGeminiLive({
       currentAiTurnTextRef.current = '';
       pendingScoreDeltaRef.current = 0;
       hangupScheduledRef.current = false;
+      autoFinishTriggeredRef.current = false;
       silenceNudgeCountRef.current = 0;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -312,6 +422,7 @@ export function useGeminiLive({
             if (interruptedText) {
               transcriptRef.current.push({ role: 'ai', text: interruptedText });
               setLiveTranscript([...transcriptRef.current]);
+              recalcCheckpoints();
             }
             currentAiTurnTextRef.current = '';
             pendingScoreDeltaRef.current = 0;
@@ -327,17 +438,8 @@ export function useGeminiLive({
               if (part.text) {
                 const textChunk = part.text;
 
-                if (
-                  textChunk.toLowerCase().includes('РєР»Р°РґСѓ С‚СЂСѓР±РєСѓ') &&
-                  !hangupScheduledRef.current
-                ) {
-                  hangupScheduledRef.current = true;
-                  setHangUpByLpr(true);
-                  reportError('РњР°СЂРёРЅР° РРІР°РЅРѕРІРЅР° Р±СЂРѕСЃРёР»Р° С‚СЂСѓР±РєСѓ!');
-                  setTimeout(() => {
-                    hangUpToneRef.current();
-                    disconnectRef.current();
-                  }, 3500);
+                if (HANGUP_PHRASE_RE.test(textChunk) && !hangupScheduledRef.current) {
+                  finalizeByLpr('ai', 'ЛПР завершил звонок.', 3500, true);
                 }
 
                 const scoreMatches = textChunk.matchAll(/\[CURRENT_SCORE:\s*([-\d]+)\]/g);
@@ -359,19 +461,28 @@ export function useGeminiLive({
           const transcriptionText = cleanAiText(rawTranscriptionText);
           if (transcriptionText) {
             currentAiTurnTextRef.current += transcriptionText + ' ';
+            setSubtitle(transcriptionText);
+            if (HANGUP_PHRASE_RE.test(transcriptionText) && !hangupScheduledRef.current) {
+              finalizeByLpr('ai', 'ЛПР завершил звонок.', 1500, true);
+            }
           }
 
           if (serverContent.turnComplete) {
             const turnText = currentAiTurnTextRef.current.trim();
 
             if (pendingScoreDeltaRef.current !== 0) {
-              setScore((prev) => prev + pendingScoreDeltaRef.current);
+              setScore((prev) => {
+                const nextScore = clamp(prev + pendingScoreDeltaRef.current, -50, 50);
+                maybeAutoFinish(nextScore);
+                return nextScore;
+              });
               pendingScoreDeltaRef.current = 0;
             }
 
             if (turnText) {
               transcriptRef.current.push({ role: 'ai', text: turnText });
               setLiveTranscript([...transcriptRef.current]);
+              recalcCheckpoints();
             }
             currentAiTurnTextRef.current = '';
           }
@@ -420,7 +531,16 @@ export function useGeminiLive({
       connectionLockRef.current = false;
       reportError(err instanceof Error ? err.message : 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ');
     }
-  }, [agentId, systemInstruction, voiceName, reportError, playConnectionTone]);
+  }, [
+    agentId,
+    systemInstruction,
+    voiceName,
+    reportError,
+    playConnectionTone,
+    finalizeByLpr,
+    maybeAutoFinish,
+    recalcCheckpoints,
+  ]);
 
   const disconnect = useCallback(() => {
     const transcript = [...transcriptRef.current];
@@ -476,6 +596,7 @@ export function useGeminiLive({
     aiVolumeCurrentRef.current = 0;
     connectionLockRef.current = false;
     hangupScheduledRef.current = false;
+    autoFinishTriggeredRef.current = false;
 
     setStatus('idle');
     setErrorMessage(null);
@@ -483,6 +604,8 @@ export function useGeminiLive({
     setAiVolume(0);
     setScore(0);
     setPatience(PATIENCE_INITIAL);
+    setCheckpoints(CHECKPOINTS_TEMPLATE);
+    setHangUpReason(null);
   }, [playDisconnectTone, onCallEnd]);
 
   useEffect(() => {
@@ -494,16 +617,6 @@ export function useGeminiLive({
 
   useEffect(() => {
     if (status !== 'ready') return;
-
-    const sendClientText = (text: string) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      ws.send(
-        JSON.stringify({
-          clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true },
-        }),
-      );
-    };
 
     const id = setInterval(() => {
       const vol = userVolumeCurrentRef.current;
@@ -528,13 +641,7 @@ export function useGeminiLive({
           }
 
           if (now - silenceSinceRef.current >= SILENCE_HARD_HANGUP_MS && !hangupScheduledRef.current) {
-            hangupScheduledRef.current = true;
-            setHangUpByLpr(true);
-            reportError('Марина Ивановна завершила звонок: слишком долгое молчание.');
-            setTimeout(() => {
-              hangUpToneRef.current();
-              disconnectRef.current();
-            }, 1200);
+            finalizeByLpr('silence', 'Марина Ивановна завершила звонок: слишком долгое молчание.');
             return;
           }
         }
@@ -557,7 +664,7 @@ export function useGeminiLive({
     }, 1000);
 
     return () => clearInterval(id);
-  }, [status]);
+  }, [status, sendClientText, finalizeByLpr]);
 
   useEffect(() => {
     if (status !== 'connecting' && status !== 'ready') return;
@@ -618,6 +725,23 @@ export function useGeminiLive({
       if (text && text.length > 2 && lastEntry?.text !== text) {
         transcriptRef.current.push({ role: 'user', text });
         setLiveTranscript([...transcriptRef.current]);
+        const delta = estimateUserScoreDelta(text);
+        if (delta !== 0) {
+          setScore((prev) => {
+            const nextScore = clamp(prev + delta, -50, 50);
+            maybeAutoFinish(nextScore);
+            return nextScore;
+          });
+          setPatience((prev) => clamp(prev + delta, 0, 100));
+        }
+        recalcCheckpoints();
+
+        if (INSULT_RE.test(text) && !hangupScheduledRef.current) {
+          sendClientText(
+            'Собеседник тебя оскорбил. Ответь резко, пригрози проблемами и закончи фразой "Я кладу трубку".',
+          );
+          finalizeByLpr('abuse', 'ЛПР завершил звонок из-за оскорбления.', 2400, true);
+        }
       }
     };
 
@@ -643,7 +767,7 @@ export function useGeminiLive({
       } catch (_) {}
       recognitionRef.current = null;
     };
-  }, [status]);
+  }, [status, finalizeByLpr, maybeAutoFinish, recalcCheckpoints, sendClientText]);
 
   const getTranscript = useCallback(() => [...transcriptRef.current], []);
 
@@ -652,15 +776,16 @@ export function useGeminiLive({
     disconnect,
     errorMessage,
     hangUpByLpr,
+    hangUpReason,
     status,
     userVolume,
     aiVolume,
     score,
     subtitle,
     patience,
+    checkpoints,
     getTranscript,
     liveTranscript,
     analyserRef,
   };
 }
-

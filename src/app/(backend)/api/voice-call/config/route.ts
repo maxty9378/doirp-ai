@@ -7,6 +7,13 @@ import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 
 const TP_PRICE_AGENT_ID = 'training-tp-price-objection';
+const LIVE_BEHAVIOR_RULES = [
+  'Если собеседник закрывает ключевые возражения и фиксирует следующий шаг, заверши разговор сам.',
+  'При успешном завершении обязательно произнеси финальную фразу: "Кладу трубку".',
+  'Если собеседник переходит на оскорбления или хамство, ответь жестко, предупреди о последствиях и заверши звонок.',
+  'При завершении из-за хамства обязательно скажи фразу: "Кладу трубку".',
+  'Каждая реплика короткая: 1-2 предложения, только прямая речь персонажа.',
+].join('\n');
 
 const buildTpPriceVoiceSystem = (preset: {
   goals?: string[];
@@ -61,7 +68,8 @@ export async function GET(request: Request) {
     }
 
     const isTpPrice = agentId === TP_PRICE_AGENT_ID;
-    const systemInstruction = isTpPrice ? buildTpPriceVoiceSystem(preset) : preset.systemRole;
+    const baseSystemInstruction = isTpPrice ? buildTpPriceVoiceSystem(preset) : preset.systemRole;
+    const systemInstruction = `${baseSystemInstruction}\n\n${LIVE_BEHAVIOR_RULES}`;
     const voiceName = isTpPrice ? 'Kore' : 'Charon';
 
     return NextResponse.json({

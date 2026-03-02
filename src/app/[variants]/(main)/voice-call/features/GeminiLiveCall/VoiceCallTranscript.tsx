@@ -4,7 +4,7 @@ import { Avatar } from '@lobehub/ui';
 import { createStaticStyles } from 'antd-style';
 import { memo, type RefObject } from 'react';
 
-import type { TranscriptEntry } from './useGeminiLive';
+import type { TranscriptEntry, VoiceCallCheckpoint } from './useGeminiLive';
 
 const styles = createStaticStyles(({ css }) => ({
   transcriptWrap: css`
@@ -46,6 +46,26 @@ const styles = createStaticStyles(({ css }) => ({
   scoreFill: css`
     height: 100%;
     transition: width 0.3s ease, background 0.3s ease;
+  `,
+  checkpointWrap: css`
+    display: flex;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--colorBorderSecondary);
+    background: var(--colorFillQuaternary);
+    flex-wrap: wrap;
+  `,
+  checkpointItem: css`
+    font-size: 12px;
+    border-radius: 999px;
+    padding: 4px 10px;
+    border: 1px solid var(--colorBorderSecondary);
+    color: var(--colorTextSecondary);
+  `,
+  checkpointDone: css`
+    border-color: #16a34a;
+    color: #166534;
+    background: #dcfce7;
   `,
   transcriptLog: css`
     flex: 1;
@@ -125,12 +145,13 @@ const EMPTY_PLACEHOLDER = 'Поздоровайтесь с клиентом...';
 
 export interface VoiceCallTranscriptProps {
   agentId: string;
+  checkpoints: VoiceCallCheckpoint[];
   score: number;
   scrollRef: RefObject<HTMLDivElement | null>;
   transcript: TranscriptEntry[];
 }
 
-const VoiceCallTranscript = memo(({ agentId, score, scrollRef, transcript }: VoiceCallTranscriptProps) => {
+const VoiceCallTranscript = memo(({ agentId, checkpoints, score, scrollRef, transcript }: VoiceCallTranscriptProps) => {
   const getScoreColor = (s: number) => {
     if (s < -10) return '#ff4d4f';
     if (s > 10) return '#52c41a';
@@ -167,7 +188,19 @@ const VoiceCallTranscript = memo(({ agentId, score, scrollRef, transcript }: Voi
           <span style={{ minWidth: 24, textAlign: 'right' }}>{score > 0 ? `+${score}` : score}</span>
         </div>
       </div>
-      
+
+      <div className={styles.checkpointWrap}>
+        {checkpoints.map((checkpoint) => (
+          <div
+            className={`${styles.checkpointItem} ${checkpoint.done ? styles.checkpointDone : ''}`}
+            key={checkpoint.id}
+          >
+            {checkpoint.done ? '[x] ' : '[ ] '}
+            {checkpoint.label}
+          </div>
+        ))}
+      </div>
+
       <div className={styles.transcriptLog} ref={scrollRef}>
         {transcript.length === 0 ? (
           <div className={styles.placeholder}>{EMPTY_PLACEHOLDER}</div>

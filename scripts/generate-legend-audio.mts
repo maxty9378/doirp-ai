@@ -1,11 +1,11 @@
-/**
- * Генерирует озвучку легенд voice-call через Gemini TTS
- * и сохраняет в public/audio/legend-<agentId>.wav.
+﻿/**
+ * Р“РµРЅРµСЂРёСЂСѓРµС‚ РѕР·РІСѓС‡РєСѓ Р»РµРіРµРЅРґ voice-call С‡РµСЂРµР· Gemini TTS
+ * Рё СЃРѕС…СЂР°РЅСЏРµС‚ РІ public/audio/legend-<agentId>.wav.
  *
- * Запуск:
+ * Р—Р°РїСѓСЃРє:
  * bun run scripts/generate-legend-audio.mts
  *
- * Требуется GOOGLE_API_KEY в .env или .env.local
+ * РўСЂРµР±СѓРµС‚СЃСЏ GOOGLE_API_KEY РІ .env РёР»Рё .env.local
  */
 
 import fs from 'node:fs';
@@ -44,25 +44,19 @@ const readPreset = (filename: string): VoicePreset => {
 };
 
 const buildLegendText = (preset: VoicePreset) => {
-  const scenario = preset.scenario_context ?? '';
-  const userRole = preset.user_role ?? '';
-  const goals = preset.goals?.length ? preset.goals.map((goal) => `- ${goal}`).join('\n') : '';
+  const title = preset.title?.trim() ?? '';
+  const scenario = (preset.scenario_context ?? '').trim();
+  const goal = preset.goals?.[0]?.trim() ?? '';
+  const shortScenario = scenario.split(/[.!?]\s+/).filter(Boolean)[0] ?? '';
 
-  return [
-    preset.title ? `Сценарий: ${preset.title}` : '',
-    scenario ? `Легенда:\n${scenario}` : '',
-    userRole ? `Роль:\n${userRole}` : '',
-    goals ? `Цели:\n${goals}` : '',
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  return [title, shortScenario, goal].filter(Boolean).join('. ');
 };
 
 const buildTtsPrompt = (legendText: string) =>
   [
-    'Прочитай как диктор трейлера к фильму: низким, уверенным мужским голосом, драматично и с паузами.',
-    'Говори только на русском языке.',
-    `Текст: ${legendText}`,
+    'Read this in Russian as a short dramatic trailer phrase.',
+    'Be concise and speak only the provided text.',
+    `Text: ${legendText}`,
   ].join(' ');
 
 function toWavFromPcm16(pcm16: Buffer, sampleRate = SAMPLE_RATE): Buffer {
@@ -165,7 +159,7 @@ const generateLegendAudio = async (apiKey: string, agentId: string, legendText: 
 async function main() {
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) {
-    console.error('GOOGLE_API_KEY не задан. Добавьте в .env или .env.local');
+    console.error('GOOGLE_API_KEY РЅРµ Р·Р°РґР°РЅ. Р”РѕР±Р°РІСЊС‚Рµ РІ .env РёР»Рё .env.local');
     process.exit(1);
   }
 
@@ -194,3 +188,4 @@ main().catch((error) => {
   console.error(error);
   process.exit(1);
 });
+
