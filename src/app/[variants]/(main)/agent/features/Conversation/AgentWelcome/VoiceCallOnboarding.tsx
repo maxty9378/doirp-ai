@@ -4,7 +4,16 @@ import { Avatar, Flexbox, Text } from '@lobehub/ui';
 import { Button } from 'antd';
 import { createStaticStyles } from 'antd-style';
 import isEqual from 'fast-deep-equal';
-import { BookOpen, CheckCircle2, Mic, ShieldAlert, Store, Target, User, Volume2 } from 'lucide-react';
+import {
+  BookOpen,
+  CheckCircle2,
+  Mic,
+  ShieldAlert,
+  Store,
+  Target,
+  User,
+  Volume2,
+} from 'lucide-react';
 import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
 
 import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
@@ -15,10 +24,13 @@ import { useChatStore } from '@/store/chat';
 import { useGlobalStore } from '@/store/global';
 
 import GeminiLiveCall from '../../../../voice-call/features/GeminiLiveCall';
-import PostCallReport, { type PostCallReportData } from '../../../../voice-call/features/GeminiLiveCall/PostCallReport';
+import PostCallReport, {
+  type PostCallReportData,
+} from '../../../../voice-call/features/GeminiLiveCall/PostCallReport';
 
 const VOICE_CALL_AGENT_ID = 'training-tp-price-objection';
-const GEMINI_COVER_URL = '/images/voice-call/field-fighter-cover.svg';
+const GEMINI_COVER_URL =
+  '/images/voice-call/gemini-image-2_A_high-resolution_photo_from_a_cinematic_banner_angle._Inside_a_modern_well-lit_-0.jpg';
 
 const LEGEND_FALLBACK =
   'Вы - торговый представитель. Вы пришли в локальную торговую точку. ' +
@@ -58,35 +70,38 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     width: 100%;
     max-width: 820px;
     padding: 20px;
-    padding-bottom: max(8vh, 28px);
+    padding-block-end: max(8vh, 28px);
   `,
   legendLayout: css`
-    width: 100%;
     display: grid;
-    gap: 14px;
     grid-template-columns: 1fr;
+    gap: 14px;
+    width: 100%;
 
-    @media (min-width: 900px) {
+    @media (width >= 900px) {
       grid-template-columns: 1.15fr 0.85fr;
     }
   `,
   cover: css`
     position: relative;
-    min-height: 240px;
-    border-radius: 18px;
+
     overflow: hidden;
-    background-size: cover;
-    background-position: center;
-    border: 1px solid rgba(255, 255, 255, 0.22);
-    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.22);
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
+
+    min-height: 240px;
+    border: 1px solid rgb(255 255 255 / 22%);
+    border-radius: 18px;
+
+    background-position: center;
+    background-size: cover;
+    box-shadow: 0 14px 42px rgb(0 0 0 / 22%);
   `,
   coverShade: css`
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgba(8, 14, 27, 0.06) 10%, rgba(8, 14, 27, 0.84) 78%);
+    background: linear-gradient(180deg, rgb(8 14 27 / 6%) 10%, rgb(8 14 27 / 84%) 78%);
   `,
   coverContent: css`
     position: relative;
@@ -96,123 +111,145 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
   `,
   coverBadge: css`
     display: inline-flex;
-    align-items: center;
     gap: 6px;
-    margin-bottom: 8px;
+    align-items: center;
+
+    margin-block-end: 8px;
+    padding-block: 4px;
+    padding-inline: 10px;
+    border: 1px solid rgb(255 255 255 / 35%);
     border-radius: 999px;
-    padding: 4px 10px;
+
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.02em;
-    border: 1px solid rgba(255, 255, 255, 0.35);
-    background: rgba(15, 23, 42, 0.5);
+
+    background: rgb(15 23 42 / 50%);
     backdrop-filter: blur(4px);
   `,
   coverTitle: css`
-    margin: 0 0 6px;
+    margin-block: 0 6px;
+    margin-inline: 0;
+
     font-size: 24px;
-    line-height: 1.2;
     font-weight: 700;
+    line-height: 1.2;
   `,
   coverDesc: css`
+    max-width: 92%;
     margin: 0;
+
     font-size: 14px;
     line-height: 1.55;
-    color: rgba(241, 245, 249, 0.94);
-    max-width: 92%;
+    color: rgb(241 245 249 / 94%);
   `,
   card: css`
-    background: ${cssVar.colorBgContainer};
+    padding: 16px;
     border: 1px solid ${cssVar.colorBorderSecondary};
     border-radius: 14px;
-    padding: 16px;
-    color: ${cssVar.colorText};
+
     font-size: 14px;
     line-height: 1.6;
+    color: ${cssVar.colorText};
+
+    background: ${cssVar.colorBgContainer};
   `,
   cardTitle: css`
+    display: flex;
+    gap: 8px;
+    align-items: center;
+
+    margin-block-end: 10px;
+
     font-size: 12px;
     font-weight: 700;
     color: ${cssVar.colorTextSecondary};
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
   `,
   legendText: css`
     white-space: pre-wrap;
   `,
   goalsList: css`
     margin: 0;
-    padding-left: 18px;
+    padding-inline-start: 18px;
   `,
   goalsItem: css`
-    margin-bottom: 7px;
+    margin-block-end: 7px;
   `,
   checkList: css`
-    list-style: none;
-    margin: 0;
-    padding: 0;
     display: flex;
     flex-direction: column;
     gap: 8px;
+
+    margin: 0;
+    padding: 0;
+
+    list-style: none;
   `,
   checkItem: css`
     display: flex;
-    align-items: flex-start;
     gap: 8px;
+    align-items: flex-start;
   `,
   warning: css`
-    margin-top: 10px;
+    margin-block-start: 10px;
+    padding-block: 10px;
+    padding-inline: 12px;
+    border: 1px solid rgb(185 28 28 / 25%);
     border-radius: 10px;
-    padding: 10px 12px;
-    background: rgba(185, 28, 28, 0.1);
-    border: 1px solid rgba(185, 28, 28, 0.25);
+
     font-size: 13px;
     color: ${cssVar.colorText};
+
+    background: rgb(185 28 28 / 10%);
   `,
   actions: css`
     display: flex;
-    gap: 8px;
     flex-wrap: wrap;
+    gap: 8px;
     justify-content: center;
   `,
   btnPrimary: css`
     min-width: 220px;
   `,
   callWrap: css`
+    overflow: hidden;
+
     width: 100%;
     max-width: 720px;
-    min-height: 560px;
     height: 70vh;
+    min-height: 560px;
     border-radius: 16px;
-    overflow: hidden;
+
     background: ${cssVar.colorBgContainer};
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 10%);
   `,
   reportWrap: css`
     width: 100%;
     max-width: 560px;
     padding: 24px;
-    padding-bottom: max(10vh, 32px);
+    padding-block-end: max(10vh, 32px);
   `,
   reportTitle: css`
+    margin-block-end: 16px;
     font-size: 18px;
     font-weight: 700;
-    margin-bottom: 16px;
     color: ${cssVar.colorText};
   `,
   reportCloseBtn: css`
-    margin-top: 16px;
-    padding: 10px 24px;
-    border-radius: 8px;
-    border: none;
-    background: ${cssVar.colorPrimary};
-    color: #fff;
     cursor: pointer;
+
+    margin-block-start: 16px;
+    padding-block: 10px;
+    padding-inline: 24px;
+    border: none;
+    border-radius: 8px;
+
     font-weight: 600;
+    color: #fff;
+
+    background: ${cssVar.colorPrimary};
   `,
 }));
 
@@ -277,11 +314,17 @@ const VoiceCallOnboarding = memo(() => {
 
   if (step === 'report') {
     return (
-      <Flexbox align={'center'} gap={16} style={{ flexDirection: 'column', padding: 16, width: '100%' }}>
+      <Flexbox
+        align={'center'}
+        gap={16}
+        style={{ flexDirection: 'column', padding: 16, width: '100%' }}
+      >
         <div className={styles.reportWrap}>
           <div className={styles.reportTitle}>Послетренинговый отчёт</div>
           {reportLoading ? (
-            <div style={{ color: 'var(--colorTextSecondary)', marginBottom: 16 }}>Финализация отчёта...</div>
+            <div style={{ color: 'var(--colorTextSecondary)', marginBottom: 16 }}>
+              Финализация отчёта...
+            </div>
           ) : reportError ? (
             <div style={{ color: 'var(--colorError)', marginBottom: 16 }}>{reportError}</div>
           ) : reportData ? (
@@ -309,12 +352,16 @@ const VoiceCallOnboarding = memo(() => {
 
   if (step === 'call') {
     return (
-      <Flexbox align={'center'} gap={16} style={{ flexDirection: 'column', padding: 16, width: '100%' }}>
+      <Flexbox
+        align={'center'}
+        gap={16}
+        style={{ flexDirection: 'column', padding: 16, width: '100%' }}
+      >
         <div className={styles.callWrap}>
           <GeminiLiveCall
-            agentId={VOICE_CALL_AGENT_ID}
             autoConnect
             embedded
+            agentId={VOICE_CALL_AGENT_ID}
             onEnd={() => {
               setStep('legend');
             }}
@@ -333,13 +380,23 @@ const VoiceCallOnboarding = memo(() => {
         style={{ flexDirection: 'column', paddingBottom: 'max(8vh, 28px)' }}
         width={'100%'}
       >
-        <Avatar avatar={meta.avatar || DEFAULT_AVATAR} background={meta.backgroundColor} shape={'square'} size={78} />
+        <Avatar
+          avatar={meta.avatar || DEFAULT_AVATAR}
+          background={meta.backgroundColor}
+          shape={'square'}
+          size={78}
+        />
         <Text fontSize={32} weight={'bold'}>
           {meta.title || 'Полевой боец: Дорого'}
         </Text>
 
         {step === 'enter' && (
-          <Flexbox align={'center'} className={styles.wrap} gap={16} style={{ flexDirection: 'column' }}>
+          <Flexbox
+            align={'center'}
+            className={styles.wrap}
+            gap={16}
+            style={{ flexDirection: 'column' }}
+          >
             <Button
               className={styles.btnPrimary}
               icon={<Store />}
@@ -353,7 +410,12 @@ const VoiceCallOnboarding = memo(() => {
         )}
 
         {step === 'legend' && (
-          <Flexbox align={'center'} className={styles.wrap} gap={14} style={{ flexDirection: 'column' }}>
+          <Flexbox
+            align={'center'}
+            className={styles.wrap}
+            gap={14}
+            style={{ flexDirection: 'column' }}
+          >
             <div className={styles.legendLayout}>
               <div className={styles.cover} style={{ backgroundImage: `url(${GEMINI_COVER_URL})` }}>
                 <div className={styles.coverShade} />
@@ -361,7 +423,8 @@ const VoiceCallOnboarding = memo(() => {
                   <div className={styles.coverBadge}>Обложка: Gemini style</div>
                   <h2 className={styles.coverTitle}>Легенда тренировки</h2>
                   <p className={styles.coverDesc}>
-                    Жёсткие переговоры с ЛПР по возражению «Дорого». Ваша цель: сохранить матрицу без прямой скидки.
+                    Жёсткие переговоры с ЛПР по возражению «Дорого». Ваша цель: сохранить матрицу
+                    без прямой скидки.
                   </p>
                 </div>
               </div>
@@ -381,8 +444,8 @@ const VoiceCallOnboarding = memo(() => {
                 </ul>
                 <div className={styles.warning}>
                   <ShieldAlert size={14} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />
-                  Если перейти на оскорбления или хамство, аватар начинает конфликтовать, угрожает проблемами и
-                  завершает звонок.
+                  Если перейти на оскорбления или хамство, аватар начинает конфликтовать, угрожает
+                  проблемами и завершает звонок.
                 </div>
               </div>
             </div>
@@ -429,7 +492,7 @@ const VoiceCallOnboarding = memo(() => {
               </div>
             ) : null}
 
-            <Flexbox className={styles.actions} horizontal>
+            <Flexbox horizontal className={styles.actions}>
               <Button icon={<Volume2 />} size="large" onClick={handlePlayLegend}>
                 Прослушать ещё раз
               </Button>

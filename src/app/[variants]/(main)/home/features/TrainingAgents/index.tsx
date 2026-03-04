@@ -2,7 +2,6 @@
 
 import { App } from 'antd';
 import { BotIcon } from 'lucide-react';
-import qs from 'query-string';
 import { memo, useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,30 +11,16 @@ import {
   INITIAL_TRAINING_AGENT_PRESETS,
   type InitialTrainingAgentPreset,
 } from '@/config/initialAgents';
-import { SESSION_CHAT_URL } from '@/const/url';
 import { agentService } from '@/services/agent';
-import { useAgentStore } from '@/store/agent';
-import { useHomeStore } from '@/store/home';
 
 import TrainingAgentItem from './Item';
 
-const TRAINING_FAST_CHAT_CONFIG = {
-  enableReasoning: false,
-  enableReasoningEffort: false,
-  thinkingBudget: 0,
-  reasoningEffort: 'low' as const,
-  thinking: 'disabled' as const,
-};
 const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
+const FIELD_FIGHTER_AGENT_ID = 'training-tp-price-objection';
 
 const TrainingAgents = memo(() => {
   const navigate = useNavigate();
   const { message } = App.useApp();
-  const [createAgent, updateAgentConfigById] = useAgentStore((s) => [
-    s.createAgent,
-    s.updateAgentConfigById,
-  ]);
-  const refreshAgentList = useHomeStore((s) => s.refreshAgentList);
   const [activePresetKey, setActivePresetKey] = useState<string | null>(null);
 
   const openOrCreateAgent = useCallback(
@@ -44,53 +29,24 @@ const TrainingAgents = memo(() => {
 
       setActivePresetKey(preset.key);
       try {
-        let targetId: string | null = null;
         if (preset.marketIdentifier) {
-          targetId = await agentService.getAgentByMarketIdentifier(preset.marketIdentifier);
+          const legacyAgentId = await agentService.getAgentByMarketIdentifier(
+            preset.marketIdentifier,
+          );
+          if (legacyAgentId) {
+            await agentService.removeAgent(legacyAgentId);
+          }
         }
 
-        if (!targetId) {
-          const result = await createAgent({
-            config: {
-              avatar: preset.avatar,
-              backgroundColor: preset.backgroundColor,
-              chatConfig: TRAINING_FAST_CHAT_CONFIG,
-              description: preset.description,
-              marketIdentifier: preset.marketIdentifier,
-              model: preset.model,
-              openingMessage: preset.openingMessage,
-              provider: preset.provider,
-              systemRole: preset.systemRole,
-              tags: ['training', 'simulator'],
-              title: preset.title,
-            },
-          });
-
-          targetId = result.agentId || result.sessionId;
-          await refreshAgentList();
-          message.success('Тренажер готов');
-        } else {
-          await updateAgentConfigById(targetId, {
-            chatConfig: TRAINING_FAST_CHAT_CONFIG,
-            model: preset.model,
-            provider: preset.provider,
-          });
-        }
-
-        const initialMessage = preset.initialUserMessage || 'Начни тренировку';
-        const targetUrl = qs.stringifyUrl({
-          query: { hiddenKickoff: '1', message: initialMessage },
-          url: SESSION_CHAT_URL(targetId),
-        });
-        navigate(targetUrl);
+        navigate(`/voice-call?agentId=${FIELD_FIGHTER_AGENT_ID}`);
       } catch (error) {
         console.error('Failed to start training agent:', error);
-        message.error('Не удалось запустить тренажер');
+        message.error('Не удалось запустить созвон');
       } finally {
         setActivePresetKey(null);
       }
     },
-    [activePresetKey, createAgent, message, navigate, refreshAgentList, updateAgentConfigById],
+    [activePresetKey, message, navigate],
   );
 
   return (

@@ -8,7 +8,8 @@ import { DEFAULT_AVATAR } from '@/const/meta';
 const TRAINING_CARD_WIDTH = 380;
 const TRAINING_CARD_MIN_HEIGHT = 240;
 const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
-const FIELD_FIGHTER_COVER = '/images/voice-call/field-fighter-cover.webp';
+const FIELD_FIGHTER_COVER =
+  '/images/voice-call/gemini-image-2_A_high-resolution_photo_from_a_cinematic_banner_angle._Inside_a_modern_well-lit_-0.jpg';
 
 interface TrainingAgentItemProps {
   loading?: boolean;

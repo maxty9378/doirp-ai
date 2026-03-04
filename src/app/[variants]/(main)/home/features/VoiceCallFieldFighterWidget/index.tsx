@@ -7,7 +7,8 @@ import { memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const FIELD_FIGHTER_AGENT_ID = 'training-tp-price-objection';
-const FIELD_FIGHTER_COVER = '/images/voice-call/field-fighter-cover.webp';
+const FIELD_FIGHTER_COVER =
+  '/images/voice-call/gemini-image-2_A_high-resolution_photo_from_a_cinematic_banner_angle._Inside_a_modern_well-lit_-0.jpg';
 
 const pulse = keyframes`
   0%, 100% { opacity: 0.2; transform: scale(1); }
