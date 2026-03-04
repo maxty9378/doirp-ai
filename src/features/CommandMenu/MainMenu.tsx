@@ -28,6 +28,7 @@ const MainMenu = memo(() => {
   const { pathname, menuContext, setPages, pages } = useCommandMenuContext();
   const { t } = useTranslation('common');
   const { open: openFeedbackModal } = useFeedbackModal();
+  const isAdmin = useIsAdmin();
 
   const {
     handleCreateSession,
@@ -118,24 +119,24 @@ const MainMenu = memo(() => {
         {getNavigableRoutes()
           .filter((route) => route.id !== 'community' || isAdmin)
           .map((route) => {
-          const RouteIcon = route.icon;
-          const keywords = route.keywordsKey
-            ? t(route.keywordsKey as any).split(' ')
-            : route.keywords;
-          return (
-            !pathname?.startsWith(route.pathPrefix) && (
-              <CommandItem
-                icon={<RouteIcon />}
-                key={route.id}
-                keywords={keywords}
-                value={route.id}
-                onSelect={() => handleNavigate(route.path)}
-              >
-                {t(route.cmdkKey as any)}
-              </CommandItem>
-            )
-          );
-        })}
+            const RouteIcon = route.icon;
+            const keywords = route.keywordsKey
+              ? t(route.keywordsKey as any).split(' ')
+              : route.keywords;
+            return (
+              !pathname?.startsWith(route.pathPrefix) && (
+                <CommandItem
+                  icon={<RouteIcon />}
+                  key={route.id}
+                  keywords={keywords}
+                  value={route.id}
+                  onSelect={() => handleNavigate(route.path)}
+                >
+                  {t(route.cmdkKey as any)}
+                </CommandItem>
+              )
+            );
+          })}
       </Command.Group>
 
       <Command.Group heading={t('cmdk.about')}>

@@ -11,7 +11,6 @@ import { useNavigate } from 'react-router-dom';
 
 import { MOBILE_TABBAR_HEIGHT } from '@/const/layoutTokens';
 import { useActiveTabKey } from '@/hooks/useActiveTabKey';
-import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { SidebarTabKey } from '@/store/global/initialState';
 import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
 
@@ -70,7 +69,7 @@ const NavBar = memo(() => {
           title: t('tab.me'),
         },
       ].filter(Boolean) as TabBarProps['items'],
-    [isAdmin, t],
+    [navigate, showMarket, t],
   );
 
   return (

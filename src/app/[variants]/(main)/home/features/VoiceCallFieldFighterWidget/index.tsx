@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { Block, Button, Flexbox, Icon, Text } from '@lobehub/ui';
 import { createStaticStyles, cssVar, keyframes } from 'antd-style';
@@ -7,7 +7,7 @@ import { memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const FIELD_FIGHTER_AGENT_ID = 'training-tp-price-objection';
-const FIELD_FIGHTER_COVER = '/images/voice-call/field-fighter-cover.svg';
+const FIELD_FIGHTER_COVER = '/images/voice-call/field-fighter-cover.webp';
 
 const pulse = keyframes`
   0%, 100% { opacity: 0.2; transform: scale(1); }
@@ -16,88 +16,108 @@ const pulse = keyframes`
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
   badge: css`
-    border: 1px solid rgba(34, 197, 94, 0.3);
+    padding-block: 2px;
+    padding-inline: 8px;
+    border: 1px solid rgb(34 197 94 / 30%);
     border-radius: 9999px;
-    background: rgba(34, 197, 94, 0.15);
-    color: #22c55e;
+
     font-size: 11px;
     font-weight: 600;
-    padding: 2px 8px;
+    color: #22c55e;
+
+    background: rgb(34 197 94 / 15%);
   `,
   card: css`
-    border-radius: ${cssVar.borderRadiusLG};
-    overflow: hidden;
     position: relative;
-    background: linear-gradient(135deg, #064e3b 0%, #047857 50%, #0f766e 100%);
+
+    overflow: hidden;
+
     padding: 1px;
+    border-radius: ${cssVar.borderRadiusLG};
+
+    background: linear-gradient(135deg, #064e3b 0%, #047857 50%, #0f766e 100%);
   `,
   cardInner: css`
-    border-radius: ${cssVar.borderRadiusLG};
-    background: ${cssVar.colorBgContainer};
-    padding: 18px;
     position: relative;
+
     display: flex;
     flex-direction: column;
     gap: 14px;
     align-items: flex-start;
 
-    @media (min-width: 640px) {
+    padding: 18px;
+    border-radius: ${cssVar.borderRadiusLG};
+
+    background: ${cssVar.colorBgContainer};
+
+    @media (width >= 640px) {
       flex-direction: row;
+      gap: 18px;
       align-items: center;
       justify-content: space-between;
-      gap: 18px;
-      padding: 20px 22px;
+
+      padding-block: 20px;
+      padding-inline: 22px;
     }
   `,
   left: css`
     display: flex;
-    align-items: center;
-    gap: 14px;
     flex: 1;
+    gap: 14px;
+    align-items: center;
+
     min-width: 0;
   `,
   coverThumb: css`
     position: relative;
+
+    overflow: hidden;
+    flex-shrink: 0;
+
     width: 82px;
     height: 82px;
+    border: 1px solid rgb(255 255 255 / 20%);
     border-radius: 16px;
-    overflow: hidden;
-    background-size: cover;
+
     background-position: center;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 0 15px rgba(16, 185, 129, 0.35);
-    flex-shrink: 0;
+    background-size: cover;
+    box-shadow: 0 0 15px rgb(16 185 129 / 35%);
   `,
   coverPing: css`
     position: absolute;
     inset: 10px;
+
     border-radius: 12px;
-    background: rgba(16, 185, 129, 0.35);
+
+    background: rgb(16 185 129 / 35%);
+
     animation: ${pulse} 1.5s ease-in-out infinite;
   `,
   coverIcon: css`
     position: absolute;
+    z-index: 1;
     inset: 0;
+
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1;
   `,
   titleRow: css`
     display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
     flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+
+    margin-block-end: 4px;
   `,
   cta: css`
-    background: #059669 !important;
-    font-weight: 600;
     border-radius: ${cssVar.borderRadius} !important;
+    font-weight: 600;
+    background: #059669 !important;
 
     &:hover {
       background: #10b981 !important;
-      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+      box-shadow: 0 0 20px rgb(16 185 129 / 40%);
     }
   `,
 }));
@@ -112,8 +132,11 @@ const VoiceCallFieldFighterWidget = memo(() => {
   return (
     <Block className={styles.card} style={{ width: '100%' }}>
       <div className={styles.cardInner}>
-        <Flexbox className={styles.left} gap={20} horizontal align={'center'}>
-          <div className={styles.coverThumb} style={{ backgroundImage: `url(${FIELD_FIGHTER_COVER})` }}>
+        <Flexbox horizontal align={'center'} className={styles.left} gap={20}>
+          <div
+            className={styles.coverThumb}
+            style={{ backgroundImage: `url(${FIELD_FIGHTER_COVER})` }}
+          >
             <span className={styles.coverPing} />
             <span className={styles.coverIcon}>
               <Icon icon={Mic} size={28} style={{ color: '#d1fae5' }} />
@@ -122,17 +145,21 @@ const VoiceCallFieldFighterWidget = memo(() => {
 
           <Flexbox gap={4} style={{ minWidth: 0 }}>
             <div className={styles.titleRow}>
-              <Text style={{ fontSize: 20, fontWeight: 700 }}>Полевой боец: Дорого</Text>
+              <Text style={{ fontSize: 20, fontWeight: 700 }}>Полевой боец: «Дорого»</Text>
               <span className={styles.badge}>LIVE</span>
             </div>
 
             <Text color={cssVar.colorTextDescription} style={{ fontSize: 13, maxWidth: 460 }}>
-              Голосовой тренажёр по отработке возражения «Дорого / у конкурентов дешевле». Переговоры в реальном
-              времени с ИИ-аватаром ЛПР.
+              Голосовой тренажер по отработке возражения «Дорого / у конкурентов дешевле».
+              Переговоры в реальном времени с ИИ-аватаром ЛПР.
             </Text>
 
             <Flexbox gap={16} style={{ marginTop: 6 }}>
-              <Flexbox align={'center'} gap={4} style={{ color: 'var(--colorTextDescription)', fontSize: 12 }}>
+              <Flexbox
+                align={'center'}
+                gap={4}
+                style={{ color: 'var(--colorTextDescription)', fontSize: 12 }}
+              >
                 <Zap size={14} style={{ color: '#fbbf24' }} />
                 ТП, возражения, переговоры
               </Flexbox>
@@ -143,9 +170,9 @@ const VoiceCallFieldFighterWidget = memo(() => {
         <Button
           className={styles.cta}
           icon={<PhoneCall size={18} />}
-          onClick={handleStartCall}
           size={'large'}
           type={'primary'}
+          onClick={handleStartCall}
         >
           Начать звонок
         </Button>

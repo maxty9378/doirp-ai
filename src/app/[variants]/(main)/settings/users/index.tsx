@@ -111,12 +111,7 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
         message.error(json.error || 'Не удалось увеличить лимит');
         return;
       }
-      message.success(
-        t('users.increaseQuotaSuccess', {
-          defaultValue: 'Лимит увеличен на {{count}}',
-          count: addAmount.toLocaleString(),
-        }),
-      );
+      message.success(`Лимит увеличен на ${addAmount.toLocaleString()}`);
       setAddTokensUserId(null);
       mutate();
     } catch {
@@ -303,6 +298,10 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
               onChange={handleEmailChange}
             />
             <Input
+              readOnly
+              placeholder={t('users.passwordPlaceholder')}
+              style={{ minWidth: 180, maxWidth: 240 }}
+              value={generatedPassword}
               addonAfter={
                 <Button
                   size="small"
@@ -317,10 +316,6 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                   {t('users.copy', { defaultValue: 'Скопировать' })}
                 </Button>
               }
-              readOnly
-              style={{ minWidth: 180, maxWidth: 240 }}
-              value={generatedPassword}
-              placeholder={t('users.passwordPlaceholder')}
             />
             <Input
               defaultValue={DEFAULT_TOKEN_QUOTA}
@@ -370,7 +365,7 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                     const revealed = passwordRevealed[record.userId];
                     const showPassword = pwd && revealed;
                     return (
-                      <Space size="small" align="center">
+                      <Space align="center" size="small">
                         {pwd ? (
                           <>
                             <Text
@@ -391,9 +386,9 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                               }
                             >
                               <Button
+                                icon={showPassword ? <EyeInvisibleOutlined /> : <EyeOutlined />}
                                 size="small"
                                 type="text"
-                                icon={showPassword ? <EyeInvisibleOutlined /> : <EyeOutlined />}
                                 onClick={() =>
                                   setPasswordRevealed((prev) => ({
                                     ...prev,
@@ -406,16 +401,17 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                         ) : null}
                         <Popconfirm
                           cancelText={t('common.cancel', { defaultValue: 'Отмена' })}
-                          okText={t('users.resetPasswordConfirmOk', { defaultValue: 'Да, сбросить' })}
-                          title={t('users.resetPasswordConfirmTitle', { defaultValue: 'Вы уверены? Пароль будет сброшен, пользователю нужно будет сообщить новый.' })}
+                          okText={t('users.resetPasswordConfirmOk', {
+                            defaultValue: 'Да, сбросить',
+                          })}
+                          title={t('users.resetPasswordConfirmTitle', {
+                            defaultValue:
+                              'Вы уверены? Пароль будет сброшен, пользователю нужно будет сообщить новый.',
+                          })}
                           onConfirm={() => handleResetPassword(record.userId)}
                         >
                           <Tooltip title={t('users.resetPassword')}>
-                            <Button
-                              size="small"
-                              type="text"
-                              icon={<ReloadOutlined />}
-                            />
+                            <Button icon={<ReloadOutlined />} size="small" type="text" />
                           </Tooltip>
                         </Popconfirm>
                       </Space>
@@ -444,7 +440,9 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                           message.error(j.error || 'Ошибка');
                           return;
                         }
-                        message.success(t('users.imageCountReset', { defaultValue: 'Счётчик обнулён' }));
+                        message.success(
+                          t('users.imageCountReset', { defaultValue: 'Счётчик обнулён' }),
+                        );
                         mutate();
                       } catch {
                         message.error('Ошибка');
@@ -453,9 +451,18 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                     return (
                       <Space size="small">
                         <Text>{count}/5</Text>
-                        {(count > 0) && (
-                          <Tooltip title={t('users.resetImageCount', { defaultValue: 'Обнулить счётчик картинок' })}>
-                            <Button size="small" type="text" icon={<ReloadOutlined />} onClick={handleReset} />
+                        {count > 0 && (
+                          <Tooltip
+                            title={t('users.resetImageCount', {
+                              defaultValue: 'Обнулить счётчик картинок',
+                            })}
+                          >
+                            <Button
+                              icon={<ReloadOutlined />}
+                              size="small"
+                              type="text"
+                              onClick={handleReset}
+                            />
                           </Tooltip>
                         )}
                       </Space>
@@ -491,9 +498,6 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                             <Popover
                               open={addTokensUserId === record.userId}
                               trigger="click"
-                              onOpenChange={(open) => {
-                                if (!open) setAddTokensUserId(null);
-                              }}
                               content={
                                 <Space direction="vertical" size="small" style={{ width: 200 }}>
                                   <div>
@@ -503,14 +507,14 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                                       })}
                                     </div>
                                     <InputNumber
-                                      min={1}
+                                      addonAfter={t('users.tokensShort', { defaultValue: 'шт.' })}
                                       max={100_000_000}
+                                      min={1}
+                                      style={{ width: '100%' }}
                                       value={
                                         addTokensUserId === record.userId ? addTokensAmount : 1000
                                       }
                                       onChange={(v) => setAddTokensAmount(v ?? 1000)}
-                                      style={{ width: '100%' }}
-                                      addonAfter={t('users.tokensShort', { defaultValue: 'шт.' })}
                                     />
                                   </div>
                                   <Space wrap size="small" style={{ width: '100%' }}>
@@ -518,11 +522,7 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                                       size="small"
                                       onClick={() => {
                                         setAddTokensAmount(500_000);
-                                        handleIncreaseQuota(
-                                          record.userId,
-                                          quota,
-                                          500_000,
-                                        );
+                                        handleIncreaseQuota(record.userId, quota, 500_000);
                                         setAddTokensUserId(null);
                                       }}
                                     >
@@ -543,21 +543,20 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                                     </Button>
                                   </Space>
                                   <Button
-                                    type="primary"
-                                    size="small"
                                     block
+                                    size="small"
+                                    type="primary"
                                     onClick={() => {
-                                      handleIncreaseQuota(
-                                        record.userId,
-                                        quota,
-                                        addTokensAmount,
-                                      );
+                                      handleIncreaseQuota(record.userId, quota, addTokensAmount);
                                     }}
                                   >
                                     {t('users.addTokensButton', { defaultValue: 'Начислить' })}
                                   </Button>
                                 </Space>
                               }
+                              onOpenChange={(open) => {
+                                if (!open) setAddTokensUserId(null);
+                              }}
                             >
                               <Tooltip
                                 title={t('users.addTokensTooltip', {
@@ -565,9 +564,9 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                                 })}
                               >
                                 <Button
+                                  icon={<PlusOutlined />}
                                   size="small"
                                   type="text"
-                                  icon={<PlusOutlined />}
                                   onClick={() => {
                                     setAddTokensUserId(record.userId);
                                     setAddTokensAmount(1000);
@@ -595,17 +594,20 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
 
                     let tag = null;
                     if (diffDays === 0)
-                      tag = <Tag color="green">{t('users.today', { defaultValue: 'Сегодня' })}</Tag>;
+                      tag = (
+                        <Tag color="green">{t('users.today', { defaultValue: 'Сегодня' })}</Tag>
+                      );
                     else if (diffDays === 1)
                       tag = (
-                        <Tag color="blue">
-                          {t('users.yesterday', { defaultValue: 'Вчера' })}
-                        </Tag>
+                        <Tag color="blue">{t('users.yesterday', { defaultValue: 'Вчера' })}</Tag>
                       );
                     else if (diffDays <= 7)
                       tag = (
                         <Tag>
-                          {t('users.daysAgo', { defaultValue: '{{count}} дн. назад', count: diffDays })}
+                          {t('users.daysAgo', {
+                            defaultValue: '{{count}} дн. назад',
+                            count: diffDays,
+                          })}
                         </Tag>
                       );
 
@@ -634,16 +636,15 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                       cancelText={t('common.cancel', { defaultValue: 'Отмена' })}
                       okButtonProps={{ danger: true }}
                       okText={t('users.deleteConfirmOk', { defaultValue: 'Удалить' })}
-                      title={t('users.deleteConfirmTitle', { defaultValue: 'Удалить пользователя? Это действие нельзя отменить.' })}
+                      title={t('users.deleteConfirmTitle', {
+                        defaultValue: 'Удалить пользователя? Это действие нельзя отменить.',
+                      })}
                       onConfirm={() => handleDeleteUser(record.userId)}
                     >
-                      <Tooltip title={t('users.deleteUser', { defaultValue: 'Удалить пользователя' })}>
-                        <Button
-                          danger
-                          size="small"
-                          type="text"
-                          icon={<DeleteOutlined />}
-                        />
+                      <Tooltip
+                        title={t('users.deleteUser', { defaultValue: 'Удалить пользователя' })}
+                      >
+                        <Button danger icon={<DeleteOutlined />} size="small" type="text" />
                       </Tooltip>
                     </Popconfirm>
                   ),

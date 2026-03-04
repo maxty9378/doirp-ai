@@ -9,12 +9,12 @@ const RADIUS_BASE = 0.35;
 const RADIUS_AMP = 0.2;
 
 export interface AltairVisualizerProps {
-  analyserRef: RefObject<AnalyserNode | null>;
-  width: number;
-  height: number;
   accent?: string;
   active?: boolean;
+  analyserRef: RefObject<AnalyserNode | null>;
   className?: string;
+  height: number;
+  width: number;
 }
 
 /**
@@ -30,7 +30,7 @@ export function AltairVisualizer({
   className,
 }: AltairVisualizerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const freqDataRef = useRef<Uint8Array | null>(null);
+  const freqDataRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const prevRef = useRef<Float32Array | null>(null);
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export function AltairVisualizer({
 
     const fftSize = analyser.frequencyBinCount;
     if (!freqDataRef.current || freqDataRef.current.length !== fftSize) {
-      freqDataRef.current = new Uint8Array(fftSize);
+      freqDataRef.current = new Uint8Array<ArrayBuffer>(new ArrayBuffer(fftSize));
       prevRef.current = new Float32Array(NUM_POINTS);
     }
     const freqData = freqDataRef.current;
@@ -141,11 +141,11 @@ export function AltairVisualizer({
 
   return (
     <canvas
-      ref={canvasRef}
-      width={width}
-      height={height}
       className={className}
+      height={height}
+      ref={canvasRef}
       style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
+      width={width}
     />
   );
 }

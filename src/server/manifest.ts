@@ -40,7 +40,7 @@ export class Manifest {
       background_color: color,
       cache_busting_mode: 'all',
       categories: ['productivity', 'design', 'development', 'education'],
-      description: description,
+      description,
       display: 'standalone',
       display_override: ['tabbed'],
       edge_side_panel: {
@@ -48,10 +48,10 @@ export class Manifest {
       },
       handle_links: 'auto',
       icons: icons.map((item) => this._getIcon(item)),
-      id: id,
+      id,
       immutable: 'true',
       max_age: MAX_AGE,
-      name: name,
+      name,
       orientation: 'portrait',
       related_applications: [
         {
@@ -73,15 +73,19 @@ export class Manifest {
     };
   }
 
-  private _getImage = (url: string, version: number = 1) => ({
+  private _getImage = (url: string, version: number = 1, useBrandingLogo = true) => ({
     cache_busting_mode: 'query',
     immutable: 'true',
     max_age: MAX_AGE,
-    src: qs.stringifyUrl({ query: { v: version }, url: BRANDING_LOGO_URL || url }),
+    src: qs.stringifyUrl({
+      query: { v: version },
+      url: useBrandingLogo && BRANDING_LOGO_URL ? BRANDING_LOGO_URL : url,
+    }),
   });
 
+  /** PWA requires icons to match declared sizes (e.g. 192x192, 512x512). Do not substitute BRANDING_LOGO_URL here. */
   private _getIcon = ({ url, version, sizes, purpose }: IconItem) => ({
-    ...this._getImage(url, version),
+    ...this._getImage(url, version, false),
     purpose,
     sizes,
     type: 'image/png',

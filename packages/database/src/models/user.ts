@@ -174,13 +174,18 @@ export class UserModel {
   };
 
   getUserSettingsDefaultAgentConfig = async () => {
-    const result = await this.db
-      .select({ defaultAgent: userSettings.defaultAgent })
-      .from(userSettings)
-      .where(eq(userSettings.id, this.userId))
-      .limit(1);
+    try {
+      const result = await this.db
+        .select({ defaultAgent: userSettings.defaultAgent })
+        .from(userSettings)
+        .where(eq(userSettings.id, this.userId))
+        .limit(1);
 
-    return result[0]?.defaultAgent;
+      return result[0]?.defaultAgent;
+    } catch (error) {
+      console.error('[UserModel.getUserSettingsDefaultAgentConfig] fallback to empty:', error);
+      return undefined;
+    }
   };
 
   updateUser = async (value: Partial<UserItem>) => {

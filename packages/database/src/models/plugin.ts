@@ -1,4 +1,4 @@
-import type { LobeTool } from '@lobechat/types';
+import type { LobeTool, LobeToolType } from '@lobechat/types';
 import { and, desc, eq } from 'drizzle-orm';
 
 import type { InstalledPluginItem, NewInstalledPlugin } from '../schemas';
@@ -63,6 +63,11 @@ export class PluginModel {
     return data.map<LobeTool>((item) => ({
       ...item,
       runtimeType: item.manifest?.type || 'default',
+      source: (['builtin', 'customPlugin', 'plugin'] as LobeToolType[]).includes(
+        item.source as LobeToolType,
+      )
+        ? (item.source as LobeToolType)
+        : undefined,
     }));
   };
 

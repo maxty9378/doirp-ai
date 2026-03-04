@@ -1,0 +1,17 @@
+---
+description: Run pre-flight checks (types, lints, tests) before confirming code changes
+globs: *.{ts,tsx,js,jsx}
+---
+
+# LobeChat Pre-flight Checks Rule
+
+**Context:** Next.js + Turbopack builds can fail silently or hang in dev mode if there are type errors, or if the `.next` cache is corrupted.
+
+**Action:** Before claiming a task is "completed" or asking the user to start the server:
+1. **Always check types:** Run `bun run type-check` to ensure no TypeScript compilation errors exist. Fix them if found.
+2. **Linting:** Run the `ReadLints` tool to catch syntax errors and linter warnings in the edited files.
+3. **Tests:** If you modified logic that has accompanying `.test.ts` files, run tests for that specific file using `bunx vitest run --silent="passed-only" "path/to/test.ts"`.
+4. **Hanging / EADDRINUSE Dev Server:** If the user complains about a hanging server or port 3010 being in use:
+   - Find and kill the process: `Get-NetTCPConnection -LocalPort 3010 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | ForEach-Object { Stop-Process -Id $_ -Force }` (PowerShell)
+   - Delete the `.next` folder to clear corrupted cache: `Remove-Item -Recurse -Force .next -ErrorAction SilentlyContinue`
+   - Restart the server.

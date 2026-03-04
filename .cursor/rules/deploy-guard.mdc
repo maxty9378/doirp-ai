@@ -1,0 +1,39 @@
+---
+description: Prevent broken local startup and broken deploys with mandatory preflight checks
+alwaysApply: true
+---
+
+# Deploy Guard (Mandatory Preflight)
+
+Before marking any task as complete, run this checklist in order.
+
+1. Local startup sanity:
+- Stop old dev processes (`next dev`, `pnpm dev`, `bun run dev`).
+- Remove `.next` cache.
+- Start `pnpm dev`.
+- Verify health endpoint responds within 10s:
+  - `GET /api/version` must return `200`.
+
+2. Type safety:
+- Run `bun run type-check`.
+- Do not finish task if there are type errors, even if unrelated to edited files.
+
+3. Targeted tests (fast path):
+- Run only tests related to touched files with:
+  - `bunx vitest run --silent='passed-only' '[file-path-pattern]'`
+- Never run full `bun run test` unless explicitly requested.
+
+4. Regression guard for edited routes/components:
+- If a page/route was changed, open it locally and verify it renders.
+- If a fetch call was changed, verify network request completes (no `Failed to fetch`).
+
+5. Deploy readiness:
+- If `pnpm dev` hangs on `Compiling...`, treat as blocker and do not close task.
+- Fix root cause first, then re-run steps 1-4.
+
+6. Reporting:
+- In final message, always include:
+  - commands executed,
+  - pass/fail for each preflight step,
+  - any remaining risks.
+

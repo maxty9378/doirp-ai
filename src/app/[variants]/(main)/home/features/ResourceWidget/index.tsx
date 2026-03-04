@@ -1,8 +1,8 @@
-'use client';
+﻿'use client';
 
 import { Flexbox, Icon, Skeleton, Text } from '@lobehub/ui';
-import { useTheme } from 'antd-style';
 import { Progress } from 'antd';
+import { useTheme } from 'antd-style';
 import { ImageIcon, Zap } from 'lucide-react';
 import { memo } from 'react';
 import useSWR from 'swr';
@@ -26,14 +26,10 @@ const fetcher = async (url: string): Promise<ResourceLimitsData> => {
 
 const ResourceWidget = memo(() => {
   const theme = useTheme();
-  const { data, error, isLoading } = useSWR<ResourceLimitsData>(
-    '/api/user/token-limits',
-    fetcher,
-    {
-      refreshInterval: 30000,
-      revalidateOnFocus: true,
-    },
-  );
+  const { data, error, isLoading } = useSWR<ResourceLimitsData>('/api/user/token-limits', fetcher, {
+    refreshInterval: 30000,
+    revalidateOnFocus: true,
+  });
 
   if (isLoading) {
     return (
@@ -71,19 +67,24 @@ const ResourceWidget = memo(() => {
             />
             <Text weight={500}>Учебные кредиты</Text>
           </Flexbox>
-          <Text style={{ fontSize: 12 }} type="secondary" title="Остаток / лимит (кредитов, 1 кр. = 10 токенов)">
+          <Text
+            style={{ fontSize: 12 }}
+            title="Остаток / лимит (кредитов, 1 кр. = 10 токенов)"
+            type="secondary"
+          >
             {creditsRemaining.toLocaleString()} / {creditsQuota.toLocaleString()} кр.
           </Text>
         </Flexbox>
         <Progress
           percent={usagePercent}
+          railColor={theme.colorFillTertiary}
           showInfo={false}
           strokeColor={isCritical ? '#ff4d4f' : isLow ? '#ffa34d' : '#1890ff'}
           style={{ width: '100%', marginBottom: 0 }}
-          railColor={theme.colorFillTertiary}
         />
-        <Text style={{ fontSize: 11 }} type="tertiary">
-          использовано {Math.floor(tokensUsed / TOKENS_PER_CREDIT).toLocaleString()} кр. (1 кр. = 10 токенов)
+        <Text style={{ fontSize: 11 }} type="secondary">
+          использовано {Math.floor(tokensUsed / TOKENS_PER_CREDIT).toLocaleString()} кр. (1 кр. = 10
+          токенов)
         </Text>
       </Flexbox>
 

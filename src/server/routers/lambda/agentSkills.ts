@@ -1,4 +1,5 @@
-import { SkillManifest, skillManifestSchema } from '@lobechat/types';
+import type { SkillManifest } from '@lobechat/types';
+import { skillManifestSchema } from '@lobechat/types';
 import { TRPCError } from '@trpc/server';
 import { z } from 'zod';
 
@@ -9,8 +10,8 @@ import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { FileService } from '@/server/services/file';
 import { MarketService } from '@/server/services/market';
 import {
-  SkillImportError,
   SkillImporter,
+  SkillImportError,
   SkillResourceError,
   SkillResourceService,
 } from '@/server/services/skill';
@@ -196,11 +197,16 @@ export const agentSkillsRouter = router({
         .optional(),
     )
     .query(async ({ ctx, input }) => {
-      if (input?.source) {
-        return ctx.skillModel.listBySource(input.source);
-      }
+      try {
+        if (input?.source) {
+          return ctx.skillModel.listBySource(input.source);
+        }
 
-      return ctx.skillModel.findAll();
+        return ctx.skillModel.findAll();
+      } catch (error) {
+        console.error('[agentSkills.list] fallback to empty list:', error);
+        return { data: [], total: 0 };
+      }
     }),
 
   listResources: skillProcedure

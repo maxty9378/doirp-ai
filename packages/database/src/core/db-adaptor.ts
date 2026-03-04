@@ -28,6 +28,6 @@ export const getServerDB = async (): Promise<LobeChatDatabase> => {
  */
 export const serverDB = new Proxy({} as LobeChatDatabase, {
   get(_, prop) {
-    return (getCachedOrNewDB() as Record<string | symbol, unknown>)[prop];
+    return (getCachedOrNewDB() as unknown as Record<string | symbol, unknown>)[prop];
   },
 });

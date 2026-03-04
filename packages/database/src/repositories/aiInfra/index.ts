@@ -143,7 +143,12 @@ export class AiInfraRepos {
    * Calculate the final providerList based on the known providerConfig
    */
   getAiProviderList = async () => {
-    const userProviders = await this.aiProviderModel.getAiProviderList();
+    let userProviders: AiProviderListItem[] = [];
+    try {
+      userProviders = await this.aiProviderModel.getAiProviderList();
+    } catch (error) {
+      console.error('[AiInfraRepos.getAiProviderList] fallback to builtin providers:', error);
+    }
 
     // 1. First create a mapping based on DEFAULT_MODEL_PROVIDER_LIST id order
     const orderMap = new Map(DEFAULT_MODEL_PROVIDER_LIST.map((item, index) => [item.id, index]));
@@ -190,10 +195,17 @@ export class AiInfraRepos {
    * used in the chat page. to show the enabled models
    */
   getEnabledModels = async (filterEnabled: boolean = true) => {
-    const [providers, allModels] = await Promise.all([
-      this.getAiProviderList(),
-      this.aiModelModel.getAllModels(),
-    ]);
+    let providers: AiProviderListItem[] = [];
+    let allModels: EnabledAiModel[] = [];
+    try {
+      [providers, allModels] = await Promise.all([
+        this.getAiProviderList(),
+        this.aiModelModel.getAllModels(),
+      ]);
+    } catch (error) {
+      console.error('[AiInfraRepos.getEnabledModels] fallback to empty models:', error);
+      return [];
+    }
     const enabledProviders = providers.filter((item) => (filterEnabled ? item.enabled : true));
 
     const builtinModelList = await pMap(
@@ -253,11 +265,30 @@ export class AiInfraRepos {
   getAiProviderRuntimeState = async (
     decryptor?: DecryptUserKeyVaults,
   ): Promise<AiProviderRuntimeState> => {
-    const [result, enabledAiProviders, allModels] = await Promise.all([
-      this.aiProviderModel.getAiProviderRuntimeConfig(decryptor),
-      this.getUserEnabledProviderList(),
-      this.getEnabledModels(false),
-    ]);
+    let result: Record<string, any>;
+    let enabledAiProviders: EnabledProvider[];
+    let allModels: EnabledAiModel[];
+
+    try {
+      [result, enabledAiProviders, allModels] = await Promise.all([
+        this.aiProviderModel.getAiProviderRuntimeConfig(decryptor),
+        this.getUserEnabledProviderList(),
+        this.getEnabledModels(false),
+      ]);
+    } catch (error) {
+      console.error(
+        '[AiInfraRepos.getAiProviderRuntimeState] fallback to empty runtime state:',
+        error,
+      );
+      return {
+        enabledAiModels: [],
+        enabledAiProviders: [],
+        enabledChatAiProviders: [],
+        enabledImageAiProviders: [],
+        enabledVideoAiProviders: [],
+        runtimeConfig: {},
+      };
+    }
 
     const runtimeConfig = result;
     Object.entries(result).forEach(([key, value]) => {
@@ -271,9 +302,7 @@ export class AiInfraRepos {
       return allModels.some((model) => model.providerId === provider.id && model.type === 'image');
     });
     const enabledVideoAiProviders = enabledAiProviders.filter((provider) => {
-      return allModels.some(
-        (model) => model.providerId === provider.id && model.type === 'video',
-      );
+      return allModels.some((model) => model.providerId === provider.id && model.type === 'video');
     });
 
     return {

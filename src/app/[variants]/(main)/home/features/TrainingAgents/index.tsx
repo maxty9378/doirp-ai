@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { App } from 'antd';
 import { BotIcon } from 'lucide-react';
@@ -8,7 +8,10 @@ import { useNavigate } from 'react-router-dom';
 
 import GroupBlock from '@/app/[variants]/(main)/home/features/components/GroupBlock';
 import ScrollShadowWithButton from '@/app/[variants]/(main)/home/features/components/ScrollShadowWithButton';
-import { INITIAL_TRAINING_AGENT_PRESETS, type InitialTrainingAgentPreset } from '@/config/initialAgents';
+import {
+  INITIAL_TRAINING_AGENT_PRESETS,
+  type InitialTrainingAgentPreset,
+} from '@/config/initialAgents';
 import { SESSION_CHAT_URL } from '@/const/url';
 import { agentService } from '@/services/agent';
 import { useAgentStore } from '@/store/agent';
@@ -74,9 +77,7 @@ const TrainingAgents = memo(() => {
           });
         }
 
-        const initialMessage =
-          preset.initialUserMessage ||
-          'Начни тренировку';
+        const initialMessage = preset.initialUserMessage || 'Начни тренировку';
         const targetUrl = qs.stringifyUrl({
           query: { hiddenKickoff: '1', message: initialMessage },
           url: SESSION_CHAT_URL(targetId),

@@ -262,10 +262,15 @@ const normalizeEmbeddable = (value?: string | null): string | undefined => {
 
 const memoryProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
-  const userSettingsRow = await ctx.serverDB.query.userSettings.findFirst({
-    columns: { memory: true },
-    where: eq(userSettings.id, ctx.userId),
-  });
+  let userSettingsRow: { memory: unknown } | undefined;
+  try {
+    userSettingsRow = await ctx.serverDB.query.userSettings.findFirst({
+      columns: { memory: true },
+      where: eq(userSettings.id, ctx.userId),
+    });
+  } catch (error) {
+    console.error('[userMemories.memoryProcedure] fallback to default memory effort:', error);
+  }
   const memoryConfig =
     typeof userSettingsRow?.memory === 'object' && userSettingsRow?.memory !== null
       ? (userSettingsRow.memory as { effort?: unknown })
@@ -957,17 +962,14 @@ export const userMemoriesRouter = router({
       }
     }),
 
-  searchMemory: memoryProcedure
-    .input(searchMemorySchema)
-    .query(async ({ input, ctx }) => {
-      try {
-        return await searchUserMemories(ctx, input);
-      } catch (error) {
-        console.error('Failed to retrieve memories:', error);
-        return EMPTY_SEARCH_RESULT;
-      }
+  searchMemory: memoryProcedure.input(searchMemorySchema).query(async ({ input, ctx }) => {
+    try {
+      return await searchUserMemories(ctx, input);
+    } catch (error) {
+      console.error('Failed to retrieve memories:', error);
+      return EMPTY_SEARCH_RESULT;
     }
-  ),
+  }),
 
   toolAddActivityMemory: memoryProcedure
     .input(ActivityMemoryItemSchema)
