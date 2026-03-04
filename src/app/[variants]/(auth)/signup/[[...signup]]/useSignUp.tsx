@@ -8,8 +8,6 @@ import { useBusinessSignup } from '@/business/client/hooks/useBusinessSignup';
 import { message } from '@/components/AntdStaticMethods';
 import { signUp } from '@/libs/better-auth/auth-client';
 import { useRouter, useSearchParams } from '@/libs/next/navigation';
-import { useServerConfigStore } from '@/store/serverConfig';
-import { serverConfigSelectors } from '@/store/serverConfig/selectors';
 
 import { type BaseSignUpFormValues } from './types';
 
@@ -21,9 +19,6 @@ export const useSignUp = () => {
   const searchParams = useSearchParams();
   const [loading, setLoading] = useState(false);
   const { getFetchOptions, preSocialSignupCheck, businessElement } = useBusinessSignup(form);
-  const enableEmailVerification = useServerConfigStore(
-    serverConfigSelectors.enableEmailVerification,
-  );
 
   const handleSignUp = async (values: SignUpFormValues) => {
     setLoading(true);
@@ -66,13 +61,7 @@ export const useSignUp = () => {
         return;
       }
 
-      if (enableEmailVerification) {
-        router.push(
-          `/verify-email?email=${encodeURIComponent(values.email)}&callbackUrl=${encodeURIComponent(callbackUrl)}`,
-        );
-      } else {
-        router.push(callbackUrl);
-      }
+      router.push(callbackUrl);
     } catch {
       message.error(t('betterAuth.signup.error'));
     } finally {

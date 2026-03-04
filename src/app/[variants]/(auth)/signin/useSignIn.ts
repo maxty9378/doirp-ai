@@ -32,6 +32,9 @@ export const useSignIn = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const enableMagicLink = useServerConfigStore(serverConfigSelectors.enableMagicLink);
+  const enableEmailVerification = useServerConfigStore(
+    serverConfigSelectors.enableEmailVerification,
+  );
   const disableEmailPassword = useServerConfigStore(serverConfigSelectors.disableEmailPassword);
   const [form] = Form.useForm<SignInFormValues>();
   const [loading, setLoading] = useState(false);
@@ -160,7 +163,7 @@ export const useSignIn = () => {
         {
           onError: (ctx) => {
             console.error('Sign in error:', ctx.error);
-            if (ctx.error.status === 403) {
+            if (ctx.error.status === 403 && enableEmailVerification) {
               router.push(
                 `/verify-email?email=${encodeURIComponent(email)}&callbackUrl=${encodeURIComponent(callbackUrl)}`,
               );
@@ -170,7 +173,7 @@ export const useSignIn = () => {
         },
       );
 
-      if (result.error && result.error.status !== 403) {
+      if (result.error && (result.error.status !== 403 || !enableEmailVerification)) {
         message.error(result.error.message || t('betterAuth.signin.error'));
       }
     } catch (error) {

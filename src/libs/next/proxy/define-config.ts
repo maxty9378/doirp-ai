@@ -198,10 +198,28 @@ export function defineConfig() {
     // Skip session lookup for public routes to reduce latency
     if (!isProtected) return response;
 
-    // Get full session with user data (Next.js 15.2.0+ feature)
-    const session = await auth.api.getSession({
+    // Get full session with user data (Next.js 15.2.0+ feature).
+    // In local dev, guard against occasional hanging auth session checks.
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const sessionPromise = auth.api.getSession({
       headers: req.headers,
     });
+    const session = isDevelopment
+      ? await Promise.race([
+          sessionPromise,
+          new Promise<null>((resolve) => {
+            setTimeout(() => resolve(null), 2000);
+          }),
+        ])
+      : await sessionPromise;
+
+    if (isDevelopment && session === null) {
+      logBetterAuth(
+        'Session lookup timed out in development, bypassing auth protection for request: %s',
+        req.url,
+      );
+      return response;
+    }
 
     const isLoggedIn = !!session?.user;
 

@@ -76,7 +76,7 @@ export const getServerGlobalConfig = async () => {
     },
     disableEmailPassword: authEnv.AUTH_DISABLE_EMAIL_PASSWORD,
     enableBusinessFeatures: ENABLE_BUSINESS_FEATURES,
-    enableEmailVerification: authEnv.AUTH_EMAIL_VERIFICATION,
+    enableEmailVerification: false,
     enableKlavis: !!klavisEnv.KLAVIS_API_KEY,
     enableLobehubSkill: !!(appEnv.MARKET_TRUSTED_CLIENT_SECRET && appEnv.MARKET_TRUSTED_CLIENT_ID),
     enableMagicLink: authEnv.AUTH_ENABLE_MAGIC_LINK,

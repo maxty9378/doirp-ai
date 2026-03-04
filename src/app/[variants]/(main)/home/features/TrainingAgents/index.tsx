@@ -23,6 +23,7 @@ const TRAINING_FAST_CHAT_CONFIG = {
   reasoningEffort: 'low' as const,
   thinking: 'disabled' as const,
 };
+const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
 
 const TrainingAgents = memo(() => {
   const navigate = useNavigate();
@@ -94,7 +95,9 @@ const TrainingAgents = memo(() => {
   return (
     <GroupBlock icon={BotIcon} title="Доступные тренажеры">
       <ScrollShadowWithButton>
-        {INITIAL_TRAINING_AGENT_PRESETS.map((preset) => (
+        {INITIAL_TRAINING_AGENT_PRESETS.filter(
+          (preset) => preset.marketIdentifier === FIELD_FIGHTER_MARKET_ID,
+        ).map((preset) => (
           <TrainingAgentItem
             key={preset.key}
             loading={activePresetKey === preset.key}

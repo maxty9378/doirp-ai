@@ -26,6 +26,7 @@ export const ServerConfigStoreProvider = memo<GlobalStoreProviderProps>(
           isMobile,
           segmentVariants,
           serverConfig,
+          serverConfigInit: !!serverConfig,
         })
       }
     >

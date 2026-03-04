@@ -7,7 +7,6 @@ import React, { useEffect, useState } from 'react';
 import { SWRConfig, useSWRConfig } from 'swr';
 
 import { setScopedMutate } from '@/libs/swr';
-import { swrCacheProvider } from '@/libs/swr/localStorageProvider';
 import { lambdaQuery, lambdaQueryClient } from '@/libs/trpc/client';
 
 /**
@@ -40,11 +39,9 @@ const QueryProvider = ({ children }: PropsWithChildren) => {
     typeof lambdaQuery.Provider
   >['queryClient'];
 
-  // 使用 useState 确保 provider 只创建一次
-  const [provider] = useState(swrCacheProvider);
 
   return (
-    <SWRConfig value={{ provider }}>
+    <SWRConfig>
       <SWRMutateInitializer>
         <lambdaQuery.Provider client={lambdaQueryClient} queryClient={providerQueryClient}>
           <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
@@ -55,3 +52,4 @@ const QueryProvider = ({ children }: PropsWithChildren) => {
 };
 
 export default QueryProvider;
+

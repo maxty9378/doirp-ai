@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { type CSSProperties } from 'react';
 import { memo } from 'react';
 
@@ -9,8 +10,9 @@ import NotSupport from './NotSupport';
 import CodeViewer from './Renderer/Code';
 import ImageViewer from './Renderer/Image';
 import MSDocViewer from './Renderer/MSDoc';
-import PDFViewer from './Renderer/PDF';
 import VideoViewer from './Renderer/Video';
+
+const PDFViewer = dynamic(() => import('./Renderer/PDF'), { ssr: false });
 
 // File type definitions
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'];

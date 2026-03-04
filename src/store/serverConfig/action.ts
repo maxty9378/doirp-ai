@@ -27,8 +27,12 @@ export class ServerConfigActionImpl {
   }
 
   useInitServerConfig = (): SWRResponse<GlobalRuntimeConfig> => {
+    const state = this.#get();
+    const hasConfigFromSSR =
+      state.serverConfigInit ||
+      Object.keys(state.serverConfig?.aiProvider ?? {}).length > 0;
     return useOnlyFetchOnceSWR<GlobalRuntimeConfig>(
-      FETCH_SERVER_CONFIG_KEY,
+      hasConfigFromSSR ? null : FETCH_SERVER_CONFIG_KEY,
       () => globalService.getGlobalConfig(),
       {
         onSuccess: (data) => {

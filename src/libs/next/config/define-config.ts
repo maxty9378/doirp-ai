@@ -398,6 +398,7 @@ export function defineConfig(config: CustomNextConfig) {
       // refs: https://github.com/lobehub/lobe-chat/discussions/6769
       baseWebpackConfig.resolve.fallback = {
         ...baseWebpackConfig.resolve.fallback,
+        stream: false,
         zipfile: false,
       };
 
