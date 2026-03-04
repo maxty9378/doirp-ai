@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="aiGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <style>
+      .pulse-ring {
+        fill: none;
+        stroke: url(#aiGradient);
+        stroke-width: 2;
+        opacity: 0;
+        transform-origin: 60px 60px;
+        animation: pulse 2.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+      }
+
+      @keyframes pulse {
+        0% {
+          transform: scale(0.6);
+          opacity: 0.8;
+        }
+        100% {
+          transform: scale(1.5);
+          opacity: 0;
+        }
+      }
+
+      .wave {
+        fill: url(#aiGradient);
+        transform-origin: center;
+        animation: equalize 1.2s ease-in-out infinite;
+      }
+
+      .wave-1 {
+        animation-delay: 0s;
+      }
+      .wave-2 {
+        animation-delay: 0.2s;
+      }
+      .wave-3 {
+        animation-delay: 0.4s;
+      }
+      .wave-4 {
+        animation-delay: 0.2s;
+      }
+      .wave-5 {
+        animation-delay: 0s;
+      }
+
+      @keyframes equalize {
+        0%,
+        100% {
+          transform: scaleY(0.3);
+          opacity: 0.5;
+        }
+        50% {
+          transform: scaleY(1);
+          opacity: 1;
+        }
+      }
+    </style>
+  </defs>
+
+  <circle cx="60" cy="55" r="30" class="pulse-ring" />
+  <circle cx="60" cy="55" r="30" class="pulse-ring" style="animation-delay: 1.25s;" />
+
+  <rect x="25" y="35" width="4.5" height="40" rx="2.25" class="wave wave-1" />
+  <rect x="37" y="25" width="4.5" height="60" rx="2.25" class="wave wave-2" />
+  <rect x="78.5" y="25" width="4.5" height="60" rx="2.25" class="wave wave-4" />
+  <rect x="90.5" y="35" width="4.5" height="40" rx="2.25" class="wave wave-5" />
+
+  <g transform="translate(0, -5)">
+    <rect x="50" y="35" width="20" height="32" rx="10" fill="url(#aiGradient)" />
+    <path
+      d="M43 52 v 5 a 17 17 0 0 0 34 0 v -5"
+      fill="none"
+      stroke="url(#aiGradient)"
+      stroke-width="4"
+      stroke-linecap="round"
+    />
+    <line x1="60" y1="74" x2="60" y2="86" stroke="url(#aiGradient)" stroke-width="4" stroke-linecap="round" />
+    <line x1="50" y1="86" x2="70" y2="86" stroke="url(#aiGradient)" stroke-width="4" stroke-linecap="round" />
+  </g>
+</svg>

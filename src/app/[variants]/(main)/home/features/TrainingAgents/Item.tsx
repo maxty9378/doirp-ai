@@ -6,10 +6,11 @@ import { type InitialTrainingAgentPreset } from '@/config/initialAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
 
 const TRAINING_CARD_WIDTH = 380;
-const TRAINING_CARD_MIN_HEIGHT = 240;
+const TRAINING_CARD_MIN_HEIGHT = 320;
 const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
 const FIELD_FIGHTER_COVER =
   '/images/voice-call/gemini-image-2_A_high-resolution_photo_from_a_cinematic_banner_angle._Inside_a_modern_well-lit_-0.jpg';
+const FIELD_FIGHTER_ICON = '/images/voice-call/trainer-ai-mic.svg';
 
 interface TrainingAgentItemProps {
   loading?: boolean;
@@ -45,26 +46,30 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(({ preset, onClick, loadi
       {isFieldFighter && (
         <div
           style={{
+            aspectRatio: '16 / 9',
             backgroundImage: `url(${FIELD_FIGHTER_COVER})`,
             backgroundPosition: 'center',
             backgroundSize: 'cover',
             borderBottom: `1px solid ${cssVar.colorBorderSecondary}`,
-            height: 132,
             position: 'relative',
             width: '100%',
           }}
         >
           <span
             style={{
-              background: 'rgba(245, 158, 11, 0.92)',
-              border: '1px solid rgba(255, 255, 255, 0.55)',
+              backdropFilter: 'blur(6px)',
+              background:
+                'linear-gradient(135deg, rgba(16, 185, 129, 0.96) 0%, rgba(5, 150, 105, 0.96) 100%)',
+              border: '1px solid rgba(167, 243, 208, 0.65)',
               borderRadius: 999,
-              color: '#111827',
-              fontSize: 11,
+              color: '#ecfdf5',
+              fontSize: 10,
               fontWeight: 700,
-              left: 10,
-              padding: '3px 9px',
+              letterSpacing: '0.08em',
+              padding: '5px 10px',
               position: 'absolute',
+              right: 10,
+              textTransform: 'uppercase',
               top: 10,
             }}
           >
@@ -85,14 +90,22 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(({ preset, onClick, loadi
             {loading ? 'Запуск...' : 'Нажмите, чтобы начать'}
           </Text>
         </Flexbox>
-        <Avatar
-          emojiScaleWithBackground
-          avatar={preset.avatar || DEFAULT_AVATAR}
-          background={preset.backgroundColor || undefined}
-          shape={'square'}
-          size={30}
-          style={{ flex: 'none' }}
-        />
+        {isFieldFighter ? (
+          <img
+            alt="Иконка тренажера"
+            src={FIELD_FIGHTER_ICON}
+            style={{ flex: 'none', height: 40, width: 40 }}
+          />
+        ) : (
+          <Avatar
+            emojiScaleWithBackground
+            avatar={preset.avatar || DEFAULT_AVATAR}
+            background={preset.backgroundColor || undefined}
+            shape={'square'}
+            size={30}
+            style={{ flex: 'none' }}
+          />
+        )}
       </Flexbox>
     </Block>
   );
