@@ -73,7 +73,13 @@ describe('ssrfSafeFetch', () => {
         'https://httpbin.org/post',
         expect.objectContaining({
           ...requestOptions,
+      headers: {
+        'Accept': '*/*',
+        'User-Agent': 'LobeChat/1.0',
+        ...requestOptions.headers,
+      },
           agent: expect.any(Function),
+          timeout: 30_000,
         }),
       );
     });
@@ -288,7 +294,13 @@ describe('ssrfSafeFetch', () => {
         'https://api.example.com/data',
         expect.objectContaining({
           ...requestOptions,
+      headers: {
+        'Accept': '*/*',
+        'User-Agent': 'LobeChat/1.0',
+        ...requestOptions.headers,
+      },
           agent: expect.any(Function),
+          timeout: 30_000,
         }),
       );
 
