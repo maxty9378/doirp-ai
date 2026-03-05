@@ -28,7 +28,7 @@ const HardNegotiations = memo(() => {
         const sessionId = await createSession({
           config: {
             systemRole: preset.systemRole,
-            model: preset.model || 'gemini-2.5-pro',
+            model: preset.model || 'gemini-2.5-flash',
             provider: preset.provider || 'google',
             openingMessage: preset.openingMessage,
             chatConfig: {
