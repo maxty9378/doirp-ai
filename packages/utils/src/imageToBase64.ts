@@ -45,11 +45,39 @@ export const imageUrlToBase64 = async (
 ): Promise<{ base64: string; mimeType: string }> => {
   try {
     const isServer = typeof window === 'undefined';
+    const normalizedImageUrl =
+      isServer && imageUrl.startsWith('/f/')
+        ? (() => {
+            const appUrl = process.env.APP_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
+            if (!appUrl) return imageUrl;
+
+            try {
+              const fileProxyUrl = new URL(imageUrl, appUrl);
+              fileProxyUrl.searchParams.set('raw', '1');
+              return fileProxyUrl.toString();
+            } catch {
+              return imageUrl;
+            }
+          })()
+        : isServer
+          ? (() => {
+              try {
+                const parsedUrl = new URL(imageUrl);
+                if (parsedUrl.pathname.startsWith('/f/')) {
+                  parsedUrl.searchParams.set('raw', '1');
+                  return parsedUrl.toString();
+                }
+                return imageUrl;
+              } catch {
+                return imageUrl;
+              }
+            })()
+          : imageUrl;
 
     // Use SSRF-safe fetch on server-side to prevent SSRF attacks
     const res = isServer
-      ? await import('@lobechat/ssrf-safe-fetch').then((m) => m.ssrfSafeFetch(imageUrl))
-      : await fetch(imageUrl);
+      ? await import('@lobechat/ssrf-safe-fetch').then((m) => m.ssrfSafeFetch(normalizedImageUrl))
+      : await fetch(normalizedImageUrl);
 
     const blob = await res.blob();
     const arrayBuffer = await blob.arrayBuffer();

@@ -34,6 +34,8 @@ export const GET = async (_req: Request, segmentData: { params: Params }) => {
   try {
     const params = await segmentData.params;
     const { id } = params;
+    const requestUrl = new URL(_req.url);
+    const shouldReturnRaw = requestUrl.searchParams.get('raw') === '1';
 
     log('File proxy request: %s', id);
 
@@ -67,6 +69,23 @@ export const GET = async (_req: Request, segmentData: { params: Params }) => {
 
     // Create file service with file owner's userId
     const fileService = new FileService(db, file.userId);
+
+    // Raw mode: return file bytes directly without redirecting to S3.
+    // Used by server-side image generation to avoid external presigned fetch timeouts.
+    if (shouldReturnRaw) {
+      const fileBytes = await fileService.getFileByteArray(file.url);
+      const responseBytes = new Uint8Array(fileBytes.byteLength);
+      responseBytes.set(fileBytes);
+
+      return new Response(responseBytes.buffer, {
+        headers: {
+          'Cache-Control': 'private, max-age=60',
+          'Content-Length': file.size.toString(),
+          'Content-Type': file.fileType || 'application/octet-stream',
+        },
+        status: 200,
+      });
+    }
 
     // Web: Generate S3 presigned URL (5 minutes expiry)
     const redirectUrl = await fileService.createPreSignedUrlForPreview(file.url, 300);

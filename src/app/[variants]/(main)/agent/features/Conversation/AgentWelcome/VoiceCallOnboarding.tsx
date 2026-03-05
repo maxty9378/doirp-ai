@@ -4,24 +4,17 @@ import { Avatar, Flexbox, Text } from '@lobehub/ui';
 import { Button } from 'antd';
 import { createStaticStyles } from 'antd-style';
 import isEqual from 'fast-deep-equal';
-import {
-  BookOpen,
-  CheckCircle2,
-  Mic,
-  ShieldAlert,
-  Store,
-  Target,
-  User,
-  Volume2,
-} from 'lucide-react';
-import React, { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { BookOpen, CheckCircle2, Mic, Store, Target, User, Volume2 } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
+import { useTrainingBannerUrl } from '@/hooks/useTrainingBannerUrl';
 import { useAgentStore } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
 import { useChatStore } from '@/store/chat';
 import { useGlobalStore } from '@/store/global';
+import { systemStatusSelectors } from '@/store/global/selectors';
 
 import GeminiLiveCall from '../../../../voice-call/features/GeminiLiveCall';
 import PostCallReport, {
@@ -29,8 +22,6 @@ import PostCallReport, {
 } from '../../../../voice-call/features/GeminiLiveCall/PostCallReport';
 
 const VOICE_CALL_AGENT_ID = 'training-tp-price-objection';
-const GEMINI_COVER_URL =
-  '/images/voice-call/gemini-image-2_A_high-resolution_photo_from_a_cinematic_banner_angle._Inside_a_modern_well-lit_-0.jpg';
 
 const LEGEND_FALLBACK =
   'Вы - торговый представитель. Вы пришли в локальную торговую точку. ' +
@@ -65,12 +56,76 @@ function stopLegendAudio() {
   }
 }
 
+const dedupe = (items: string[]) =>
+  Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+
 const styles = createStaticStyles(({ css, cssVar }) => ({
-  wrap: css`
+  page: css`
+    position: relative;
+    overflow: hidden;
     width: 100%;
-    max-width: 820px;
+    min-height: 100%;
+
+    &::before {
+      pointer-events: none;
+      content: '';
+
+      position: absolute;
+      inset: 0;
+
+      background:
+        radial-gradient(900px 360px at 12% 0%, rgb(59 130 246 / 8%), transparent 60%),
+        radial-gradient(900px 360px at 88% 0%, rgb(16 185 129 / 7%), transparent 64%);
+    }
+  `,
+  shell: css`
+    position: relative;
+    z-index: 1;
+
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+
+    width: 100%;
+    max-width: 1320px;
+    margin-block: 0;
+    margin-inline: auto;
     padding: 20px;
     padding-block-end: max(8vh, 28px);
+
+    @media (width >= 1200px) {
+      padding-inline: 28px;
+    }
+  `,
+  heading: css`
+    display: flex;
+    gap: 12px;
+    align-items: center;
+
+    padding: 14px;
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 14px;
+
+    background: ${cssVar.colorBgContainer};
+    backdrop-filter: blur(2px);
+  `,
+  headingTitle: css`
+    margin: 0;
+    font-size: clamp(24px, 3vw, 34px);
+    font-weight: 700;
+    line-height: 1.2;
+  `,
+  headingDesc: css`
+    margin: 0;
+    color: ${cssVar.colorTextSecondary};
+  `,
+  enterCard: css`
+    width: 100%;
+    padding: 18px;
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 16px;
+
+    background: ${cssVar.colorBgContainer};
   `,
   legendLayout: css`
     display: grid;
@@ -78,8 +133,9 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     gap: 14px;
     width: 100%;
 
-    @media (width >= 900px) {
-      grid-template-columns: 1.15fr 0.85fr;
+    @media (width >= 1080px) {
+      grid-template-columns: 1.35fr 0.65fr;
+      align-items: start;
     }
   `,
   cover: css`
@@ -90,18 +146,18 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     flex-direction: column;
     justify-content: flex-end;
 
-    min-height: 240px;
-    border: 1px solid rgb(255 255 255 / 22%);
+    min-height: 280px;
+    border: 1px solid rgb(255 255 255 / 20%);
     border-radius: 18px;
 
     background-position: center;
     background-size: cover;
-    box-shadow: 0 14px 42px rgb(0 0 0 / 22%);
+    box-shadow: 0 14px 40px rgb(0 0 0 / 18%);
   `,
   coverShade: css`
     position: absolute;
     inset: 0;
-    background: linear-gradient(180deg, rgb(8 14 27 / 6%) 10%, rgb(8 14 27 / 84%) 78%);
+    background: linear-gradient(180deg, rgb(8 14 27 / 10%) 12%, rgb(8 14 27 / 84%) 78%);
   `,
   coverContent: css`
     position: relative;
@@ -131,7 +187,7 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     margin-block: 0 6px;
     margin-inline: 0;
 
-    font-size: 24px;
+    font-size: 26px;
     font-weight: 700;
     line-height: 1.2;
   `,
@@ -144,6 +200,7 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     color: rgb(241 245 249 / 94%);
   `,
   card: css`
+    width: 100%;
     padding: 16px;
     border: 1px solid ${cssVar.colorBorderSecondary};
     border-radius: 14px;
@@ -152,7 +209,23 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     line-height: 1.6;
     color: ${cssVar.colorText};
 
-    background: ${cssVar.colorBgContainer};
+    background: ${cssVar.colorFillQuaternary};
+    box-shadow: 0 1px 0 rgb(255 255 255 / 3%) inset;
+  `,
+  sectionsGrid: css`
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    width: 100%;
+
+    @media (width >= 1080px) {
+      grid-template-columns: 1fr 1fr;
+    }
+  `,
+  sectionFull: css`
+    @media (width >= 1080px) {
+      grid-column: 1 / -1;
+    }
   `,
   cardTitle: css`
     display: flex;
@@ -192,34 +265,44 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     gap: 8px;
     align-items: flex-start;
   `,
-  warning: css`
-    margin-block-start: 10px;
-    padding-block: 10px;
-    padding-inline: 12px;
-    border: 1px solid rgb(185 28 28 / 25%);
-    border-radius: 10px;
+  actionsDock: css`
+    position: sticky;
+    z-index: 12;
+    inset-block-end: 10px;
 
-    font-size: 13px;
-    color: ${cssVar.colorText};
+    width: 100%;
+    margin-block-start: 2px;
+    padding: 10px;
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 12px;
 
-    background: rgb(185 28 28 / 10%);
+    background: color-mix(in srgb, ${cssVar.colorBgContainer} 88%, transparent);
+    backdrop-filter: blur(8px);
   `,
   actions: css`
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
-    justify-content: center;
+    justify-content: flex-start;
+
+    width: 100%;
+
+    @media (width < 768px) {
+      > button {
+        width: 100%;
+      }
+    }
   `,
   btnPrimary: css`
-    min-width: 220px;
+    min-width: 240px;
   `,
   callWrap: css`
     overflow: hidden;
 
     width: 100%;
-    max-width: 720px;
-    height: 70vh;
-    min-height: 560px;
+    max-width: 1280px;
+    height: clamp(600px, 80vh, 920px);
+    border: 1px solid ${cssVar.colorBorderSecondary};
     border-radius: 16px;
 
     background: ${cssVar.colorBgContainer};
@@ -227,13 +310,16 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
   `,
   reportWrap: css`
     width: 100%;
-    max-width: 560px;
+    max-width: 1080px;
     padding: 24px;
-    padding-block-end: max(10vh, 32px);
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 14px;
+
+    background: ${cssVar.colorBgContainer};
   `,
   reportTitle: css`
     margin-block-end: 16px;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 700;
     color: ${cssVar.colorText};
   `,
@@ -255,23 +341,28 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
 
 const VoiceCallOnboarding = memo(() => {
   const meta = useAgentStore(agentSelectors.currentAgentMeta, isEqual);
+  const trainerBannerUrl = useTrainingBannerUrl();
+  const wideScreen = useGlobalStore(systemStatusSelectors.wideScreen);
   const switchTopic = useChatStore((s) => s.switchTopic);
   const [step, setStep] = useState<'enter' | 'legend' | 'call' | 'report'>('enter');
   const [reportData, setReportData] = useState<PostCallReportData | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
-  const legendSpokenRef = useRef(false);
   const legendAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const preset = VOICE_CALL_PRESETS[VOICE_CALL_AGENT_ID];
   const scenarioContext = preset?.scenario_context;
   const userRole = preset?.user_role;
   const goals = preset?.goals;
-  const checkpoints = goals?.length ? goals : CHECKPOINT_FALLBACK;
 
-  const legendForTts =
-    [scenarioContext, userRole, goals?.length ? goals.join('. ') : ''].filter(Boolean).join(' ') ||
-    LEGEND_FALLBACK;
+  const keyPoints = useMemo(() => dedupe([...(goals || []), ...CHECKPOINT_FALLBACK]), [goals]);
+
+  const legendForTts = useMemo(
+    () =>
+      [scenarioContext, userRole, keyPoints.join('. ')].filter(Boolean).join(' ') ||
+      LEGEND_FALLBACK,
+    [keyPoints, scenarioContext, userRole],
+  );
 
   const legendAudioUrl = `/audio/legend-${VOICE_CALL_AGENT_ID}.wav?v=${encodeURIComponent(`${legendForTts.length}`)}`;
 
@@ -284,14 +375,6 @@ const VoiceCallOnboarding = memo(() => {
     audio.currentTime = 0;
     audio.play().catch(() => speakLegendFallback(legendForTts));
   }, [legendAudioUrl, legendForTts]);
-
-  useEffect(() => {
-    if (step !== 'legend') return;
-    if (legendSpokenRef.current) return;
-
-    legendSpokenRef.current = true;
-    playLegendAudio();
-  }, [step, playLegendAudio]);
 
   useEffect(() => {
     useGlobalStore.setState({ isVoiceCallActive: step === 'call' });
@@ -314,37 +397,35 @@ const VoiceCallOnboarding = memo(() => {
 
   if (step === 'report') {
     return (
-      <Flexbox
-        align={'center'}
-        gap={16}
-        style={{ flexDirection: 'column', padding: 16, width: '100%' }}
-      >
-        <div className={styles.reportWrap}>
-          <div className={styles.reportTitle}>Послетренинговый отчёт</div>
-          {reportLoading ? (
-            <div style={{ color: 'var(--colorTextSecondary)', marginBottom: 16 }}>
-              Финализация отчёта...
-            </div>
-          ) : reportError ? (
-            <div style={{ color: 'var(--colorError)', marginBottom: 16 }}>{reportError}</div>
-          ) : reportData ? (
-            <PostCallReport data={reportData} />
-          ) : null}
+      <Flexbox className={styles.page} width={'100%'}>
+        <div className={styles.shell} style={wideScreen ? { maxWidth: '100%' } : undefined}>
+          <div className={styles.reportWrap} style={wideScreen ? { maxWidth: '100%' } : undefined}>
+            <div className={styles.reportTitle}>Послетренинговый отчёт</div>
+            {reportLoading ? (
+              <div style={{ color: 'var(--colorTextSecondary)', marginBottom: 16 }}>
+                Финализация отчёта...
+              </div>
+            ) : reportError ? (
+              <div style={{ color: 'var(--colorError)', marginBottom: 16 }}>{reportError}</div>
+            ) : reportData ? (
+              <PostCallReport data={reportData} />
+            ) : null}
 
-          {!reportLoading && (
-            <button
-              className={styles.reportCloseBtn}
-              type="button"
-              onClick={() => {
-                setReportData(null);
-                setReportError(null);
-                setReportLoading(false);
-                setStep('legend');
-              }}
-            >
-              Закрыть
-            </button>
-          )}
+            {!reportLoading && (
+              <button
+                className={styles.reportCloseBtn}
+                type="button"
+                onClick={() => {
+                  setReportData(null);
+                  setReportError(null);
+                  setReportLoading(false);
+                  setStep('legend');
+                }}
+              >
+                Закрыть
+              </button>
+            )}
+          </div>
         </div>
       </Flexbox>
     );
@@ -352,75 +433,69 @@ const VoiceCallOnboarding = memo(() => {
 
   if (step === 'call') {
     return (
-      <Flexbox
-        align={'center'}
-        gap={16}
-        style={{ flexDirection: 'column', padding: 16, width: '100%' }}
-      >
-        <div className={styles.callWrap}>
-          <GeminiLiveCall
-            autoConnect
-            embedded
-            agentId={VOICE_CALL_AGENT_ID}
-            onEnd={() => {
-              setStep('legend');
-            }}
-          />
+      <Flexbox className={styles.page} width={'100%'}>
+        <div className={styles.shell} style={wideScreen ? { maxWidth: '100%' } : undefined}>
+          <div className={styles.callWrap} style={wideScreen ? { maxWidth: '100%' } : undefined}>
+            <GeminiLiveCall
+              autoConnect
+              embedded
+              agentId={VOICE_CALL_AGENT_ID}
+              onEnd={() => {
+                setStep('legend');
+              }}
+            />
+          </div>
         </div>
       </Flexbox>
     );
   }
 
   return (
-    <>
-      <Flexbox flex={1} />
-      <Flexbox
-        align={'center'}
-        gap={16}
-        style={{ flexDirection: 'column', paddingBottom: 'max(8vh, 28px)' }}
-        width={'100%'}
-      >
-        <Avatar
-          avatar={meta.avatar || DEFAULT_AVATAR}
-          background={meta.backgroundColor}
-          shape={'square'}
-          size={78}
-        />
-        <Text fontSize={32} weight={'bold'}>
-          {meta.title || 'Полевой боец: Дорого'}
-        </Text>
+    <Flexbox className={styles.page} width={'100%'}>
+      <div className={styles.shell} style={wideScreen ? { maxWidth: '100%' } : undefined}>
+        <div className={styles.heading}>
+          <Avatar
+            avatar={meta.avatar || DEFAULT_AVATAR}
+            background={meta.backgroundColor}
+            shape={'square'}
+            size={72}
+          />
+          <div>
+            <h1 className={styles.headingTitle}>{meta.title || 'Полевой боец: Дорого'}</h1>
+            <p className={styles.headingDesc}>
+              Тренировка переговоров с ЛПР по возражению «Дорого».
+            </p>
+          </div>
+        </div>
 
         {step === 'enter' && (
-          <Flexbox
-            align={'center'}
-            className={styles.wrap}
-            gap={16}
-            style={{ flexDirection: 'column' }}
-          >
-            <Button
-              className={styles.btnPrimary}
-              icon={<Store />}
-              size="large"
-              type="primary"
-              onClick={() => setStep('legend')}
-            >
-              Зайти в торговую точку
-            </Button>
-          </Flexbox>
+          <div className={styles.enterCard}>
+            <Flexbox gap={12}>
+              <Text type={'secondary'}>
+                Перед звонком изучите легенду и ключевые ориентиры. После этого запустите диалог.
+              </Text>
+              <Flexbox horizontal>
+                <Button
+                  className={styles.btnPrimary}
+                  icon={<Store />}
+                  size="large"
+                  type="primary"
+                  onClick={() => setStep('legend')}
+                >
+                  Зайти в торговую точку
+                </Button>
+              </Flexbox>
+            </Flexbox>
+          </div>
         )}
 
         {step === 'legend' && (
-          <Flexbox
-            align={'center'}
-            className={styles.wrap}
-            gap={14}
-            style={{ flexDirection: 'column' }}
-          >
+          <Flexbox gap={14}>
             <div className={styles.legendLayout}>
-              <div className={styles.cover} style={{ backgroundImage: `url(${GEMINI_COVER_URL})` }}>
+              <div className={styles.cover} style={{ backgroundImage: `url(${trainerBannerUrl})` }}>
                 <div className={styles.coverShade} />
                 <div className={styles.coverContent}>
-                  <div className={styles.coverBadge}>Обложка: Gemini style</div>
+                  <div className={styles.coverBadge}>Тренировочный сценарий</div>
                   <h2 className={styles.coverTitle}>Легенда тренировки</h2>
                   <p className={styles.coverDesc}>
                     Жёсткие переговоры с ЛПР по возражению «Дорого». Ваша цель: сохранить матрицу
@@ -432,91 +507,90 @@ const VoiceCallOnboarding = memo(() => {
               <div className={styles.card}>
                 <div className={styles.cardTitle}>
                   <CheckCircle2 size={14} />
-                  Чек-поинты, чтобы диалог дошёл до финала
+                  Ключевые ориентиры тренировки
                 </div>
                 <ul className={styles.checkList}>
-                  {checkpoints.map((checkpoint, index) => (
+                  {keyPoints.map((point, index) => (
                     <li className={styles.checkItem} key={index}>
                       <CheckCircle2 size={15} style={{ marginTop: 2, opacity: 0.9 }} />
-                      <span>{checkpoint}</span>
+                      <span>{point}</span>
                     </li>
                   ))}
                 </ul>
-                <div className={styles.warning}>
-                  <ShieldAlert size={14} style={{ marginRight: 6, verticalAlign: 'text-bottom' }} />
-                  Если перейти на оскорбления или хамство, аватар начинает конфликтовать, угрожает
-                  проблемами и завершает звонок.
-                </div>
               </div>
             </div>
 
-            {scenarioContext && (
-              <div className={styles.card} style={{ width: '100%' }}>
-                <div className={styles.cardTitle}>
-                  <BookOpen size={14} />
-                  Легенда
+            <div className={styles.sectionsGrid}>
+              {userRole && (
+                <div className={styles.card}>
+                  <div className={styles.cardTitle}>
+                    <User size={14} />
+                    Ваша роль
+                  </div>
+                  <div>{userRole}</div>
                 </div>
-                <div className={styles.legendText}>{scenarioContext}</div>
-              </div>
-            )}
+              )}
 
-            {userRole && (
-              <div className={styles.card} style={{ width: '100%' }}>
-                <div className={styles.cardTitle}>
-                  <User size={14} />
-                  Ваша роль
+              {goals && goals.length > 0 && (
+                <div className={styles.card}>
+                  <div className={styles.cardTitle}>
+                    <Target size={14} />
+                    Цели
+                  </div>
+                  <ul className={styles.goalsList}>
+                    {goals.map((goal, index) => (
+                      <li className={styles.goalsItem} key={index}>
+                        {goal}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div>{userRole}</div>
-              </div>
-            )}
+              )}
 
-            {goals && goals.length > 0 ? (
-              <div className={styles.card} style={{ width: '100%' }}>
-                <div className={styles.cardTitle}>
-                  <Target size={14} />
-                  Цели тренажёра
+              {scenarioContext && (
+                <div className={`${styles.card} ${styles.sectionFull}`}>
+                  <div className={styles.cardTitle}>
+                    <BookOpen size={14} />
+                    Легенда
+                  </div>
+                  <div className={styles.legendText}>{scenarioContext}</div>
                 </div>
-                <ul className={styles.goalsList}>
-                  {goals.map((goal, index) => (
-                    <li className={styles.goalsItem} key={index}>
-                      {goal}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+              )}
 
-            {!scenarioContext && !userRole && (!goals || goals.length === 0) ? (
-              <div className={styles.card} style={{ width: '100%' }}>
-                <div className={styles.legendText}>{LEGEND_FALLBACK}</div>
-              </div>
-            ) : null}
+              {!scenarioContext && !userRole && (!goals || goals.length === 0) ? (
+                <div className={`${styles.card} ${styles.sectionFull}`}>
+                  <div className={styles.legendText}>{LEGEND_FALLBACK}</div>
+                </div>
+              ) : null}
+            </div>
 
-            <Flexbox horizontal className={styles.actions}>
-              <Button icon={<Volume2 />} size="large" onClick={handlePlayLegend}>
-                Прослушать ещё раз
-              </Button>
-              <Button size="large" onClick={stopLegend}>
-                Остановить озвучку
-              </Button>
-              <Button
-                className={styles.btnPrimary}
-                icon={<Mic />}
-                size="large"
-                type="primary"
-                onClick={() => {
-                  stopLegend();
-                  switchTopic(null, { skipRefreshMessage: true });
-                  setStep('call');
-                }}
-              >
-                Начать звонок
-              </Button>
-            </Flexbox>
+            <div className={styles.actionsDock}>
+              <Flexbox horizontal className={styles.actions}>
+                <Button icon={<Volume2 />} size="large" onClick={handlePlayLegend}>
+                  Плей легенду
+                </Button>
+                <Button size="large" onClick={stopLegend}>
+                  Стоп легенды
+                </Button>
+                <Button
+                  className={styles.btnPrimary}
+                  icon={<Mic />}
+                  size="large"
+                  type="primary"
+                  onClick={() => {
+                    stopLegend();
+                    switchTopic(null, { skipRefreshMessage: true });
+                    setStep('call');
+                  }}
+                >
+                  Начать звонок
+                </Button>
+              </Flexbox>
+            </div>
           </Flexbox>
         )}
-      </Flexbox>
-    </>
+      </div>
+    </Flexbox>
   );
 });
 

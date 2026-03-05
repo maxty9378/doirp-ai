@@ -51,6 +51,14 @@ lobe-chat/
 - Use `bun` to run npm scripts
 - Use `bunx` to run executable npm packages
 
+### Dev Server (Cursor / Local)
+
+- Default local start command: `pnpm dev`
+- Avoid `pnpm dev:webpack` unless Webpack-specific debugging is required.
+- If you see repeated `webpack.cache.PackFileCacheStrategy` warnings, clear cache once and restart:
+  - `Remove-Item -Recurse -Force .next`
+  - `pnpm dev`
+
 ### Code Style Guidelines
 
 #### TypeScript

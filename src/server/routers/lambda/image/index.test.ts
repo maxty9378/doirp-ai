@@ -8,7 +8,6 @@ import { imageRouter } from './index';
 const {
   mockServerDB,
   mockGetKeyFromFullUrl,
-  mockGetFullFileUrl,
   mockAsyncTaskModelUpdate,
   mockChargeBeforeGenerate,
   mockCreateAsyncCaller,
@@ -17,7 +16,6 @@ const {
     transaction: vi.fn(),
   },
   mockGetKeyFromFullUrl: vi.fn(),
-  mockGetFullFileUrl: vi.fn(),
   mockAsyncTaskModelUpdate: vi.fn(),
   mockChargeBeforeGenerate: vi.fn(),
   mockCreateAsyncCaller: vi.fn(),
@@ -42,7 +40,6 @@ vi.mock('@/database/core/db-adaptor', () => ({
 vi.mock('@/server/services/file', () => ({
   FileService: vi.fn(() => ({
     getKeyFromFullUrl: mockGetKeyFromFullUrl,
-    getFullFileUrl: mockGetFullFileUrl,
   })),
 }));
 
@@ -110,7 +107,6 @@ describe('imageRouter', () => {
     // Default mock implementations
     mockChargeBeforeGenerate.mockResolvedValue(undefined);
     mockGetKeyFromFullUrl.mockResolvedValue(null);
-    mockGetFullFileUrl.mockResolvedValue(null);
 
     // Setup default transaction mock
     const mockBatch = {
@@ -415,18 +411,9 @@ describe('imageRouter', () => {
       expect(result.success).toBe(true);
     });
 
-    describe('development environment URL conversion', () => {
-      beforeEach(() => {
-        vi.stubEnv('NODE_ENV', 'development');
-      });
-
-      afterEach(() => {
-        vi.unstubAllEnvs();
-      });
-
-      it('should convert single imageUrl to S3 URL in development mode', async () => {
+    describe('file proxy raw mode conversion', () => {
+      it('should convert single /f/ imageUrl to raw mode for async generation', async () => {
         mockGetKeyFromFullUrl.mockResolvedValue('files/image-key.jpg');
-        mockGetFullFileUrl.mockResolvedValue('https://s3.amazonaws.com/bucket/files/image-key.jpg');
 
         const ctx = createMockCtx();
         const input = createDefaultInput({
@@ -440,16 +427,19 @@ describe('imageRouter', () => {
         const result = await caller.createImage(input);
 
         expect(result.success).toBe(true);
-        expect(mockGetFullFileUrl).toHaveBeenCalledWith('files/image-key.jpg');
+        expect(mockAsyncCallerCreateImage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            params: expect.objectContaining({
+              imageUrl: 'http://localhost:3000/f/file-id?raw=1',
+            }),
+          }),
+        );
       });
 
-      it('should convert multiple imageUrls to S3 URLs in development mode', async () => {
+      it('should convert multiple /f/ imageUrls to raw mode for async generation', async () => {
         mockGetKeyFromFullUrl
           .mockResolvedValueOnce('files/image1.jpg')
           .mockResolvedValueOnce('files/image2.jpg');
-        mockGetFullFileUrl
-          .mockResolvedValueOnce('https://s3.amazonaws.com/bucket/files/image1.jpg')
-          .mockResolvedValueOnce('https://s3.amazonaws.com/bucket/files/image2.jpg');
 
         const ctx = createMockCtx();
         const input = createDefaultInput({
@@ -463,28 +453,13 @@ describe('imageRouter', () => {
         const result = await caller.createImage(input);
 
         expect(result.success).toBe(true);
-        expect(mockGetFullFileUrl).toHaveBeenCalledTimes(2);
-        expect(mockGetFullFileUrl).toHaveBeenCalledWith('files/image1.jpg');
-        expect(mockGetFullFileUrl).toHaveBeenCalledWith('files/image2.jpg');
-      });
-
-      it('should not convert URLs when getFullFileUrl returns null', async () => {
-        mockGetKeyFromFullUrl.mockResolvedValue('files/image-key.jpg');
-        mockGetFullFileUrl.mockResolvedValue(null);
-
-        const ctx = createMockCtx();
-        const input = createDefaultInput({
-          params: {
-            prompt: 'test prompt',
-            imageUrl: 'http://localhost:3000/f/file-id',
-          },
-        });
-
-        const caller = imageRouter.createCaller(ctx);
-        const result = await caller.createImage(input);
-
-        expect(result.success).toBe(true);
-        expect(mockGetFullFileUrl).toHaveBeenCalled();
+        expect(mockAsyncCallerCreateImage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            params: expect.objectContaining({
+              imageUrls: ['http://localhost:3000/f/id1?raw=1', 'http://localhost:3000/f/id2?raw=1'],
+            }),
+          }),
+        );
       });
     });
   });

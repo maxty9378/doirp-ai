@@ -3,12 +3,12 @@ import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { chargeBeforeGenerate } from '@/business/server/image-generation/chargeBeforeGenerate';
-import { checkImageLimit, incrementImageUsage } from '@/server/middleware/imageLimit';
 import { AsyncTaskModel } from '@/database/models/asyncTask';
 import { type NewGeneration, type NewGenerationBatch } from '@/database/schemas';
 import { asyncTasks, generationBatches, generations } from '@/database/schemas';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { keyVaults, serverDatabase } from '@/libs/trpc/lambda/middleware';
+import { incrementImageUsage } from '@/server/middleware/imageLimit';
 import { createAsyncCaller } from '@/server/routers/async/caller';
 import { FileService } from '@/server/services/file';
 import {
@@ -22,6 +22,17 @@ import { generateUniqueSeeds } from '@/utils/number';
 import { validateNoUrlsInConfig } from './utils';
 
 const log = debug('lobe-image:lambda');
+
+const toInternalRawFileProxyUrl = (url: string): string => {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.pathname.startsWith('/f/')) return url;
+    parsed.searchParams.set('raw', '1');
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+};
 
 const imageProcedure = authedProcedure
   .use(keyVaults)
@@ -115,32 +126,20 @@ export const imageRouter = router({
       }
     }
 
-    // In development, convert localhost proxy URLs to S3 URLs for async task access
+    // Keep model input URLs stable and avoid external presigned S3 fetches in SSRF-safe flows.
+    // For /f/:id links, force internal raw proxy mode (/f/:id?raw=1).
     let generationParams = params;
-    if (process.env.NODE_ENV === 'development') {
-      const updates: Record<string, unknown> = {};
-
-      // Handle single imageUrl: localhost/f/{id} -> S3 URL
-      if (typeof params.imageUrl === 'string' && params.imageUrl) {
-        const s3Url = await fileService.getFullFileUrl(configForDatabase.imageUrl as string);
-        if (s3Url) {
-          log('Dev: converted proxy URL to S3 URL: %s -> %s', params.imageUrl, s3Url);
-          updates.imageUrl = s3Url;
-        }
-      }
-
-      // Handle multiple imageUrls
-      if (Array.isArray(params.imageUrls) && params.imageUrls.length > 0) {
-        const s3Urls = await Promise.all(
-          (configForDatabase.imageUrls as string[]).map((key) => fileService.getFullFileUrl(key)),
-        );
-        log('Dev: converted proxy URLs to S3 URLs: %O', s3Urls);
-        updates.imageUrls = s3Urls;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        generationParams = { ...params, ...updates };
-      }
+    if (typeof params.imageUrl === 'string' && params.imageUrl) {
+      generationParams = {
+        ...generationParams,
+        imageUrl: toInternalRawFileProxyUrl(params.imageUrl),
+      };
+    }
+    if (Array.isArray(params.imageUrls) && params.imageUrls.length > 0) {
+      generationParams = {
+        ...generationParams,
+        imageUrls: params.imageUrls.map((url) => toInternalRawFileProxyUrl(url)),
+      };
     }
 
     // Defensive check: ensure no full URLs enter the database
