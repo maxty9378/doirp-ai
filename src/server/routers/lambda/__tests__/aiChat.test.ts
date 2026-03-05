@@ -21,6 +21,12 @@ vi.mock('@/server/services/file', () => ({
 vi.mock('@/server/modules/ModelRuntime', () => ({
   initModelRuntimeFromDB: vi.fn(),
 }));
+// Не требуем user_codes для тестов агента — проверка лимита токенов замокана
+vi.mock('@/server/middleware/trackTokenUsage', () => ({
+  checkTokenLimit: vi.fn().mockResolvedValue(undefined),
+  trackTokenUsage: vi.fn().mockResolvedValue(undefined),
+  TOKEN_OVERDRAFT_LIMIT: 10_000,
+}));
 
 describe('aiChatRouter', () => {
   const mockCtx = { userId: 'u1' };

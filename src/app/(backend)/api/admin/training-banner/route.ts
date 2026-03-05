@@ -1,4 +1,4 @@
-﻿import { users, userSettings } from '@lobechat/database/schemas';
+import { users, userSettings } from '@lobechat/database/schemas';
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
@@ -8,6 +8,7 @@ import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
 
 const TRAINING_TP_BANNER_KEY = 'trainingTpBannerUrl';
+const TRAINING_HN_BANNER_KEY = 'trainingHnBannerUrl';
 
 const isAllowedBannerUrl = (url: string): boolean => {
   if (!url) return false;
@@ -63,6 +64,8 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json().catch(() => ({}));
     const url = typeof body?.url === 'string' ? body.url.trim() : '';
+    const key = body?.key === 'hn' ? 'hn' : 'tp';
+    const storageKey = key === 'hn' ? TRAINING_HN_BANNER_KEY : TRAINING_TP_BANNER_KEY;
 
     if (!isAllowedBannerUrl(url)) {
       return NextResponse.json({ error: 'Некорректный URL баннера' }, { status: 400 });
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
 
       const nextGeneral = {
         ...currentGeneral,
-        [TRAINING_TP_BANNER_KEY]: url,
+        [storageKey]: url,
       };
 
       await serverDB

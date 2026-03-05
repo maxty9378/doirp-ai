@@ -55,6 +55,12 @@ vi.mock('@/business/server/image-generation/chargeBeforeGenerate', () => ({
   chargeBeforeGenerate: (params: any) => mockChargeBeforeGenerate(params),
 }));
 
+// Не требуем user_codes для тестов генерации картинок
+vi.mock('@/server/middleware/imageLimit', () => ({
+  checkImageLimit: vi.fn().mockResolvedValue(undefined),
+  incrementImageUsage: vi.fn().mockResolvedValue(undefined),
+}));
+
 // Mock async caller
 vi.mock('@/server/routers/async/caller', () => ({
   createAsyncCaller: mockCreateAsyncCaller,
