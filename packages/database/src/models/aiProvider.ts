@@ -20,6 +20,38 @@ type DecryptUserKeyVaults = (encryptKeyVaultsStr: string | null) => Promise<any>
 
 type EncryptUserKeyVaults = (keyVaults: string) => Promise<string>;
 
+const TRANSIENT_DB_ERROR_CODES = new Set([
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EHOSTUNREACH',
+  'ENETDOWN',
+  'ENETRESET',
+  'ENETUNREACH',
+  'EPIPE',
+  'ETIMEDOUT',
+  'UND_ERR_CONNECT_TIMEOUT',
+]);
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null;
+
+const getNestedErrorCode = (error: unknown): string | undefined => {
+  if (!isObject(error)) return;
+
+  if (typeof error.code === 'string') return error.code;
+
+  if (isObject(error.cause) && typeof error.cause.code === 'string') {
+    return error.cause.code;
+  }
+};
+
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) return error.message;
+  if (isObject(error) && typeof error.message === 'string') return error.message;
+  return String(error);
+};
+
 export class AiProviderModel {
   private userId: string;
   private db: LobeChatDatabase;
@@ -28,6 +60,46 @@ export class AiProviderModel {
     this.userId = userId;
     this.db = db;
   }
+
+  private isTransientReadError = (error: unknown): boolean => {
+    const code = getNestedErrorCode(error);
+    if (code && TRANSIENT_DB_ERROR_CODES.has(code)) return true;
+
+    const message = getErrorMessage(error).toLowerCase();
+    return (
+      message.includes('connection timeout') ||
+      message.includes('read econnreset') ||
+      message.includes('socket hang up')
+    );
+  };
+
+  private withReadRetry = async <T>(
+    operation: string,
+    executor: () => Promise<T>,
+    maxAttempts: number = 2,
+  ): Promise<T> => {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        return await executor();
+      } catch (error) {
+        lastError = error;
+        const canRetry = attempt < maxAttempts && this.isTransientReadError(error);
+        if (!canRetry) throw error;
+
+        const code = getNestedErrorCode(error) || 'UNKNOWN';
+        console.warn(
+          `[AiProviderModel.${operation}] transient db error (${code}), retrying ${attempt}/${maxAttempts - 1}`,
+        );
+        await new Promise((resolve) => {
+          setTimeout(resolve, 80 * attempt);
+        });
+      }
+    }
+
+    throw lastError;
+  };
 
   create = async (
     { keyVaults: userKey, ...params }: CreateAiProviderParams,
@@ -70,34 +142,40 @@ export class AiProviderModel {
   };
 
   query = async () => {
-    return this.db.query.aiProviders.findMany({
-      orderBy: [desc(aiProviders.updatedAt)],
-      where: eq(aiProviders.userId, this.userId),
-    });
+    return this.withReadRetry('query', () =>
+      this.db.query.aiProviders.findMany({
+        orderBy: [desc(aiProviders.updatedAt)],
+        where: eq(aiProviders.userId, this.userId),
+      }),
+    );
   };
 
   getAiProviderList = async (): Promise<AiProviderListItem[]> => {
-    const result = await this.db
-      .select({
-        description: aiProviders.description,
-        enabled: aiProviders.enabled,
-        id: aiProviders.id,
-        logo: aiProviders.logo,
-        name: aiProviders.name,
-        sort: aiProviders.sort,
-        source: aiProviders.source,
-      })
-      .from(aiProviders)
-      .where(eq(aiProviders.userId, this.userId))
-      .orderBy(asc(aiProviders.sort), desc(aiProviders.updatedAt));
+    const result = await this.withReadRetry('getAiProviderList', () =>
+      this.db
+        .select({
+          description: aiProviders.description,
+          enabled: aiProviders.enabled,
+          id: aiProviders.id,
+          logo: aiProviders.logo,
+          name: aiProviders.name,
+          sort: aiProviders.sort,
+          source: aiProviders.source,
+        })
+        .from(aiProviders)
+        .where(eq(aiProviders.userId, this.userId))
+        .orderBy(asc(aiProviders.sort), desc(aiProviders.updatedAt)),
+    );
 
     return result as AiProviderListItem[];
   };
 
   findById = async (id: string) => {
-    return this.db.query.aiProviders.findFirst({
-      where: and(eq(aiProviders.id, id), eq(aiProviders.userId, this.userId)),
-    });
+    return this.withReadRetry('findById', () =>
+      this.db.query.aiProviders.findFirst({
+        where: and(eq(aiProviders.id, id), eq(aiProviders.userId, this.userId)),
+      }),
+    );
   };
 
   update = async (id: string, value: Partial<AiProviderSelectItem>) => {
@@ -216,14 +294,14 @@ export class AiProviderModel {
       .where(and(eq(aiProviders.id, id), eq(aiProviders.userId, this.userId)))
       .limit(1);
 
-    const [result] = await query;
+    const [result] = await this.withReadRetry('getAiProviderById', () => query);
 
     if (!result) {
       // if the provider is builtin but not init, we will insert it to the db
       if (this.isBuiltInProvider(id)) {
         await this.db.insert(aiProviders).values({ id, source: 'builtin', userId: this.userId });
 
-        const resultAgain = await query;
+        const resultAgain = await this.withReadRetry('getAiProviderById', () => query);
 
         return { ...resultAgain[0] } as unknown as AiProviderDetailItem;
       }
@@ -252,16 +330,18 @@ export class AiProviderModel {
   };
 
   getAiProviderRuntimeConfig = async (decryptor?: DecryptUserKeyVaults) => {
-    const result = await this.db
-      .select({
-        config: aiProviders.config,
-        fetchOnClient: aiProviders.fetchOnClient,
-        id: aiProviders.id,
-        keyVaults: aiProviders.keyVaults,
-        settings: aiProviders.settings,
-      })
-      .from(aiProviders)
-      .where(and(eq(aiProviders.userId, this.userId)));
+    const result = await this.withReadRetry('getAiProviderRuntimeConfig', () =>
+      this.db
+        .select({
+          config: aiProviders.config,
+          fetchOnClient: aiProviders.fetchOnClient,
+          id: aiProviders.id,
+          keyVaults: aiProviders.keyVaults,
+          settings: aiProviders.settings,
+        })
+        .from(aiProviders)
+        .where(and(eq(aiProviders.userId, this.userId))),
+    );
 
     const decrypt = decryptor ?? JSON.parse;
     const runtimeConfig: Record<string, AiProviderRuntimeConfig> = {};
