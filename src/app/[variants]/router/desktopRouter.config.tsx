@@ -410,6 +410,18 @@ export const desktopRoutes: RouteConfig[] = [
         path: 'image',
       },
 
+      // Training routes
+      {
+        children: [
+          {
+            element: dynamicElement(() => import('../(main)/training'), 'Desktop > Training'),
+            index: true,
+          },
+        ],
+        errorElement: <ErrorBoundary resetPath="/training" />,
+        path: 'training',
+      },
+
       ...BusinessDesktopRoutesWithMainLayout,
 
       // Eval routes

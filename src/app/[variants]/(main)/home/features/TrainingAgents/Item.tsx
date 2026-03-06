@@ -12,6 +12,7 @@ const TRAINING_CARD_WIDTH = 380;
 const TRAINING_CARD_MIN_HEIGHT = 320;
 const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
 const FIELD_FIGHTER_ICON = '/images/voice-call/trainer-ai-mic.svg';
+const TRAINING_BANNER_FALLBACK_ICON = '/images/voice-call/trainer-ai-mic.svg';
 
 interface TrainingAgentItemProps {
   isAdmin?: boolean;
@@ -65,9 +66,10 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
           <div
             style={{
               aspectRatio: '16 / 9',
-              backgroundImage: `url(${trainerBannerUrl})`,
-              backgroundPosition: 'center',
-              backgroundSize: 'cover',
+              backgroundImage: `url(${trainerBannerUrl}), url(${TRAINING_BANNER_FALLBACK_ICON})`,
+              backgroundPosition: 'center, center',
+              backgroundRepeat: 'no-repeat, no-repeat',
+              backgroundSize: 'cover, 88px',
               borderBottom: `1px solid ${cssVar.colorBorderSecondary}`,
               position: 'relative',
               width: '100%',
@@ -116,15 +118,32 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
           </div>
         )}
 
-        <Flexbox horizontal align={'center'} gap={8} paddingBlock={8} paddingInline={12}>
-          <Flexbox flex={1} gap={1} style={{ overflow: 'hidden' }}>
-            <Text fontSize={13} weight={500}>
+        <Flexbox horizontal align={'flex-start'} gap={10} paddingBlock={10} paddingInline={12}>
+          <Flexbox flex={1} gap={3} style={{ minWidth: 0 }}>
+            <Text
+              fontSize={14}
+              style={{ lineHeight: '20px', minHeight: 20 }}
+              title={title}
+              weight={600}
+            >
               {title}
             </Text>
-            <Text color={cssVar.colorTextSecondary} fontSize={13}>
+            <Text
+              color={cssVar.colorTextSecondary}
+              fontSize={13}
+              title={description}
+              style={{
+                display: '-webkit-box',
+                lineHeight: '18px',
+                minHeight: 36,
+                overflow: 'hidden',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: 2,
+              }}
+            >
               {description}
             </Text>
-            <Text fontSize={12} type={'secondary'}>
+            <Text fontSize={12} style={{ lineHeight: '16px', minHeight: 16 }} type={'secondary'}>
               {loading ? 'Запуск...' : 'Нажмите, чтобы начать'}
             </Text>
           </Flexbox>
@@ -132,7 +151,7 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
             <img
               alt="Иконка тренажера"
               src={FIELD_FIGHTER_ICON}
-              style={{ flex: 'none', height: 40, width: 40 }}
+              style={{ alignSelf: 'flex-start', flex: 'none', height: 40, marginTop: 2, width: 40 }}
             />
           ) : (
             <Avatar
@@ -140,8 +159,8 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
               avatar={preset.avatar || DEFAULT_AVATAR}
               background={preset.backgroundColor || undefined}
               shape={'square'}
-              size={30}
-              style={{ flex: 'none' }}
+              size={32}
+              style={{ alignSelf: 'flex-start', flex: 'none', marginTop: 2 }}
             />
           )}
         </Flexbox>

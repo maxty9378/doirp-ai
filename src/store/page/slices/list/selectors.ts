@@ -34,8 +34,8 @@ const getFilteredDocuments = (s: PageState): LobeDocument[] => {
     });
   }
 
-  // Sort by creation date (newest first)
-  return result.sort((a: LobeDocument, b: LobeDocument) => {
+  // Sort by creation date (newest first) without mutating store state array
+  return result.slice().sort((a: LobeDocument, b: LobeDocument) => {
     const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return dateB - dateA;

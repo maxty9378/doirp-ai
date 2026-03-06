@@ -1,5 +1,5 @@
 /** Плейсхолдер, пока обложка не загружена — стандартная иконка «картинка» */
-const TRAINER_BANNER_PLACEHOLDER = '/images/voice-call/trainer-banner-placeholder.svg';
+const TRAINER_BANNER_PLACEHOLDER = '/images/voice-call/field-fighter-cover.svg';
 const DEFAULT_TRAINING_TP_BANNER_URL = TRAINER_BANNER_PLACEHOLDER;
 const DEFAULT_TRAINING_HN_BANNER_URL = TRAINER_BANNER_PLACEHOLDER;
 

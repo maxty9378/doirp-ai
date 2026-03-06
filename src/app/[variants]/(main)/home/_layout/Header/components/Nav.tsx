@@ -1,7 +1,7 @@
 'use client';
 
 import { Flexbox, Icon, Tag } from '@lobehub/ui';
-import { HomeIcon, SearchIcon, ShieldCheck } from 'lucide-react';
+import { Bot, HomeIcon, SearchIcon, ShieldCheck } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -78,6 +78,12 @@ const Nav = memo(() => {
         url: '/image',
       },
       {
+        icon: Bot,
+        key: 'training',
+        title: 'Тренажеры',
+        url: '/training',
+      },
+      {
         hidden: !showMarket || !isAdmin,
         icon: getRouteById('community')!.icon,
         key: SidebarTabKey.Community,
@@ -85,7 +91,7 @@ const Nav = memo(() => {
         url: '/community',
       },
     ],
-    [isAdmin, t],
+    [enableBusinessFeatures, isAdmin, showAiImage, showMarket, t, toggleCommandMenu],
   );
 
   const newBadge = (

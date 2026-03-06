@@ -30,6 +30,7 @@ const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
 const FIELD_FIGHTER_AGENT_ID = 'training-tp-price-objection';
 const TRAINING_CARD_WIDTH = 380;
 const TRAINING_CARD_WITH_BANNER_MIN_HEIGHT = 320;
+const TRAINING_BANNER_FALLBACK_COVER = '/images/voice-call/field-fighter-cover.svg';
 
 const toTrainingBannerUrl = (path: string) => {
   const normalizedPath = path.replace(/^\/+/, '').trim();
@@ -211,7 +212,7 @@ const TrainingAgents = memo(() => {
   );
 
   return (
-    <GroupBlock icon={BotIcon} title="Доступные тренажёры">
+    <GroupBlock icon={BotIcon} title="Тренажеры">
       {isAdmin && (
         <>
           <input
@@ -272,9 +273,10 @@ const TrainingAgents = memo(() => {
           <div
             style={{
               aspectRatio: '16 / 9',
-              backgroundImage: `url(${hnBannerUrl})`,
-              backgroundPosition: 'center',
-              backgroundSize: 'cover',
+              backgroundImage: `url(${hnBannerUrl}), url(${TRAINING_BANNER_FALLBACK_COVER})`,
+              backgroundPosition: 'center, center',
+              backgroundRepeat: 'no-repeat, no-repeat',
+              backgroundSize: 'cover, cover',
               borderBottom: `1px solid ${cssVar.colorBorderSecondary}`,
               position: 'relative',
               width: '100%',
@@ -286,6 +288,8 @@ const TrainingAgents = memo(() => {
                 onClick={(e) => e.stopPropagation()}
               >
                 <Dropdown
+                  placement="bottomRight"
+                  trigger={['click']}
                   menu={{
                     items: [
                       {
@@ -299,8 +303,6 @@ const TrainingAgents = memo(() => {
                       },
                     ],
                   }}
-                  placement="bottomRight"
-                  trigger={['click']}
                 >
                   <ActionIcon
                     icon={MoreVertical}
@@ -318,25 +320,36 @@ const TrainingAgents = memo(() => {
             )}
           </div>
 
-          <Flexbox horizontal align={'center'} gap={8} paddingBlock={8} paddingInline={12}>
-            <Flexbox flex={1} gap={1} style={{ overflow: 'hidden' }}>
-              <Text fontSize={13} weight={500}>
+          <Flexbox horizontal align={'flex-start'} gap={10} paddingBlock={10} paddingInline={12}>
+            <Flexbox flex={1} gap={3} style={{ minWidth: 0 }}>
+              <Text fontSize={14} style={{ lineHeight: '20px', minHeight: 20 }} weight={600}>
                 Жесткие переговоры
               </Text>
-              <Text color={cssVar.colorTextSecondary} fontSize={13}>
+              <Text
+                color={cssVar.colorTextSecondary}
+                fontSize={13}
+                style={{
+                  display: '-webkit-box',
+                  lineHeight: '18px',
+                  minHeight: 36,
+                  overflow: 'hidden',
+                  WebkitBoxOrient: 'vertical',
+                  WebkitLineClamp: 2,
+                }}
+              >
                 Управленческие поединки в чате
               </Text>
-              <Text fontSize={12} type={'secondary'}>
+              <Text fontSize={12} style={{ lineHeight: '16px', minHeight: 16 }} type={'secondary'}>
                 Нажмите, чтобы выбрать режим
               </Text>
             </Flexbox>
             <Avatar
               emojiScaleWithBackground
-              avatar="⚔️"
+              avatar={'\u2694\uFE0F'}
               background="#722ED1"
               shape={'square'}
-              size={30}
-              style={{ flex: 'none' }}
+              size={32}
+              style={{ alignSelf: 'flex-start', flex: 'none', marginTop: 2 }}
             />
           </Flexbox>
         </Block>

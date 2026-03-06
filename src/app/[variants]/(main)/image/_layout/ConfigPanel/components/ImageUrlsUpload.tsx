@@ -3,40 +3,12 @@ import { memo } from 'react';
 import { useAutoDimensions } from '@/app/[variants]/(main)/image/_layout/ConfigPanel/hooks/useAutoDimensions';
 import { useGenerationConfigParam } from '@/store/image/slices/generationConfig/hooks';
 
-import ImageUpload from './ImageUpload';
 import MultiImagesUpload from './MultiImagesUpload';
 
 const ImageUrlsUpload = memo(() => {
-  const { value, setValue, maxCount, maxFileSize } = useGenerationConfigParam('imageUrls');
-  const { autoSetDimensions, extractUrlAndDimensions } = useAutoDimensions();
+  const { value, setValue } = useGenerationConfigParam('imageUrls');
+  const { autoSetDimensions } = useAutoDimensions();
 
-  // When maxCount is 1, use ImageUpload for single image upload
-  if (maxCount === 1) {
-    const handleSingleChange = (
-      data?:
-        | string // Old API: just URL
-        | { dimensions?: { height: number; width: number }; url: string }, // New API: URL with dimensions
-    ) => {
-      const { url, dimensions } = extractUrlAndDimensions(data);
-
-      setValue(url ? [url] : []);
-
-      // Auto-set dimensions if available
-      if (dimensions) {
-        autoSetDimensions(dimensions);
-      }
-    };
-
-    return (
-      <ImageUpload
-        maxFileSize={maxFileSize}
-        value={value?.[0] ?? null}
-        onChange={handleSingleChange}
-      />
-    );
-  }
-
-  // Otherwise use MultiImagesUpload for multiple images
   const handleChange = (
     data:
       | string[] // Old API: just URLs
@@ -57,8 +29,6 @@ const ImageUrlsUpload = memo(() => {
 
   return (
     <MultiImagesUpload
-      maxCount={maxCount}
-      maxFileSize={maxFileSize}
       value={value}
       onChange={handleChange}
     />
