@@ -23,7 +23,6 @@ const WelcomeStep = memo<WelcomeStepProps>(({ onNext }) => {
   const updateGeneralConfig = useUserStore((s) => s.updateGeneralConfig);
 
   const handleNext = () => {
-    // 默认启用 telemetry
     updateGeneralConfig({ telemetry: true });
     onNext();
   };
@@ -45,8 +44,8 @@ const WelcomeStep = memo<WelcomeStepProps>(({ onNext }) => {
   }, []);
 
   return (
-    <Flexbox align="flex-start" horizontal gap={24} justify="space-between">
-      <Flexbox flex={1} gap={16} style={{ minWidth: 0 }}>
+    <Flexbox gap={16}>
+      <ProductLogo size={64} />
       <Flexbox style={{ marginBottom: 16 }}>
         <Text as={'h1'} fontSize={28} weight={'bold'}>
           <TypewriterEffect
@@ -123,8 +122,6 @@ const WelcomeStep = memo<WelcomeStepProps>(({ onNext }) => {
       >
         {t('telemetry.next')}
       </Button>
-      </Flexbox>
-      <ProductLogo size={64} style={{ flexShrink: 0 }} />
     </Flexbox>
   );
 });

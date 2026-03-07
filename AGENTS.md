@@ -62,6 +62,12 @@ lobe-chat/
   - `Remove-Item -Recurse -Force .next`
   - `bun run dev` или `pnpm dev`
 
+**Turbopack «спотыкается» о старые файлы (после перехода с npm/pnpm):** остановите сервер (Ctrl+C), удалите кэш и запустите заново:
+  - `Remove-Item -Recurse -Force .next`
+  - `bun run dev`
+
+**Предупреждение про lockfile (pnpm-lock.yaml vs bun.lock):** если Next.js находит старый `pnpm-lock.yaml` в корне пользователя (например `C:\Users\<User>\pnpm-lock.yaml`), а в проекте — `bun.lock`, удалите лишний lockfile вне проекта (тот, что в домашней папке), чтобы предупреждение исчезло.
+
 ### Code Style Guidelines
 
 #### TypeScript

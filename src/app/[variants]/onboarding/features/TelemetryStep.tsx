@@ -1,16 +1,18 @@
 'use client';
 
+import { BRANDING_NAME } from '@lobechat/business-const';
 import { type IconProps } from '@lobehub/ui';
 import { Block, Button, Flexbox, Icon, Text } from '@lobehub/ui';
 import { TypewriterEffect } from '@lobehub/ui/awesome';
 import { LoadingDots } from '@lobehub/ui/chat';
-import { Steps } from 'antd';
+import { Steps, Switch } from 'antd';
 import { cssVar } from 'antd-style';
-import { BrainIcon, HeartHandshakeIcon, PencilRulerIcon } from 'lucide-react';
+import { BrainIcon, HeartHandshakeIcon, PencilRulerIcon, ShieldCheck } from 'lucide-react';
 import { memo, useCallback, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 
 import { ProductLogo } from '@/components/Branding';
+import { PRIVACY_URL, TERMS_URL } from '@/const/url';
 import { useUserStore } from '@/store/user';
 
 interface TelemetryStepProps {
@@ -20,6 +22,7 @@ interface TelemetryStepProps {
 const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
   const { t, i18n } = useTranslation('onboarding');
   const locale = i18n.language;
+  const [check, setCheck] = useState(true);
   const [isNavigating, setIsNavigating] = useState(false);
   const isNavigatingRef = useRef(false);
   const updateGeneralConfig = useUserStore((s) => s.updateGeneralConfig);
@@ -52,8 +55,8 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
   }, []);
 
   return (
-    <Flexbox align="flex-start" horizontal gap={24} justify="space-between">
-      <Flexbox flex={1} gap={16} style={{ minWidth: 0 }}>
+    <Flexbox gap={16}>
+      <ProductLogo size={64} />
       <Flexbox style={{ marginBottom: 16 }}>
         <Text as={'h1'} fontSize={28} weight={'bold'}>
           <TypewriterEffect
@@ -119,6 +122,17 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
           },
         ]}
       />
+      <Flexbox gap={8}>
+        <Text as={'p'} color={cssVar.colorTextSecondary}>
+          {t('telemetry.rows.privacy.desc', { appName: BRANDING_NAME })}
+        </Text>
+        <Flexbox horizontal align="center" gap={8}>
+          <Switch checked={check} size={'small'} onChange={(v) => setCheck(v)} />
+          <Text fontSize={12} type={check ? undefined : 'secondary'}>
+            {t('telemetry.rows.privacy.title', { appName: BRANDING_NAME })}
+          </Text>
+        </Flexbox>
+      </Flexbox>
       <Button
         disabled={isNavigating}
         size={'large'}
@@ -127,12 +141,43 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
           marginBlock: 8,
           maxWidth: 240,
         }}
-        onClick={() => handleChoice(true)}
+        onClick={() => handleChoice(check)}
       >
         {t('telemetry.next')}
       </Button>
-      </Flexbox>
-      <ProductLogo size={64} style={{ flexShrink: 0 }} />
+      {check && (
+        <Block horizontal align="flex-start" gap={8} variant={'borderless'}>
+          <Icon
+            icon={ShieldCheck}
+            size={16}
+            style={{ color: cssVar.colorSuccess, flexShrink: 0 }}
+          />
+          <Text fontSize={12} type="secondary">
+            <Trans
+              i18nKey={'telemetry.agreement'}
+              ns={'onboarding'}
+              components={{
+                privacy: (
+                  <a
+                    href={PRIVACY_URL}
+                    style={{ color: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    {t('telemetry.terms')}
+                  </a>
+                ),
+                terms: (
+                  <a
+                    href={TERMS_URL}
+                    style={{ color: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    {t('telemetry.privacy')}
+                  </a>
+                ),
+              }}
+            />
+          </Text>
+        </Block>
+      )}
     </Flexbox>
   );
 });
