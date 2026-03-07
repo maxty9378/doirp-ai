@@ -1,10 +1,9 @@
-import { isDesktop } from '@lobechat/const';
 import { type DropdownItem } from '@lobehub/ui';
 import { Icon } from '@lobehub/ui';
 import { App } from 'antd';
 import { cssVar, useResponsive } from 'antd-style';
 import dayjs from 'dayjs';
-import { CopyPlus, Download, Link2, Maximize2, Trash2 } from 'lucide-react';
+import { CopyPlus, Download, HistoryIcon, Link2, Maximize2, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -53,24 +52,26 @@ export const useMenu = (): { menuItems: any[] } => {
     }
   };
 
-  const handleExportMarkdown = async () => {
+  const handleExportWord = async () => {
     const state = storeApi.getState();
     const { editor, title } = state;
 
     if (!editor) return;
 
     try {
-      const markdown = (editor.getDocument('markdown') as unknown as string) || '';
-      const fileName = `${title || 'Untitled'}.md`;
+      const raw = (editor.getDocument('markdown') as unknown as string) || '';
+      const body = raw.trim() || ' ';
+      const fileName = `${title || 'Untitled'}.docx`;
+      const markdownWithTitle =
+        title?.trim() ? `# ${title.trim()}\n\n${body}` : body;
 
-      if (isDesktop) {
-        const { desktopExportService } = await import('@/services/electron/desktopExportService');
-        await desktopExportService.exportMarkdown({
-          content: markdown,
-          fileName,
-        });
+      const { convertMarkdownToDocx, downloadDocx } = await import('@mohtasham/md-to-docx');
+      const blob = await convertMarkdownToDocx(markdownWithTitle);
+
+      if (typeof downloadDocx === 'function') {
+        downloadDocx(blob, fileName);
+        message.success(t('pageEditor.exportSuccess'));
       } else {
-        const blob = new Blob([markdown], { type: 'text/markdown' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -81,9 +82,20 @@ export const useMenu = (): { menuItems: any[] } => {
         URL.revokeObjectURL(url);
         message.success(t('pageEditor.exportSuccess'));
       }
-    } catch (error) {
-      console.error('Failed to export markdown:', error);
-      message.error(t('pageEditor.exportError'));
+    } catch (error: unknown) {
+      const errMsg =
+        error instanceof Error ? error.message : error != null ? String(error) : 'Unknown error';
+      console.error('Failed to export Word:', error);
+      const isModuleMissing =
+        typeof errMsg === 'string' &&
+        (errMsg.includes('Cannot find module') || errMsg.includes('@mohtasham/md-to-docx'));
+      message.error(
+        isModuleMissing
+          ? t('pageEditor.exportErrorWordModule', {
+              defaultValue: 'Не удалось экспортировать страницу. Выполните в корне проекта: pnpm install',
+            })
+          : t('pageEditor.exportError') + (errMsg ? `: ${errMsg}` : ''),
+      );
     }
   };
 
@@ -130,19 +142,21 @@ export const useMenu = (): { menuItems: any[] } => {
         },
       },
       {
+        icon: <Icon icon={HistoryIcon} />,
+        key: 'history',
+        label: t('pageEditor.menu.history'),
+        onClick: () => {
+          useDocumentStore.getState().toggleHistoryPanel();
+        },
+      },
+      {
         type: 'divider' as const,
       },
       {
-        children: [
-          {
-            key: 'export-markdown',
-            label: t('pageEditor.menu.export.markdown'),
-            onClick: handleExportMarkdown,
-          },
-        ],
         icon: <Icon icon={Download} />,
         key: 'export',
         label: t('pageEditor.menu.export'),
+        onClick: handleExportWord,
       },
     ];
 
@@ -179,7 +193,7 @@ export const useMenu = (): { menuItems: any[] } => {
     toggleWideScreen,
     showViewModeSwitch,
     handleDuplicate,
-    handleExportMarkdown,
+    handleExportWord,
   ]);
 
   return { menuItems };

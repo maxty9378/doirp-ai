@@ -210,6 +210,20 @@ export const documentRouter = router({
     return ctx.documentService.purgeDeletedOlderThan24h();
   }),
 
+  // ============ Revisions ============
+
+  getDocumentRevisions: documentProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.documentService.getDocumentRevisions(input.id);
+    }),
+
+  restoreRevision: documentProcedure
+    .input(z.object({ documentId: z.string(), revisionId: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.documentService.restoreRevision(input.documentId, input.revisionId);
+    }),
+
   updateDocument: documentProcedure
     .input(
       z.object({
@@ -217,6 +231,7 @@ export const documentRouter = router({
         editorData: z.string().optional(),
         fileType: z.string().optional(),
         id: z.string(),
+        lastUpdatedAt: z.string().optional(),
         metadata: z.record(z.any()).optional(),
         parentId: z.string().nullable().optional(),
         rawData: z.string().optional(),

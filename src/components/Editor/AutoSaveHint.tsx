@@ -12,7 +12,8 @@ dayjs.extend(relativeTime);
 
 interface AutoSaveHintProps {
   lastUpdatedTime?: string | Date | null;
-  saveStatus: 'idle' | 'saving' | 'saved';
+  onRetry?: () => void;
+  saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   style?: CSSProperties;
 }
 
@@ -21,7 +22,7 @@ interface AutoSaveHintProps {
  *
  * Displays real-time save status for document/config changes
  */
-const AutoSaveHint = memo<AutoSaveHintProps>(({ style, saveStatus, lastUpdatedTime }) => {
+const AutoSaveHint = memo<AutoSaveHintProps>(({ style, saveStatus, lastUpdatedTime, onRetry }) => {
   const { t } = useTranslation('editor');
 
   const isSaving = saveStatus === 'saving';
@@ -32,6 +33,9 @@ const AutoSaveHint = memo<AutoSaveHintProps>(({ style, saveStatus, lastUpdatedTi
         {t('autoSave.saving')}
       </Tag>
     );
+
+  // Ошибка сохранения не выводится на страницу — только в консоль; повтор через меню или onRetry
+  if (saveStatus === 'error') return null;
 
   if (saveStatus === 'saved' && lastUpdatedTime)
     return (

@@ -6,6 +6,7 @@ import { type IEditor } from '@lobehub/editor';
 import { debounce } from 'es-toolkit/compat';
 import { type SWRResponse } from 'swr';
 
+import { draftService } from '@/services/draft';
 import { useClientDataSWRWithSync } from '@/libs/swr';
 import { documentService } from '@/services/document';
 import { type StoreSetter } from '@/store/types';
@@ -134,6 +135,9 @@ export class DocumentActionImpl {
 
     const { internal_dispatchDocument } = this.#get();
 
+    // Check for local draft
+    const draft = draftService.getDraft(documentId);
+
     // Add or update document via reducer
     internal_dispatchDocument({
       id: documentId,
@@ -141,6 +145,7 @@ export class DocumentActionImpl {
       value: {
         autoSave,
         content: content ?? undefined,
+        draft: draft ?? undefined,
         editorData,
         lastSavedContent: content ?? undefined,
         sourceType,

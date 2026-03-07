@@ -644,6 +644,13 @@
       "when": 1771400003000,
       "tag": "0091_add_documents_deleted_at",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1772804241829,
+      "tag": "0092_pink_scorpion",
+      "breakpoints": true
     }
   ],
   "version": "6"

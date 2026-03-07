@@ -43,6 +43,7 @@
     "clean:node_modules": "bash -lc 'set -e; echo \"Removing all node_modules...\"; rm -rf node_modules; pnpm -r exec rm -rf node_modules; rm -rf apps/desktop/node_modules; echo \"All node_modules removed.\"'",
     "db:generate": "drizzle-kit generate && npm run workflow:dbml",
     "db:migrate": "cross-env MIGRATION_DB=1 tsx ./scripts/migrateServerDB/index.ts",
+    "db:migrate:document-revisions": "tsx ./scripts/migrateServerDB/runDocumentRevisionsOnly.mts",
     "db:studio": "drizzle-kit studio",
     "db:visualize": "dbdocs build docs/development/database-schema.dbml --project lobe-chat",
     "desktop:build:all": "npm run desktop:build:renderer:all && npm run desktop:build:main",
@@ -240,6 +241,7 @@
     "@lobehub/tts": "^4.0.2",
     "@lobehub/ui": "^4.38.4",
     "@modelcontextprotocol/sdk": "^1.25.3",
+    "@mohtasham/md-to-docx": "^2.8.0",
     "@napi-rs/canvas": "^0.1.88",
     "@neondatabase/serverless": "^1.0.2",
     "@next/third-parties": "^16.1.5",
@@ -498,6 +500,9 @@
       "better-auth": "1.4.6",
       "better-call": "1.1.8",
       "drizzle-orm": "0.44.7"
+    },
+    "patchedDependencies": {
+      "@lobehub/ui": "patches/@lobehub__ui.patch"
     }
   }
 }

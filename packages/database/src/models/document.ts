@@ -1,7 +1,7 @@
 import { and, count, desc, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
 
-import type { DocumentItem, NewDocument } from '../schemas';
-import { documents } from '../schemas';
+import type { DocumentItem, DocumentRevisionItem, NewDocument, NewDocumentRevision } from '../schemas';
+import { documentRevisions, documents } from '../schemas';
 import type { LobeChatDatabase } from '../type';
 
 export interface QueryDocumentParams {
@@ -221,6 +221,58 @@ export class DocumentModel {
       .delete(documents)
       .where(
         and(eq(documents.userId, this.userId), isNotNull(documents.deletedAt), lt(documents.deletedAt, cutoff)),
+      );
+    return result.rowCount ?? 0;
+  };
+
+  // ============ Revisions ============
+
+  createRevision = async (params: Omit<NewDocumentRevision, 'userId'>): Promise<DocumentRevisionItem> => {
+    const result = (await this.db
+      .insert(documentRevisions)
+      .values({ ...params, userId: this.userId })
+      .returning()) as DocumentRevisionItem[];
+
+    return result[0]!;
+  };
+
+  queryRevisions = async (documentId: string): Promise<DocumentRevisionItem[]> => {
+    return this.db
+      .select()
+      .from(documentRevisions)
+      .where(and(eq(documentRevisions.documentId, documentId), eq(documentRevisions.userId, this.userId)))
+      .orderBy(desc(documentRevisions.createdAt));
+  };
+
+  findRevisionById = async (id: string): Promise<DocumentRevisionItem | undefined> => {
+    return this.db.query.documentRevisions.findFirst({
+      where: and(eq(documentRevisions.id, id), eq(documentRevisions.userId, this.userId)),
+    });
+  };
+
+  deleteRevision = async (id: string) => {
+    return this.db
+      .delete(documentRevisions)
+      .where(and(eq(documentRevisions.id, id), eq(documentRevisions.userId, this.userId)));
+  };
+
+  /**
+   * Keep only the last keepCount revisions for a document; delete older ones.
+   */
+  pruneRevisions = async (documentId: string, keepCount: number = 10): Promise<number> => {
+    const all = await this.queryRevisions(documentId);
+    if (all.length <= keepCount) return 0;
+    const toKeep = all.slice(0, keepCount);
+    const toDeleteIds = all.slice(keepCount).map((r) => r.id);
+    if (toDeleteIds.length === 0) return 0;
+    const result = await this.db
+      .delete(documentRevisions)
+      .where(
+        and(
+          eq(documentRevisions.documentId, documentId),
+          eq(documentRevisions.userId, this.userId),
+          inArray(documentRevisions.id, toDeleteIds),
+        ),
       );
     return result.rowCount ?? 0;
   };

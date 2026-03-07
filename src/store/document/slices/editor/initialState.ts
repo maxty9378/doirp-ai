@@ -39,9 +39,17 @@ export interface EditorContentState {
    */
   lastUpdatedTime: Date | null;
   /**
+   * Local draft content if any
+   */
+  draft?: {
+    content: string;
+    editorData: any;
+    updatedAt: number;
+  };
+  /**
    * Current save status
    */
-  saveStatus: 'idle' | 'saving' | 'saved';
+  saveStatus: 'idle' | 'saving' | 'saved' | 'error';
   /**
    * Document source type - determines which service to call for persistence
    */
@@ -72,6 +80,10 @@ export interface EditorState {
    * Editor state from useEditorState hook
    */
   editorState: LobehubEditorState | undefined;
+  /**
+   * Whether the version history panel is visible
+   */
+  showHistoryPanel: boolean;
 }
 
 /**
@@ -96,4 +108,5 @@ export const initialEditorState: EditorState = {
   documents: {},
   editor: undefined,
   editorState: undefined,
+  showHistoryPanel: false,
 };

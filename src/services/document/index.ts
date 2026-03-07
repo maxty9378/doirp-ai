@@ -20,6 +20,7 @@ export interface UpdateDocumentParams {
   editorData?: string;
   fileType?: string;
   id: string;
+  lastUpdatedAt?: string | Date;
   metadata?: Record<string, any>;
   parentId?: string | null;
   title?: string;
@@ -77,7 +78,19 @@ export class DocumentService {
   }
 
   async updateDocument(params: UpdateDocumentParams): Promise<void> {
-    await lambdaClient.document.updateDocument.mutate(params);
+    const { lastUpdatedAt, ...rest } = params;
+    await lambdaClient.document.updateDocument.mutate({
+      ...rest,
+      lastUpdatedAt: lastUpdatedAt ? new Date(lastUpdatedAt).toISOString() : undefined,
+    });
+  }
+
+  async getDocumentRevisions(documentId: string) {
+    return lambdaClient.document.getDocumentRevisions.query({ id: documentId });
+  }
+
+  async restoreRevision(documentId: string, revisionId: string): Promise<DocumentItem> {
+    return lambdaClient.document.restoreRevision.mutate({ documentId, revisionId });
   }
 }
 

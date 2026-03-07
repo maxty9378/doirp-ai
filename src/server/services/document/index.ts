@@ -191,11 +191,42 @@ export class DocumentService {
       content?: string;
       editorData?: Record<string, any>;
       fileType?: string;
+      lastUpdatedAt?: string | Date;
       metadata?: Record<string, any>;
       parentId?: string | null;
       title?: string;
     },
   ) {
+    const currentDoc = await this.documentModel.findById(id);
+    if (!currentDoc) {
+      throw new Error(`Document not found: ${id}`);
+    }
+
+    // 1. Conflict Detection
+    if (params.lastUpdatedAt) {
+      const dbUpdatedAt = new Date(currentDoc.updatedAt).getTime();
+      const clientUpdatedAt = new Date(params.lastUpdatedAt).getTime();
+
+      // If DB has a newer version (allow 1s tolerance for clock drift)
+      if (dbUpdatedAt > clientUpdatedAt + 1000) {
+        throw new Error('Conflict: Document has been modified by another session');
+      }
+    }
+
+    // 2. Create Revision (snapshot current state before update); keep only last 10
+    if (
+      (params.content !== undefined && params.content !== currentDoc.content) ||
+      params.editorData !== undefined
+    ) {
+      await this.documentModel.createRevision({
+        content: currentDoc.content,
+        documentId: id,
+        editorData: currentDoc.editorData,
+        metadata: currentDoc.metadata,
+      });
+      await this.documentModel.pruneRevisions(id, 10);
+    }
+
     const updates: any = {};
 
     if (params.content !== undefined) {
@@ -225,7 +256,7 @@ export class DocumentService {
       updates.parentId = params.parentId;
     }
 
-    const result = await this.documentModel.update(id, updates);
+    await this.documentModel.update(id, updates);
 
     // If title was updated and this document has an associated file, update the file name too
     if (params.title !== undefined || params.parentId !== undefined) {
@@ -238,7 +269,34 @@ export class DocumentService {
       }
     }
 
-    return result;
+    const doc = await this.documentModel.findById(id);
+    if (!doc) throw new Error(`Document not found: ${id}`);
+    return doc;
+  }
+
+  /**
+   * Get document revisions
+   */
+  async getDocumentRevisions(documentId: string) {
+    return this.documentModel.queryRevisions(documentId);
+  }
+
+  /**
+   * Restore a revision
+   */
+  async restoreRevision(documentId: string, revisionId: string) {
+    const revision = await this.documentModel.findRevisionById(revisionId);
+    if (!revision) {
+      throw new Error(`Revision not found: ${revisionId}`);
+    }
+
+    // Restore content from revision
+    // This will trigger a new revision of the *current* state (which is good)
+    return this.updateDocument(documentId, {
+      content: revision.content || '',
+      editorData: revision.editorData || {},
+      metadata: revision.metadata || {},
+    });
   }
 
   /**

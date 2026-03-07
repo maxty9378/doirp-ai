@@ -126,6 +126,40 @@ export type NewDocument = typeof documents.$inferInsert;
 export type DocumentItem = typeof documents.$inferSelect;
 export const insertDocumentSchema = createInsertSchema(documents);
 
+/**
+ * Document revisions table - Stores historical versions of documents
+ */
+export const documentRevisions = pgTable(
+  'document_revisions',
+  {
+    id: varchar('id', { length: 255 })
+      .$defaultFn(() => idGenerator('document_revisions', 16))
+      .primaryKey(),
+
+    documentId: varchar('document_id', { length: 255 })
+      .references((): AnyPgColumn => documents.id, { onDelete: 'cascade' })
+      .notNull(),
+
+    content: text('content'),
+    editorData: jsonb('editor_data').$type<Record<string, any>>(),
+
+    metadata: jsonb('metadata').$type<Record<string, any>>(),
+
+    userId: text('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+
+    createdAt: createdAt(),
+  },
+  (table) => [
+    index('document_revisions_document_id_idx').on(table.documentId),
+    index('document_revisions_user_id_idx').on(table.userId),
+  ],
+);
+
+export type NewDocumentRevision = typeof documentRevisions.$inferInsert;
+export type DocumentRevisionItem = typeof documentRevisions.$inferSelect;
+
 export const files = pgTable(
   'files',
   {

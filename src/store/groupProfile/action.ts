@@ -45,7 +45,7 @@ export class ActionImpl {
           }
         } catch (error) {
           console.error('[ProfileEditor] Failed to save:', error);
-          this.#updateSaveStatusInternal(tabId, 'idle');
+          this.#updateSaveStatusInternal(tabId, 'error');
         }
       },
       EDITOR_DEBOUNCE_TIME,
@@ -114,7 +114,7 @@ export class ActionImpl {
       this.#updateSaveStatusInternal(activeTabId, 'saved');
     } catch (error) {
       console.error('[ProfileEditor] Failed to save streaming content:', error);
-      this.#updateSaveStatusInternal(activeTabId, 'idle');
+      this.#updateSaveStatusInternal(activeTabId, 'error');
     }
 
     this.#set({
@@ -148,7 +148,7 @@ export class ActionImpl {
       });
     } catch (error) {
       console.error('[ProfileEditor] Failed to read editor content:', error);
-      this.#updateSaveStatusInternal(activeTabId, 'idle');
+      this.#updateSaveStatusInternal(activeTabId, 'error');
     }
   };
 

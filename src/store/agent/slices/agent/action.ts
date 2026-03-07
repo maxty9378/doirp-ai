@@ -290,7 +290,7 @@ export class AgentSliceActionImpl {
         updateSaveStatus('idle');
       } else {
         console.error('[AgentStore] Failed to save config:', error);
-        updateSaveStatus('idle');
+        updateSaveStatus('error');
       }
     }
   };
@@ -320,7 +320,7 @@ export class AgentSliceActionImpl {
         updateSaveStatus('idle');
       } else {
         console.error('[AgentStore] Failed to save meta:', error);
-        updateSaveStatus('idle');
+        updateSaveStatus('error');
       }
     }
   };

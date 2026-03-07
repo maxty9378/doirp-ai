@@ -4,6 +4,7 @@ import type { IEditor } from '@lobehub/editor/es/types';
 import type { EditorState as LobehubEditorState } from '@lobehub/editor/react';
 import isEqual from 'fast-deep-equal';
 
+import { draftService } from '@/services/draft';
 import { documentService } from '@/services/document';
 import type { StoreSetter } from '@/store/types';
 import { setNamespace } from '@/utils/storeDebug';
@@ -73,6 +74,15 @@ export class EditorActionImpl {
         },
         'handleContentChange',
       );
+
+      // Store local draft if changed
+      if (contentChanged) {
+        draftService.saveDraft(activeDocumentId, {
+          content: markdown,
+          editorData,
+          updatedAt: Date.now(),
+        });
+      }
 
       // Only trigger auto-save if content actually changed AND autoSave is enabled
       if (contentChanged && doc.autoSave !== false) {
@@ -165,6 +175,7 @@ export class EditorActionImpl {
         content: currentContent,
         editorData: JSON.stringify(currentEditorData),
         id,
+        lastUpdatedAt: doc.lastUpdatedTime ?? undefined,
         metadata: metadata?.emoji ? { emoji: metadata.emoji } : undefined,
         title: metadata?.title,
       });
@@ -181,14 +192,100 @@ export class EditorActionImpl {
           saveStatus: 'saved',
         },
       });
+
+      // Clear local draft on success
+      draftService.removeDraft(id);
     } catch (error) {
       console.error('[DocumentStore] Failed to save:', error);
-      internal_dispatchDocument({ id, type: 'updateDocument', value: { saveStatus: 'idle' } });
+      // If conflict error, maybe show a different status or message
+      // For now, general error status is enough to trigger the retry UI
+      internal_dispatchDocument({ id, type: 'updateDocument', value: { saveStatus: 'error' } });
     }
   };
 
   setEditorState = (editorState: LobehubEditorState | undefined): void => {
     this.#set({ editorState }, false, n('setEditorState'));
+  };
+
+  restoreDraft = (documentId: string): void => {
+    const { documents, editor, internal_dispatchDocument } = this.#get();
+    const doc = documents[documentId];
+    if (!doc || !doc.draft || !editor) return;
+
+    const { content, editorData } = doc.draft;
+
+    // Update editor content
+    try {
+      editor.setDocument('json', JSON.stringify(editorData));
+    } catch {
+      editor.setDocument('markdown', content);
+    }
+
+    // Update state
+    internal_dispatchDocument({
+      id: documentId,
+      type: 'updateDocument',
+      value: {
+        content,
+        draft: undefined,
+        editorData,
+        isDirty: true,
+      },
+    });
+
+    // Clear local draft
+    draftService.removeDraft(documentId);
+  };
+
+  clearDraft = (documentId: string): void => {
+    const { internal_dispatchDocument } = this.#get();
+    internal_dispatchDocument({
+      id: documentId,
+      type: 'updateDocument',
+      value: { draft: undefined },
+    });
+    draftService.removeDraft(documentId);
+  };
+
+  toggleHistoryPanel = (): void => {
+    const { showHistoryPanel } = this.#get();
+    this.#set({ showHistoryPanel: !showHistoryPanel }, false, n('toggleHistoryPanel'));
+  };
+
+  /**
+   * Apply restored document content from server (e.g. after restoreRevision)
+   */
+  applyRestoredDocument = (
+    documentId: string,
+    content: string,
+    editorData: Record<string, any> | null,
+    lastUpdatedTime: Date,
+  ): void => {
+    const { editor, activeDocumentId, internal_dispatchDocument } = this.#get();
+    internal_dispatchDocument({
+      id: documentId,
+      type: 'updateDocument',
+      value: {
+        content,
+        editorData: editorData ?? null,
+        isDirty: false,
+        lastSavedContent: content,
+        lastUpdatedTime,
+        saveStatus: 'saved',
+      },
+    });
+    if (editor && activeDocumentId === documentId) {
+      try {
+        if (editorData && typeof editorData === 'object' && Object.keys(editorData).length > 0) {
+          editor.setDocument('json', JSON.stringify(editorData));
+        } else if (content) {
+          editor.setDocument('markdown', content);
+        }
+      } catch (err) {
+        console.warn('[DocumentStore] applyRestoredDocument: set editor fallback to markdown', err);
+        editor.setDocument('markdown', content);
+      }
+    }
   };
 }
 

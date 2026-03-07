@@ -356,7 +356,7 @@ export function defineConfig(config: CustomNextConfig) {
       'pdfjs-dist',
     ],
 
-    transpilePackages: ['mermaid', 'better-auth-harmony'],
+    transpilePackages: ['@mohtasham/md-to-docx', 'mermaid', 'better-auth-harmony'],
     turbopack: {
       rules: isTest
         ? void 0

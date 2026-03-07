@@ -1,10 +1,8 @@
 diff --git a/es/Image/components/usePreview.mjs b/es/Image/components/usePreview.mjs
-index 0000000000000000000000000000000000000000..2222222222222222222222222222222222222222 100644
+index 1bbed767ed6d4454d97eeb0e3fb7f0b899a0205e..e2df32c748b799466282e0f06f27227d983a23e5 100644
 --- a/es/Image/components/usePreview.mjs
 +++ b/es/Image/components/usePreview.mjs
-@@ -44,7 +44,7 @@ const usePreview = (props) => {
- 			onOpenChange: (open) => {
- 				setVisible(open);
+@@ -43,7 +43,7 @@ const usePreview = (props) => {
  				onOpenChange?.(open);
  				onVisibleChange?.(open, !open);
  			},
@@ -14,12 +12,10 @@ index 0000000000000000000000000000000000000000..22222222222222222222222222222222
  			...rest
  		};
 diff --git a/es/Image/components/usePreviewGroup.mjs b/es/Image/components/usePreviewGroup.mjs
-index 0000000000000000000000000000000000000000..1111111111111111111111111111111111111111 100644
+index 417bb367ce6a26653c91c7203a472a8b07220525..d3f43ed19ad605da81bad4e10132847de1e914bd 100644
 --- a/es/Image/components/usePreviewGroup.mjs
 +++ b/es/Image/components/usePreviewGroup.mjs
-@@ -42,7 +42,7 @@ const usePreview = (props) => {
- 			onOpenChange: (open, info) => {
- 				setVisible(open);
+@@ -43,7 +43,7 @@ const usePreview = (props) => {
  				onOpenChange?.(open, info);
  				onVisibleChange?.(open, !open, info.current);
  			},
@@ -28,11 +24,10 @@ index 0000000000000000000000000000000000000000..11111111111111111111111111111111
  			...rest
  		};
  	}, [
-
 diff --git a/es/Modal/Modal.mjs b/es/Modal/Modal.mjs
 index 81ec2ee1e229209afd36d549caea2d838fbdd2e4..2f71314ab740561cafe7493fee77c9fedbd35637 100644
 --- a/es/Modal/Modal.mjs
-+++ b/es/Modal/Modal.mjs	
++++ b/es/Modal/Modal.mjs
 @@ -67,7 +67,7 @@ const Modal$1 = memo(({ panelRef, allowFullscreen, children, title = " ", classN
  		theme: { token: { colorBgElevated: cssVar.colorBgContainer } },
  		children: /* @__PURE__ */ jsx(Modal, {
@@ -42,3 +37,51 @@ index 81ec2ee1e229209afd36d549caea2d838fbdd2e4..2f71314ab740561cafe7493fee77c9fe
  			cancelText,
  			className: cx(styles.content, className),
  			closeIcon: /* @__PURE__ */ jsx(Icon_default, {
+diff --git a/es/Modal/ModalStackItem.mjs b/es/Modal/ModalStackItem.mjs
+index 7a3bf4d23b57cbe10788ca2ccd044cd08e6265e1..ef311013464de456327268f03a1884a488e027de 100644
+--- a/es/Modal/ModalStackItem.mjs
++++ b/es/Modal/ModalStackItem.mjs
+@@ -14,7 +14,7 @@ const ModalStackItem = memo(({ id, props, onClose, onUpdate, onDestroy }) => {
+ 	const stableAfterOpenChange = useEventCallback(afterOpenChange ?? noop);
+ 	const stableOnCancel = useEventCallback(onCancel ?? noop);
+ 	const close = useEventCallback(() => onClose(id));
+-	const setCanDismissByClickOutside = useEventCallback((value) => onUpdate(id, { maskClosable: value }));
++	const setCanDismissByClickOutside = useEventCallback((value) => onUpdate(id, { mask: { closable: value } }));
+ 	const stableContextValue = useMemo(() => ({
+ 		close,
+ 		setCanDismissByClickOutside
+diff --git a/es/Modal/RawModalStackItem.mjs b/es/Modal/RawModalStackItem.mjs
+index 7f79ef2a2d3905ca4dadd296c82b03f30be9d38e..e3e45c0e44e890ff2292f979d060e13c7e7b4bdd 100644
+--- a/es/Modal/RawModalStackItem.mjs
++++ b/es/Modal/RawModalStackItem.mjs
+@@ -10,7 +10,7 @@ const RawModalStackItem = memo(({ component: Component, id, onClose, onUpdate, o
+ 	const stableOnClose = useEventCallback(onClose);
+ 	const close = useEventCallback(() => stableOnClose(id));
+ 	const setCanDismissByClickOutside = useEventCallback((value) => {
+-		onUpdate(id, { maskClosable: value });
++		onUpdate(id, { mask: { closable: value } });
+ 	});
+ 	const contextValue = useMemo(() => ({
+ 		close,
+diff --git a/es/Modal/imperative.mjs b/es/Modal/imperative.mjs
+index 6401038f6c1f9c59c9d9098affba03ace863aec8..9086ec84b4e23a4337923b5c92b2f6f999118ebb 100644
+--- a/es/Modal/imperative.mjs
++++ b/es/Modal/imperative.mjs
+@@ -160,7 +160,7 @@ const createModal = (props) => {
+ 	return {
+ 		close: () => closeModal(id),
+ 		destroy: () => destroyModal(id),
+-		setCanDismissByClickOutside: (value) => updateModal(id, { maskClosable: value }),
++		setCanDismissByClickOutside: (value) => updateModal(id, { mask: { closable: value } }),
+ 		update: (nextProps) => updateModal(id, nextProps)
+ 	};
+ };
+@@ -178,7 +178,7 @@ function createRawModal(component, props, options) {
+ 	return {
+ 		close: () => closeModal(id),
+ 		destroy: () => destroyModal(id),
+-		setCanDismissByClickOutside: (value) => updateRawProps(id, { maskClosable: value }),
++		setCanDismissByClickOutside: (value) => updateRawProps(id, { mask: { closable: value } }),
+ 		update: (nextProps) => updateRawProps(id, nextProps)
+ 	};
+ }

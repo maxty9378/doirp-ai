@@ -45,12 +45,12 @@ export class EditorErrorBoundary extends Component<
       if (this.props.fallback) {
         return this.props.fallback;
       }
-
+      // Не показываем технический текст ошибки на странице (Next.js, продакшен)
       return (
         <Alert
           showIcon
-          description="Editor Error"
-          title={this.state.error?.message || 'An unknown error occurred in the editor'}
+          description={undefined}
+          title="Произошла ошибка"
           type="error"
           style={{
             margin: 16,

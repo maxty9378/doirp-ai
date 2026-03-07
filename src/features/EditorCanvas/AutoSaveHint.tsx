@@ -1,7 +1,9 @@
 'use client';
 
+import { App } from 'antd';
 import { type CSSProperties } from 'react';
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import AutoSaveHintBase from '@/components/Editor/AutoSaveHint';
 import { useDocumentStore } from '@/store/document';
@@ -19,17 +21,34 @@ export interface AutoSaveHintProps {
 }
 
 /**
- * AutoSave hint component that reads from DocumentStore
- * Use this component externally to display save status for a document
+ * AutoSave hint component that reads from DocumentStore.
+ * Ошибки сохранения не показываются на странице — только toast и консоль.
  */
 const AutoSaveHint = memo<AutoSaveHintProps>(({ documentId, style }) => {
+  const { t } = useTranslation('editor');
+  const { message } = App.useApp();
   const saveStatus = useDocumentStore((s) => editorSelectors.saveStatus(documentId)(s));
   const lastUpdatedTime = useDocumentStore(
     (s) => editorSelectors.lastUpdatedTime(documentId)(s) ?? null,
   );
+  const performSave = useDocumentStore((s) => s.performSave);
+  const errorToastShownRef = useRef(false);
+
+  useEffect(() => {
+    if (saveStatus === 'error' && !errorToastShownRef.current) {
+      errorToastShownRef.current = true;
+      message.error(t('autoSave.error'));
+    }
+    if (saveStatus !== 'error') errorToastShownRef.current = false;
+  }, [saveStatus, message, t]);
 
   return (
-    <AutoSaveHintBase lastUpdatedTime={lastUpdatedTime} saveStatus={saveStatus} style={style} />
+    <AutoSaveHintBase
+      lastUpdatedTime={lastUpdatedTime}
+      onRetry={() => performSave(documentId)}
+      saveStatus={saveStatus}
+      style={style}
+    />
   );
 });
 

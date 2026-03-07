@@ -1,7 +1,8 @@
 'use client';
 
 import { type IEditor } from '@lobehub/editor';
-import { Alert, Skeleton } from '@lobehub/ui';
+import { Alert, Button, Flexbox, Skeleton } from '@lobehub/ui';
+import { App } from 'antd';
 import { memo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createStoreUpdater } from 'zustand-utils';
@@ -22,23 +23,6 @@ const EditorSkeleton = memo(() => (
   </div>
 ));
 
-/**
- * Error display for fetch failures
- */
-const EditorError = memo<{ error: Error }>(({ error }) => {
-  const { t } = useTranslation('file');
-
-  return (
-    <Alert
-      showIcon
-      description={error.message || t('pageEditor.loadError', 'Failed to load document')}
-      style={{ margin: 16 }}
-      title={t('pageEditor.error', 'Error')}
-      type="error"
-    />
-  );
-});
-
 export interface DocumentIdModeProps extends EditorCanvasProps {
   documentId: string;
   editor: IEditor | undefined;
@@ -57,7 +41,7 @@ const DocumentIdMode = memo<DocumentIdModeProps>(
     style,
     ...editorProps
   }) => {
-    const { t } = useTranslation('file');
+    const { t } = useTranslation(['file', 'editor']);
 
     const storeUpdater = createStoreUpdater(useDocumentStore);
     storeUpdater('activeDocumentId', documentId);
@@ -72,9 +56,26 @@ const DocumentIdMode = memo<DocumentIdModeProps>(
 
     // Use SWR hook for document fetching (auto-initializes via onSuccess in DocumentStore)
     const { error } = useFetchDocument(documentId, { autoSave, editor, sourceType });
+    const { message } = App.useApp();
+    const errorShownRef = useRef(false);
+
+    // Уведомление об ошибке загрузки только через toast, без блока на странице
+    useEffect(() => {
+      if (error && !errorShownRef.current) {
+        errorShownRef.current = true;
+        console.error('[DocumentIdMode] Failed to load document:', error);
+        message.error(
+          (error as Error)?.message || t('pageEditor.loadError', { defaultValue: 'Не удалось загрузить документ' }),
+        );
+      }
+      if (!error) errorShownRef.current = false;
+    }, [error, message, t]);
 
     // Check loading state via selector (document not yet in store)
     const isLoading = useDocumentStore(editorSelectors.isDocumentLoading(documentId));
+
+    const hasDraft = useDocumentStore(editorSelectors.hasDraft(documentId));
+    const [restoreDraft, clearDraft] = useDocumentStore((s) => [s.restoreDraft, s.clearDraft]);
 
     // Handle content change
     const handleChange = () => {
@@ -111,7 +112,27 @@ const DocumentIdMode = memo<DocumentIdModeProps>(
 
     return (
       <>
-        {error && <EditorError error={error as Error} />}
+        {hasDraft && (
+          <Alert
+            closable
+            description={t('draft.description', { ns: 'editor' })}
+            extra={
+              <Flexbox gap={8} horizontal style={{ marginTop: 8 }}>
+                <Button onClick={() => restoreDraft(documentId)} size={'small'} type={'primary'}>
+                  {t('draft.restore', { ns: 'editor' })}
+                </Button>
+                <Button onClick={() => clearDraft(documentId)} size={'small'}>
+                  {t('draft.ignore', { ns: 'editor' })}
+                </Button>
+              </Flexbox>
+            }
+            onClose={() => clearDraft(documentId)}
+            showIcon
+            style={{ margin: 16 }}
+            title={t('draft.title', { ns: 'editor' })}
+            type="warning"
+          />
+        )}
         <InternalEditor
           editor={editor}
           placeholder={editorProps.placeholder || t('pageEditor.editorPlaceholder')}

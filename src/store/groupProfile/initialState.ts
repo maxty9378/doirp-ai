@@ -1,6 +1,6 @@
 import { type IEditor } from '@lobehub/editor';
 
-export type SaveStatus = 'idle' | 'saving' | 'saved';
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export interface SaveState {
   lastUpdatedTime?: Date | null;

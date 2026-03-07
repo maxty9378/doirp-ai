@@ -1,8 +1,9 @@
 'use client';
 
-import { memo, useEffect } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { createStoreUpdater } from 'zustand-utils';
 
+import { getDocumentStoreState } from '@/store/document';
 import { pageAgentRuntime } from '@/store/tool/slices/builtin/executors/lobe-page-agent';
 
 import { type PublicState } from './store';
@@ -37,6 +38,19 @@ const StoreUpdater = memo<StoreUpdaterProps>(
 
     const editor = usePageEditorStore((s) => s.editor);
     const initMeta = usePageEditorStore((s) => s.initMeta);
+    const prevPageIdRef = useRef<string | undefined>(pageId);
+
+    // Flush pending save when switching to another document or when unmounting (so changes aren't lost)
+    useEffect(() => {
+      const prev = prevPageIdRef.current;
+      if (prev != null && prev !== pageId) {
+        getDocumentStoreState().flushSave(prev);
+      }
+      prevPageIdRef.current = pageId;
+      return () => {
+        if (pageId) getDocumentStoreState().flushSave(pageId);
+      };
+    }, [pageId]);
 
     // Update store with props
     useStoreUpdater('documentId', pageId);

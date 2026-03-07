@@ -21,6 +21,7 @@ import { StyleSheet } from '@/utils/styles';
 import Copilot from './Copilot';
 import EditorCanvas from './EditorCanvas';
 import Header from './Header';
+import HistoryPanel from './HistoryPanel';
 import PageAgentProvider from './PageAgentProvider';
 import { PageEditorProvider } from './PageEditorProvider';
 import PageTitle from './PageTitle';
@@ -68,13 +69,13 @@ const PageEditorCanvas = memo(() => {
   // Register Files scope and save document hotkey
   useRegisterFilesHotkeys();
 
-  // Warn user before leaving page with unsaved changes
+  // Flush pending save and warn user before leaving page with unsaved changes
+  const flushSave = useDocumentStore((s) => s.flushSave);
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (documentId) flushSave(documentId);
       if (isDirty) {
-        // Prevent default and show browser confirmation dialog
         e.preventDefault();
-        // Most modern browsers require returnValue to be set
         e.returnValue = '';
       }
     };
@@ -84,7 +85,7 @@ const PageEditorCanvas = memo(() => {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [isDirty]);
+  }, [isDirty, documentId, flushSave]);
 
   return (
     <>
@@ -108,6 +109,7 @@ const PageEditorCanvas = memo(() => {
           {documentId && <DiffAllToolbar documentId={documentId} editor={editor!} />}
         </Flexbox>
         <Copilot />
+        {documentId && <HistoryPanel />}
       </Flexbox>
     </>
   );

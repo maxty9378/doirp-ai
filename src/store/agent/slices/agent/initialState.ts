@@ -5,7 +5,7 @@ import { type AgentItem } from '@/types/agent';
 import { type MetaData } from '@/types/meta';
 
 export type LoadingState = Record<Partial<keyof MetaData> | string, boolean>;
-export type SaveStatus = 'idle' | 'saving' | 'saved';
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
 
 export interface AgentSliceState {
   activeAgentId?: string;

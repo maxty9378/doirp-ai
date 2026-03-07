@@ -40,6 +40,7 @@ export default defineConfig({
   ],
   test: {
     alias: {
+      '@mohtasham/md-to-docx': resolve(__dirname, './tests/mocks/md-to-docx.ts'),
       '@/database/_deprecated': resolve(__dirname, './src/database/_deprecated'),
       '@/database': resolve(__dirname, './packages/database/src'),
       '@/utils/client/switchLang': resolve(__dirname, './src/utils/client/switchLang'),
