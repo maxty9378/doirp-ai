@@ -481,6 +481,10 @@ export default {
   'tab.me': 'Me',
   'tab.memory': 'Memory',
   'tab.pages': 'Pages',
+  'resourceAssistant.desc':
+    'Пожалуйста, экономьте ресурсы. Удаляйте файлы и библиотеки, которые вам больше не нужны.',
+  'resourceAssistant.ok': 'Понятно',
+  'resourceAssistant.title': 'Помощник по сайту (Макс)',
   'tab.resource': 'Resources',
   'tab.search': 'Search',
   'tab.setting': 'Settings',

@@ -3,16 +3,16 @@
 import { type FC } from 'react';
 import { Outlet } from 'react-router-dom';
 
-import { AdminGuard } from '@/components/AdminGuard';
-
 import RegisterHotkeys from './RegisterHotkeys';
+import ResourceAssistantPopup from './ResourceAssistantPopup';
 
 const ResourceLayout: FC = () => {
   return (
-    <AdminGuard>
+    <>
       <Outlet />
       <RegisterHotkeys />
-    </AdminGuard>
+      <ResourceAssistantPopup />
+    </>
   );
 };
 
