@@ -1,7 +1,7 @@
 'use client';
 
 import { Flexbox } from '@lobehub/ui';
-import { Avatar, Button, Modal, Typography } from 'antd';
+import { Button, Modal, Typography } from 'antd';
 import { memo, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
@@ -53,26 +53,40 @@ const ResourceAssistantPopup = memo(() => {
       mask={{ closable: true }}
       onCancel={handleClose}
       open={open}
-      styles={{ body: { padding: '24px 12px' } }}
-      width={520}
+      styles={{ body: { padding: '24px' } }}
+      width={600}
     >
-      <Flexbox horizontal align="flex-start" gap={24}>
-        <Avatar
-          src="/images/assistant-max.jpg"
-          size={110}
+      <Flexbox horizontal align="stretch" gap={24}>
+        {/* Левая колонка: большая картинка */}
+        <div
           style={{
-            border: '2px solid #f0f0f0',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+            borderRadius: 12,
             flexShrink: 0,
+            height: 320,
+            overflow: 'hidden',
+            width: 220,
           }}
-        />
-        <Flexbox gap={8} style={{ flex: 1, minWidth: 0 }}>
-          <div>
+        >
+          <img
+            alt="Макс"
+            src="/images/assistant-max.jpg"
+            style={{
+              display: 'block',
+              height: '100%',
+              objectFit: 'cover',
+              width: '100%',
+            }}
+          />
+        </div>
+
+        {/* Правая колонка: текст обращения */}
+        <Flexbox gap={8} justify="center" style={{ flex: 1, minWidth: 0, padding: '12px 0' }}>
+          <div style={{ marginBottom: 8 }}>
             <Title level={4} style={{ margin: 0, fontWeight: 600 }}>
-              Максим Кадочкин
+              Макс
             </Title>
-            <Text style={{ fontSize: '13px' }} type="secondary">
-              Отдел Дистанционного обучения
+            <Text style={{ fontSize: '14px' }} type="secondary">
+              Ресурсный менеджер
             </Text>
           </div>
           <Paragraph
@@ -80,16 +94,16 @@ const ResourceAssistantPopup = memo(() => {
               color: '#333',
               fontSize: '15px',
               lineHeight: '1.6',
-              marginBottom: '16px',
-              marginTop: '8px',
+              marginBottom: '24px',
             }}
           >
-            Привет! 👋 Я собрал эту ИИ-среду, чтобы забрать у вас часть рутины.
+            Привет! 👋 Наша система работает стабильно и быстро, когда мы
+            бережно относимся к ресурсам.
             <br />
             <br />
-            Здесь мы можем быстро собирать фактуру для слайдов, генерировать
-            ролевые кейсы для тренингов и проверять задания стажеров. Если
-            что-то пойдёт не так — пишите мне напрямую!
+            Пожалуйста, следите за местом на диске: вовремя удаляйте тяжёлые
+            файлы и старые генерации, которые вам больше не нужны. Это поможет
+            платформе работать без перебоев для всех!
           </Paragraph>
           <Flexbox horizontal justify="flex-end">
             <Button
@@ -98,7 +112,7 @@ const ResourceAssistantPopup = memo(() => {
               type="primary"
               onClick={handleClose}
             >
-              Отлично, к делу!
+              Понял, буду экономить!
             </Button>
           </Flexbox>
         </Flexbox>
