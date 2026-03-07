@@ -5,7 +5,6 @@ import { Link, useNavigate } from 'react-router-dom';
 
 import { getRouteById } from '@/config/routes';
 import NavItem from '@/features/NavPanel/components/NavItem';
-import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useActiveTabKey } from '@/hooks/useActiveTabKey';
 import { SidebarTabKey } from '@/store/global/initialState';
 
@@ -18,7 +17,6 @@ interface Item {
 
 const BottomMenu = memo(() => {
   const tab = useActiveTabKey();
-  const isAdmin = useIsAdmin();
   const navigate = useNavigate();
   const { t } = useTranslation('common');
 
@@ -46,8 +44,6 @@ const BottomMenu = memo(() => {
       ].filter(Boolean) as Item[],
     [t],
   );
-
-  if (!isAdmin) return null;
 
   return (
     <Flexbox
