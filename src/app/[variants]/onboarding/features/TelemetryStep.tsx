@@ -1,19 +1,32 @@
 'use client';
 
-import { BRANDING_NAME } from '@lobechat/business-const';
 import { type IconProps } from '@lobehub/ui';
 import { Block, Button, Flexbox, Icon, Text } from '@lobehub/ui';
 import { TypewriterEffect } from '@lobehub/ui/awesome';
 import { LoadingDots } from '@lobehub/ui/chat';
-import { Steps, Switch } from 'antd';
-import { cssVar } from 'antd-style';
-import { BrainIcon, HeartHandshakeIcon, PencilRulerIcon, ShieldCheck } from 'lucide-react';
+import { Steps } from 'antd';
+import { createStaticStyles, cssVar, keyframes } from 'antd-style';
+import { BrainIcon, HeartHandshakeIcon, PencilRulerIcon } from 'lucide-react';
 import { memo, useCallback, useRef, useState } from 'react';
-import { Trans, useTranslation } from 'react-i18next';
+import { useTranslation } from 'react-i18next';
 
 import { ProductLogo } from '@/components/Branding';
-import { PRIVACY_URL, TERMS_URL } from '@/const/url';
+import NeuralNetworkLoading from '@/components/NeuralNetworkLoading';
 import { useUserStore } from '@/store/user';
+
+const LOGO_SIZE = 40;
+const AI_ICON_SIZE = 32;
+
+const aiPulseKeyframes = keyframes`
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+`;
+
+const styles = createStaticStyles(({ css }) => ({
+  aiPulse: css`
+    animation: ${aiPulseKeyframes} 3s ease-in-out infinite;
+  `,
+}));
 
 interface TelemetryStepProps {
   onNext: () => void;
@@ -22,7 +35,6 @@ interface TelemetryStepProps {
 const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
   const { t, i18n } = useTranslation('onboarding');
   const locale = i18n.language;
-  const [check, setCheck] = useState(true);
   const [isNavigating, setIsNavigating] = useState(false);
   const isNavigatingRef = useRef(false);
   const updateGeneralConfig = useUserStore((s) => s.updateGeneralConfig);
@@ -55,8 +67,45 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
   }, []);
 
   return (
-    <Flexbox gap={16}>
-      <ProductLogo size={64} />
+    <Flexbox align="flex-start" gap={16}>
+      <Flexbox
+        align="center"
+        gap={12}
+        horizontal
+        style={{ flexShrink: 0, paddingBlock: 12, paddingInlineEnd: 12, paddingInlineStart: 0 }}
+      >
+        <ProductLogo size={LOGO_SIZE} />
+        <Flexbox
+          align="center"
+          justify="center"
+          style={{
+            position: 'relative',
+            flexShrink: 0,
+            height: AI_ICON_SIZE,
+            width: AI_ICON_SIZE,
+          }}
+        >
+          <NeuralNetworkLoading size={AI_ICON_SIZE} />
+          <Text
+            className={styles.aiPulse}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.02em',
+              lineHeight: 1,
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          >
+            AI
+          </Text>
+        </Flexbox>
+      </Flexbox>
       <Flexbox style={{ marginBottom: 16 }}>
         <Text as={'h1'} fontSize={28} weight={'bold'}>
           <TypewriterEffect
@@ -122,17 +171,6 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
           },
         ]}
       />
-      <Flexbox gap={8}>
-        <Text as={'p'} color={cssVar.colorTextSecondary}>
-          {t('telemetry.rows.privacy.desc', { appName: BRANDING_NAME })}
-        </Text>
-        <Flexbox horizontal align="center" gap={8}>
-          <Switch checked={check} size={'small'} onChange={(v) => setCheck(v)} />
-          <Text fontSize={12} type={check ? undefined : 'secondary'}>
-            {t('telemetry.rows.privacy.title', { appName: BRANDING_NAME })}
-          </Text>
-        </Flexbox>
-      </Flexbox>
       <Button
         disabled={isNavigating}
         size={'large'}
@@ -141,43 +179,10 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
           marginBlock: 8,
           maxWidth: 240,
         }}
-        onClick={() => handleChoice(check)}
+        onClick={() => handleChoice(true)}
       >
         {t('telemetry.next')}
       </Button>
-      {check && (
-        <Block horizontal align="flex-start" gap={8} variant={'borderless'}>
-          <Icon
-            icon={ShieldCheck}
-            size={16}
-            style={{ color: cssVar.colorSuccess, flexShrink: 0 }}
-          />
-          <Text fontSize={12} type="secondary">
-            <Trans
-              i18nKey={'telemetry.agreement'}
-              ns={'onboarding'}
-              components={{
-                privacy: (
-                  <a
-                    href={PRIVACY_URL}
-                    style={{ color: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}
-                  >
-                    {t('telemetry.terms')}
-                  </a>
-                ),
-                terms: (
-                  <a
-                    href={TERMS_URL}
-                    style={{ color: 'inherit', cursor: 'pointer', textDecoration: 'underline' }}
-                  >
-                    {t('telemetry.privacy')}
-                  </a>
-                ),
-              }}
-            />
-          </Text>
-        </Block>
-      )}
     </Flexbox>
   );
 });
