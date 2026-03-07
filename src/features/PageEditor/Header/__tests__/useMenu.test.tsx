@@ -46,11 +46,11 @@ const messageSuccess = vi.fn();
 const messageError = vi.fn();
 
 vi.mock('antd', async (orig) => {
-  const M = await orig();
+  const M = await orig<typeof import('antd')>();
   return {
     ...M,
     App: {
-      ...(M as any).App,
+      ...M.App,
       useApp: () => ({
         message: { success: messageSuccess, error: messageError },
         modal: {},

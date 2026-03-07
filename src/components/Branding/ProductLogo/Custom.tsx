@@ -47,6 +47,7 @@ const CustomImageLogo = memo<Omit<ImageProps, 'alt' | 'src'> & { size: number }>
         height={size}
         priority
         src={BRANDING_LOGO_URL}
+        style={{ objectFit: 'contain', ...rest.style }}
         unoptimized={true}
         width={size}
         {...rest}

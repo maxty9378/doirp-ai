@@ -3,6 +3,8 @@ import { ActionIconGroup, Flexbox, createRawModal } from '@lobehub/ui';
 import type { ActionIconGroupEvent, ActionIconGroupItemType } from '@lobehub/ui';
 import { memo, useCallback, useMemo } from 'react';
 
+import { useInsertOnPageContext } from '@/features/PageEditor/InsertOnPageContext';
+
 import { ReactionPicker } from '../../../components/Reaction';
 import ShareMessageModal, { type ShareModalProps } from '../../../components/ShareMessageModal';
 import {
@@ -95,6 +97,12 @@ export const AssistantActionsBar = memo<AssistantActionsBarProps>(
 
     const isCollapsed = useConversationStore(messageStateSelectors.isMessageCollapsed(id));
 
+    const insertOnPageContext = useInsertOnPageContext();
+    const insertOnPageAction = useMemo(
+      () => insertOnPageContext?.getInsertOnPageAction?.(id, data) ?? null,
+      [insertOnPageContext, id, data],
+    );
+
     const defaultActions = useAssistantActions({
       data,
       id,
@@ -123,19 +131,19 @@ export const AssistantActionsBar = memo<AssistantActionsBarProps>(
     }, [actionsConfig?.extraMenuActions, id]);
 
     // Use external config if provided, otherwise use defaults
-    // Append extra actions from factories (insertOnPage first when in page scope)
+    // insertOnPage first when in page scope (from InsertOnPageContext)
     const barItems = useMemo(() => {
       const base =
         actionsConfig?.bar ??
         (hasTools
           ? [defaultActions.delAndRegenerate, defaultActions.copy]
           : [defaultActions.edit, defaultActions.copy]);
-      const insertFirst = defaultActions.insertOnPage ? [defaultActions.insertOnPage] : [];
+      const insertFirst = insertOnPageAction ? [insertOnPageAction] : [];
       return [...insertFirst, ...base, ...extraBarItems];
     }, [
       actionsConfig?.bar,
       hasTools,
-      defaultActions.insertOnPage,
+      insertOnPageAction,
       defaultActions.delAndRegenerate,
       defaultActions.copy,
       defaultActions.edit,
@@ -143,7 +151,7 @@ export const AssistantActionsBar = memo<AssistantActionsBarProps>(
     ]);
 
     const menuItems = useMemo(() => {
-      const insertFirst = defaultActions.insertOnPage ? [defaultActions.insertOnPage, defaultActions.divider] : [];
+      const insertFirst = insertOnPageAction ? [insertOnPageAction, defaultActions.divider] : [];
       const base = actionsConfig?.menu ?? [
         defaultActions.edit,
         defaultActions.copy,
@@ -161,7 +169,7 @@ export const AssistantActionsBar = memo<AssistantActionsBarProps>(
       return [...insertFirst, ...base, ...extraMenuItems];
     }, [
       actionsConfig?.menu,
-      defaultActions.insertOnPage,
+      insertOnPageAction,
       defaultActions.edit,
       defaultActions.copy,
       collapseAction,

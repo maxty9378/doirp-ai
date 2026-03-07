@@ -233,12 +233,16 @@ export const resolveAgentConfig = (ctx: AgentConfigResolverContext): ResolvedAge
 
     // === Page Editor Auto-Injection ===
     // When custom agent is used in page editor (scope === 'page'),
-    // automatically inject page-agent tools and system role
+    // automatically inject page-agent tools, image generation, and system role
     if (ctx.scope === 'page') {
-      // 1. Inject page-agent tool if not already present
-      const pageAgentPlugins = finalPlugins.includes(PageAgentIdentifier)
-        ? finalPlugins
-        : [PageAgentIdentifier, ...finalPlugins];
+      // 1. Inject page-agent tool and image designer if not already present
+      let extendedPlugins = [...finalPlugins];
+      if (!extendedPlugins.includes(PageAgentIdentifier)) {
+        extendedPlugins = [PageAgentIdentifier, ...extendedPlugins];
+      }
+      if (!extendedPlugins.includes('lobe-image-designer')) {
+        extendedPlugins = ['lobe-image-designer', ...extendedPlugins];
+      }
 
       // 2. Get page-agent system prompt from builtin agent runtime
       const pageAgentRuntime = getAgentRuntimeConfig(BUILTIN_AGENT_SLUGS.pageAgent, {});
@@ -267,7 +271,7 @@ export const resolveAgentConfig = (ctx: AgentConfigResolverContext): ResolvedAge
         agentConfig: finalAgentConfig,
         chatConfig: finalChatConfig,
         isBuiltinAgent: false,
-        plugins: applyPluginFilters(pageAgentPlugins),
+        plugins: applyPluginFilters(extendedPlugins),
       };
     }
 
@@ -357,9 +361,12 @@ export const resolveAgentConfig = (ctx: AgentConfigResolverContext): ResolvedAge
   // When a builtin agent (other than page-agent itself) is used in page editor,
   // inject page-agent tools and system role
   if (ctx.scope === 'page' && slug !== BUILTIN_AGENT_SLUGS.pageAgent) {
-    // 1. Inject page-agent tool if not already present
+    // 1. Inject page-agent tool and image designer if not already present
     if (!finalPlugins.includes(PageAgentIdentifier)) {
       finalPlugins = [PageAgentIdentifier, ...finalPlugins];
+    }
+    if (!finalPlugins.includes('lobe-image-designer')) {
+      finalPlugins = ['lobe-image-designer', ...finalPlugins];
     }
 
     // 2. Get page-agent system prompt

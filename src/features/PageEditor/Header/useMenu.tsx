@@ -3,7 +3,7 @@ import { Icon } from '@lobehub/ui';
 import { App } from 'antd';
 import { cssVar, useResponsive } from 'antd-style';
 import dayjs from 'dayjs';
-import { CopyPlus, Download, HistoryIcon, Link2, Maximize2, Trash2 } from 'lucide-react';
+import { CopyPlus, HistoryIcon, Link2, Maximize2, Trash2 } from 'lucide-react';
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -14,6 +14,7 @@ import { useGlobalStore } from '@/store/global';
 import { systemStatusSelectors } from '@/store/global/selectors';
 
 import { usePageEditorStore, useStoreApi } from '../store';
+import { WordDownloadIcon } from './WordDownloadIcon';
 
 /**
  * Action menu for the page editor.
@@ -59,8 +60,9 @@ export const useMenu = (): { menuItems: any[] } => {
     if (!editor) return;
 
     try {
-      const raw = (editor.getDocument('markdown') as unknown as string) || '';
-      const body = raw.trim() || ' ';
+      const raw = editor.getDocument('markdown');
+      const markdown = (typeof raw === 'string' ? raw : '') || '';
+      const body = markdown.trim() || ' ';
       const fileName = `${title || 'Untitled'}.docx`;
       const markdownWithTitle =
         title?.trim() ? `# ${title.trim()}\n\n${body}` : body;
@@ -153,7 +155,7 @@ export const useMenu = (): { menuItems: any[] } => {
         type: 'divider' as const,
       },
       {
-        icon: <Icon icon={Download} />,
+        icon: <WordDownloadIcon />,
         key: 'export',
         label: t('pageEditor.menu.export'),
         onClick: handleExportWord,

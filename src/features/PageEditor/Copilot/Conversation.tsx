@@ -10,6 +10,7 @@ import { useAgentStore } from '@/store/agent';
 import { agentByIdSelectors } from '@/store/agent/selectors';
 import { useChatStore } from '@/store/chat';
 
+import AutoInsertOnPageEffect from './AutoInsertOnPageEffect';
 import CopilotToolbar from './Toolbar';
 import Welcome from './Welcome';
 
@@ -57,6 +58,7 @@ const Conversation = memo<ConversationProps>(({ agentId }) => {
       <Flexbox flex={1} height={'100%'}>
         <CopilotToolbar agentId={currentAgentId} />
         <Flexbox flex={1} style={{ overflow: 'hidden' }}>
+          <AutoInsertOnPageEffect />
           <ChatList welcome={<Welcome />} />
         </Flexbox>
         <ChatInput

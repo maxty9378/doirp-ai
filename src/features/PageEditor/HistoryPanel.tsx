@@ -104,7 +104,7 @@ const HistoryPanel = memo(() => {
               ]}
             >
               <List.Item.Meta
-                avatar={<Icon icon={RotateCcw} size={{ fontSize: 16 }} />}
+                avatar={<Icon icon={RotateCcw} style={{ fontSize: 16 }} />}
                 description={dayjs(rev.createdAt).format('D MMM YYYY, HH:mm')}
                 title={dayjs(rev.createdAt).format('D MMM YYYY')}
               />

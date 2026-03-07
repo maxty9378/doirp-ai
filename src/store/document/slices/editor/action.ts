@@ -42,7 +42,8 @@ export class EditorActionImpl {
     if (!editor) return null;
 
     try {
-      const markdown = (editor.getDocument('markdown') as unknown as string) || '';
+      const raw = editor.getDocument('markdown');
+      const markdown = (typeof raw === 'string' ? raw : '') || '';
       const editorData = editor.getDocument('json');
       return { editorData, markdown };
     } catch (error) {
@@ -60,7 +61,8 @@ export class EditorActionImpl {
     if (!doc) return;
 
     try {
-      const markdown = (editor.getDocument('markdown') as unknown as string) || '';
+      const raw = editor.getDocument('markdown');
+      const markdown = (typeof raw === 'string' ? raw : '') || '';
       const editorData = editor.getDocument('json');
 
       // Check if content actually changed
@@ -167,7 +169,8 @@ export class EditorActionImpl {
     internal_dispatchDocument({ id, type: 'updateDocument', value: { saveStatus: 'saving' } });
 
     try {
-      const currentContent = (editor.getDocument('markdown') as unknown as string) || '';
+      const raw = editor.getDocument('markdown');
+      const currentContent = (typeof raw === 'string' ? raw : '') || '';
       const currentEditorData = editor.getDocument('json');
 
       // Save document

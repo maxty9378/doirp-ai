@@ -87,6 +87,19 @@ const PageEditorCanvas = memo(() => {
     };
   }, [isDirty, documentId, flushSave]);
 
+  // Flush pending save when tab becomes hidden (e.g., user switches tabs or minimizes browser)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden' && documentId) flushSave(documentId);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [documentId, flushSave]);
+
   return (
     <>
       <PageTitle />

@@ -3,6 +3,8 @@ import { ActionIconGroup, Flexbox, createRawModal } from '@lobehub/ui';
 import type { ActionIconGroupEvent, ActionIconGroupItemType } from '@lobehub/ui';
 import { memo, useCallback, useMemo } from 'react';
 
+import { useInsertOnPageContext } from '@/features/PageEditor/InsertOnPageContext';
+
 import { ReactionPicker } from '../../../components/Reaction';
 import ShareMessageModal, { type ShareModalProps } from '../../../components/ShareMessageModal';
 import {
@@ -96,6 +98,12 @@ const WithContentId = memo<GroupActionsProps>(({ actionsConfig, id, data, conten
 
   const isCollapsed = useConversationStore(messageStateSelectors.isMessageCollapsed(id));
 
+  const insertOnPageContext = useInsertOnPageContext();
+  const insertOnPageAction = useMemo(
+    () => insertOnPageContext?.getInsertOnPageAction?.(id, data) ?? null,
+    [insertOnPageContext, id, data],
+  );
+
   const defaultActions = useGroupActions({
     contentBlock,
     data,
@@ -114,10 +122,7 @@ const WithContentId = memo<GroupActionsProps>(({ actionsConfig, id, data, conten
     (hasTools
       ? [defaultActions.delAndRegenerate, defaultActions.copy]
       : [defaultActions.edit, defaultActions.copy]);
-  const barItems = [
-    ...(defaultActions.insertOnPage ? [defaultActions.insertOnPage] : []),
-    ...baseBar,
-  ];
+  const barItems = [...(insertOnPageAction ? [insertOnPageAction] : []), ...baseBar];
 
   const baseMenu =
     actionsConfig?.menu ?? [
@@ -131,7 +136,7 @@ const WithContentId = memo<GroupActionsProps>(({ actionsConfig, id, data, conten
       defaultActions.del,
     ];
   const menuItems = [
-    ...(defaultActions.insertOnPage ? [defaultActions.insertOnPage, defaultActions.divider] : []),
+    ...(insertOnPageAction ? [insertOnPageAction, defaultActions.divider] : []),
     ...baseMenu,
   ];
 
