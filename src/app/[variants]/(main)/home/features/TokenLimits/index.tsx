@@ -68,6 +68,21 @@ const TokenLimits = memo(() => {
             }}
           />
           <Text weight={500}>Использование токенов</Text>
+          {!isUnlimited && (
+            <div
+              style={{
+                fontSize: 10,
+                padding: '1px 6px',
+                borderRadius: 10,
+                background: theme.colorFillSecondary,
+                color: theme.colorTextSecondary,
+                fontWeight: 'bold',
+                border: `1px solid ${theme.colorBorder}`,
+              }}
+            >
+              Партнёр
+            </div>
+          )}
         </Flexbox>
         {isUnlimited ? (
           <div

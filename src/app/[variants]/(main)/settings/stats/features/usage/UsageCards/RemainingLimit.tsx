@@ -46,7 +46,24 @@ const RemainingLimit = memo(() => {
   return (
     <StatisticCard
       loading={isLoading && !data}
-      title={isUnlimited ? t('usage.cards.remaining.used') : t('usage.cards.remaining.title')}
+      title={isUnlimited ? t('usage.cards.remaining.used') : (
+        <Flexbox horizontal align="center" gap={8}>
+          {t('usage.cards.remaining.title')}
+          <div
+            style={{
+              fontSize: 10,
+              padding: '1px 6px',
+              borderRadius: 10,
+              background: 'rgba(0, 0, 0, 0.06)',
+              color: 'rgba(0, 0, 0, 0.45)',
+              fontWeight: 'bold',
+              border: `1px solid rgba(0, 0, 0, 0.1)`,
+            }}
+          >
+            Партнёр
+          </div>
+        </Flexbox>
+      )}
       statistic={{
         value: isUnlimited ? tokensUsed.toLocaleString() : displayRemaining.toLocaleString(),
         description: (
