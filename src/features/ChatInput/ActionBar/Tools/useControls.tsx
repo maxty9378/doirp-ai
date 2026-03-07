@@ -35,6 +35,16 @@ import ToolItem from './ToolItem';
 
 const SKILL_ICON_SIZE = 20;
 
+/** Включены по умолчанию и не показываются в меню инструментов (LobeHub/Skills, Artifacts, Memory, Cloud Sandbox, GTD, Notebook) */
+const DEFAULT_ENABLED_HIDDEN_IDS = new Set([
+  'lobe-skills',
+  'lobe-artifacts',
+  'lobe-user-memory',
+  'lobe-cloud-sandbox',
+  'lobe-gtd',
+  'lobe-notebook',
+]);
+
 export const useControls = ({ setUpdating }: { setUpdating: (updating: boolean) => void }) => {
   const { t } = useTranslation('setting');
   const agentId = useAgentId();
@@ -105,13 +115,16 @@ export const useControls = ({ setUpdating }: { setUpdating: (updating: boolean) 
     return ids;
   }, [installedBuiltinSkills, marketAgentSkills, userAgentSkills]);
 
-  // 过滤掉 builtinList 中的 klavis 工具和 skill（它们会单独显示）
+  // 过滤掉 builtinList 中的 klavis 工具、skill 以及 включённые по умолчанию скрытые инструменты
   const filteredBuiltinList = useMemo(() => {
     let list = builtinList;
     if (isKlavisEnabledInEnv) {
       list = list.filter((item) => !allKlavisTypeIdentifiers.has(item.identifier));
     }
-    return list.filter((item) => !allSkillIdentifiers.has(item.identifier));
+    return list.filter(
+      (item) =>
+        !allSkillIdentifiers.has(item.identifier) && !DEFAULT_ENABLED_HIDDEN_IDS.has(item.identifier),
+    );
   }, [builtinList, allKlavisTypeIdentifiers, isKlavisEnabledInEnv, allSkillIdentifiers]);
 
   // 获取推荐的 Klavis skill IDs
@@ -231,10 +244,10 @@ export const useControls = ({ setUpdating }: { setUpdating: (updating: boolean) 
     [filteredBuiltinList, checked, togglePlugin, setUpdating],
   );
 
-  // Builtin Agent Skills 列表项（归入 LobeHub 分组）
+  // Builtin Agent Skills 列表项（归入 LobeHub 分组），скрытые по умолчанию не показываем
   const builtinAgentSkillItems = useMemo(
     () =>
-      installedBuiltinSkills.map((skill) => ({
+      installedBuiltinSkills.filter((s) => !DEFAULT_ENABLED_HIDDEN_IDS.has(s.identifier)).map((skill) => ({
         icon: (
           <Avatar
             avatar={skill.avatar || '🧩'}
@@ -454,9 +467,9 @@ export const useControls = ({ setUpdating }: { setUpdating: (updating: boolean) 
     // 合并已启用的 LobeHub Skill 和 Klavis（作为内置技能）
     const enabledSkillItems = [...connectedLobehubSkillItems, ...connectedKlavisItems];
 
-    // 已启用的 Builtin Agent Skills
+    // 已启用的 Builtin Agent Skills（скрытые по умолчанию не показываем）
     const enabledBuiltinAgentSkillItems = installedBuiltinSkills
-      .filter((skill) => checked.includes(skill.identifier))
+      .filter((skill) => !DEFAULT_ENABLED_HIDDEN_IDS.has(skill.identifier) && checked.includes(skill.identifier))
       .map((skill) => ({
         icon: (
           <Avatar

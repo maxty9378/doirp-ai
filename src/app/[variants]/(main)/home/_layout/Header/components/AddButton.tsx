@@ -6,13 +6,14 @@ import React, { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { DESKTOP_HEADER_ICON_SIZE } from '@/const/layoutTokens';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 
 import { useCreateMenuItems } from '../../hooks';
 
 const AddButton = memo(() => {
   const { t: tChat } = useTranslation('chat');
+  const isAdmin = useIsAdmin();
 
-  // Create menu items
   const {
     createAgentMenuItem,
     createGroupChatMenuItem,
@@ -32,18 +33,23 @@ const AddButton = memo(() => {
   );
 
   const dropdownItems = useMemo(() => {
-    return [createAgentMenuItem(), createGroupChatMenuItem(), createPageMenuItem()];
-  }, [createAgentMenuItem, createGroupChatMenuItem, createPageMenuItem]);
+    if (isAdmin) {
+      return [createAgentMenuItem(), createGroupChatMenuItem(), createPageMenuItem()];
+    }
+    return [createPageMenuItem()];
+  }, [isAdmin, createAgentMenuItem, createGroupChatMenuItem, createPageMenuItem]);
 
   return (
     <Flexbox horizontal>
-      <ActionIcon
-        icon={CreateBotIcon}
-        loading={isMutatingAgent || isCreatingGroup}
-        size={DESKTOP_HEADER_ICON_SIZE}
-        title={tChat('newAgent')}
-        onClick={handleMainIconClick}
-      />
+      {isAdmin && (
+        <ActionIcon
+          icon={CreateBotIcon}
+          loading={isMutatingAgent || isCreatingGroup}
+          size={DESKTOP_HEADER_ICON_SIZE}
+          title={tChat('newAgent')}
+          onClick={handleMainIconClick}
+        />
+      )}
       <DropdownMenu items={dropdownItems}>
         <ActionIcon
           color={cssVar.colorTextQuaternary}

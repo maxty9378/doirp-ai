@@ -16,7 +16,6 @@ import { authSelectors } from '@/store/user/selectors';
 import DataStatistics from '../DataStatistics';
 import UserInfo from '../UserInfo';
 import UserLoginOrSignup from '../UserLoginOrSignup';
-import LangButton from './LangButton';
 import { useMenu } from './useMenu';
 
 const PanelContent: FC<{ closePopover: () => void }> = ({ closePopover }) => {
@@ -68,7 +67,6 @@ const PanelContent: FC<{ closePopover: () => void }> = ({ closePopover }) => {
       <Menu items={logoutItems} onClick={handleSignOut} />
       <Flexbox horizontal gap={4} justify={'space-between'} style={{ padding: '6px 8px 6px 16px' }}>
         <BrandWatermark />
-        <LangButton placement={'right' as any} />
       </Flexbox>
     </Flexbox>
   );

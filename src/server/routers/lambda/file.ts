@@ -175,6 +175,11 @@ export const fileRouter = router({
       };
     }),
 
+  getStorageUsage: fileProcedure.query(async ({ ctx }) => {
+    const usedBytes = await ctx.fileModel.countUsage();
+    return { usedBytes };
+  }),
+
   getFiles: fileProcedure.input(QueryFileListSchema).query(async ({ ctx, input }) => {
     const fileList = await ctx.fileModel.query(input);
 

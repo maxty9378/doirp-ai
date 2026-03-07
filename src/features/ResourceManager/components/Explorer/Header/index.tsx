@@ -11,6 +11,8 @@ import { useResourceManagerStore } from '@/app/[variants]/(main)/resource/featur
 import NavHeader from '@/features/NavHeader';
 import { FilesTabs } from '@/types/files';
 
+import StorageUsage from '@/app/[variants]/(main)/resource/features/StorageUsage';
+
 import AddButton from '../../Header/AddButton';
 import BatchActionsDropdown from '../ToolBar/BatchActionsDropdown';
 import SortDropdown from '../ToolBar/SortDropdown';
@@ -101,6 +103,7 @@ const Header = memo(() => {
       left={leftContent}
       right={
         <>
+          <StorageUsage />
           <SearchInput />
           <SortDropdown />
           <BatchActionsDropdown selectCount={selectCount} onActionClick={onActionClick} />

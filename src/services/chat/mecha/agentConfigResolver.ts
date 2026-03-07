@@ -25,6 +25,19 @@ const log = debug('mecha:agentConfigResolver');
  */
 const VALID_BUILTIN_SLUGS = new Set<string>(Object.values(BUILTIN_AGENT_SLUGS));
 
+/** Включены по умолчанию и скрыты в меню (LobeHub/Skills, Artifacts, Memory, Cloud Sandbox, GTD, Notebook) — всегда добавляются к списку плагинов при резолве */
+const DEFAULT_ENABLED_HIDDEN_PLUGIN_IDS = [
+  'lobe-skills',
+  'lobe-artifacts',
+  'lobe-user-memory',
+  'lobe-cloud-sandbox',
+  'lobe-gtd',
+  'lobe-notebook',
+];
+
+const mergeDefaultEnabledHiddenPlugins = (pluginIds: string[]): string[] =>
+  Array.from(new Set([...DEFAULT_ENABLED_HIDDEN_PLUGIN_IDS, ...pluginIds]));
+
 /**
  * Check if a slug is a valid builtin agent slug
  */
@@ -271,7 +284,7 @@ export const resolveAgentConfig = (ctx: AgentConfigResolverContext): ResolvedAge
         agentConfig: finalAgentConfig,
         chatConfig: finalChatConfig,
         isBuiltinAgent: false,
-        plugins: applyPluginFilters(extendedPlugins),
+        plugins: applyPluginFilters(mergeDefaultEnabledHiddenPlugins(extendedPlugins)),
       };
     }
 
@@ -280,7 +293,7 @@ export const resolveAgentConfig = (ctx: AgentConfigResolverContext): ResolvedAge
       agentConfig: finalAgentConfig,
       chatConfig: finalChatConfig,
       isBuiltinAgent: false,
-      plugins: applyPluginFilters(finalPlugins),
+      plugins: applyPluginFilters(mergeDefaultEnabledHiddenPlugins(finalPlugins)),
     };
   }
 
@@ -411,7 +424,7 @@ export const resolveAgentConfig = (ctx: AgentConfigResolverContext): ResolvedAge
     agentConfig: finalAgentConfig,
     chatConfig: resolvedChatConfig,
     isBuiltinAgent: true,
-    plugins: applyPluginFilters(finalPlugins),
+    plugins: applyPluginFilters(mergeDefaultEnabledHiddenPlugins(finalPlugins)),
     slug,
   };
 };

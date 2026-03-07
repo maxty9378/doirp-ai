@@ -1,8 +1,7 @@
 import { Blocks } from 'lucide-react';
-import { memo, Suspense, useCallback, useState } from 'react';
+import { memo, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { createSkillStoreModal } from '@/features/SkillStore';
 import { useModelSupportToolUse } from '@/hooks/useModelSupportToolUse';
 import { useAgentStore } from '@/store/agent';
 import { agentByIdSelectors } from '@/store/agent/selectors';
@@ -25,12 +24,10 @@ const Tools = memo(() => {
 
   const enableFC = useModelSupportToolUse(model, provider);
 
-  const handleOpenStore = useCallback(() => {
-    createSkillStoreModal();
-  }, []);
-
   if (!enableFC)
     return <Action disabled icon={Blocks} showTooltip={true} title={t('tools.disabled')} />;
+
+  if (marketItems.length === 0) return null;
 
   return (
     <Suspense fallback={<Action disabled icon={Blocks} title={t('tools.title')} />}>
@@ -40,7 +37,7 @@ const Tools = memo(() => {
         showTooltip={false}
         title={t('tools.title')}
         popover={{
-          content: <PopoverContent items={marketItems} onOpenStore={handleOpenStore} />,
+          content: <PopoverContent items={marketItems} />,
           maxWidth: 320,
           minWidth: 320,
           styles: {

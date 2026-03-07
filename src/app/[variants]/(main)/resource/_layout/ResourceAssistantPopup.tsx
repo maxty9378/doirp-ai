@@ -5,19 +5,18 @@ import { Button, Modal, Typography } from 'antd';
 import { memo, useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 
+import { lambdaClient } from '@/libs/trpc/client';
+
 const { Paragraph, Text, Title } = Typography;
 
-const STORAGE_KEY = 'resourceAssistantPopupLastDay';
+const STORAGE_KEY_FIRST_SEEN = 'resourceAssistantPopupFirstSeen';
 const FORCE_SHOW_PARAM = 'showResourceAssistant';
-
-function getTodayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+const STORAGE_THRESHOLD_BYTES = 100 * 1024 * 1024; // 100 МБ
 
 const ResourceAssistantPopup = memo(() => {
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  const [usedBytes, setUsedBytes] = useState<number | null>(null);
 
   const forceShow = searchParams?.get(FORCE_SHOW_PARAM) === '1';
 
@@ -26,24 +25,45 @@ const ResourceAssistantPopup = memo(() => {
       const t = window.setTimeout(() => setOpen(true), 400);
       return () => window.clearTimeout(t);
     }
-    if (typeof localStorage === 'undefined') return;
-
-    const today = getTodayKey();
-    if (localStorage.getItem(STORAGE_KEY) === today) return;
 
     let cancelled = false;
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      localStorage.setItem(STORAGE_KEY, today);
-      setOpen(true);
-    }, 400);
+
+    const run = async () => {
+      try {
+        const { usedBytes: bytes } = await lambdaClient.file.getStorageUsage.query();
+        if (cancelled) return;
+        setUsedBytes(bytes ?? 0);
+      } catch {
+        if (cancelled) return;
+        setUsedBytes(0);
+      }
+    };
+
+    run();
     return () => {
       cancelled = true;
-      window.clearTimeout(timer);
     };
   }, [forceShow]);
 
-  const handleClose = () => setOpen(false);
+  useEffect(() => {
+    if (forceShow || usedBytes === null) return;
+    if (typeof localStorage === 'undefined') return;
+
+    const firstSeen = localStorage.getItem(STORAGE_KEY_FIRST_SEEN) === '1';
+    const overThreshold = usedBytes > STORAGE_THRESHOLD_BYTES;
+
+    if (firstSeen && !overThreshold) return;
+
+    const t = window.setTimeout(() => setOpen(true), 400);
+    return () => window.clearTimeout(t);
+  }, [forceShow, usedBytes]);
+
+  const handleClose = () => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY_FIRST_SEEN, '1');
+    }
+    setOpen(false);
+  };
 
   return (
     <Modal
@@ -54,7 +74,7 @@ const ResourceAssistantPopup = memo(() => {
       onCancel={handleClose}
       open={open}
       styles={{ body: { padding: '24px' } }}
-      width={600}
+      width={720}
     >
       <Flexbox horizontal align="stretch" gap={24}>
         {/* Левая колонка: большая картинка */}
@@ -62,9 +82,9 @@ const ResourceAssistantPopup = memo(() => {
           style={{
             borderRadius: 12,
             flexShrink: 0,
-            height: 320,
+            height: 300,
             overflow: 'hidden',
-            width: 220,
+            width: 300,
           }}
         >
           <img
@@ -91,7 +111,7 @@ const ResourceAssistantPopup = memo(() => {
           </div>
           <Paragraph
             style={{
-              color: '#333',
+              color: '#fff',
               fontSize: '15px',
               lineHeight: '1.6',
               marginBottom: '24px',

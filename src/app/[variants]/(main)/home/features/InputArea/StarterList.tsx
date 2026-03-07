@@ -8,6 +8,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useInitBuiltinAgent } from '@/hooks/useInitBuiltinAgent';
+import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { type StarterMode } from '@/store/home';
 import { useHomeStore } from '@/store/home';
 
@@ -46,6 +47,7 @@ interface StarterItem {
 
 const StarterList = memo(() => {
   const { t } = useTranslation('home');
+  const isAdmin = useIsAdmin();
 
   useInitBuiltinAgent(BUILTIN_AGENT_SLUGS.agentBuilder);
   useInitBuiltinAgent(BUILTIN_AGENT_SLUGS.groupAgentBuilder);
@@ -57,7 +59,7 @@ const StarterList = memo(() => {
     s.navigate,
   ]);
 
-  const items: StarterItem[] = useMemo(
+  const allItems: StarterItem[] = useMemo(
     () => [
       {
         icon: BotIcon,
@@ -88,6 +90,14 @@ const StarterList = memo(() => {
       // },
     ],
     [],
+  );
+
+  const items = useMemo(
+    () =>
+      isAdmin
+        ? allItems
+        : allItems.filter((item) => item.key !== 'agent' && item.key !== 'group'),
+    [isAdmin, allItems],
   );
 
   const handleClick = useCallback(
