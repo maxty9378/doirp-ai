@@ -26,30 +26,55 @@ const RemainingLimit = memo(() => {
   const { data, isLoading, error } = useSWR<TokenLimitsData>('/api/user/token-limits', fetcher, {
     refreshInterval: 60000,
     revalidateOnFocus: true,
+    keepPreviousData: true,
   });
 
-  if (error || !data) {
+  if (error || (!data && !isLoading)) {
     return null;
   }
 
-  const { tokenQuota, tokensUsed, remaining } = data;
-  const usagePercent = tokenQuota > 0 ? Math.round((tokensUsed / tokenQuota) * 100) : 0;
-  const isLow = remaining < tokenQuota * 0.2;
-  const isCritical = remaining < tokenQuota * 0.1;
+  const { tokenQuota = 0, tokensUsed = 0, remaining = 0 } = data || {};
+  
+  const displayRemaining = Math.max(0, remaining);
+  const displayTokensUsed = Math.min(tokensUsed, tokenQuota);
+  
+  const usagePercent = tokenQuota > 0 ? Math.round((displayTokensUsed / tokenQuota) * 100) : 0;
+  const isLow = displayRemaining < tokenQuota * 0.2;
+  const isCritical = displayRemaining < tokenQuota * 0.1;
+  const isUnlimited = tokenQuota >= 100_000_000;
 
   return (
     <StatisticCard
-      loading={isLoading}
-      title={t('usage.cards.remaining.title')}
+      loading={isLoading && !data}
+      title={isUnlimited ? t('usage.cards.remaining.used') : t('usage.cards.remaining.title')}
       statistic={{
-        value: remaining.toLocaleString(),
+        value: isUnlimited ? tokensUsed.toLocaleString() : displayRemaining.toLocaleString(),
         description: (
           <Flexbox gap={8} style={{ width: '100%' }}>
-            <Statistic
-              title={t('usage.cards.remaining.used')}
-              value={`${tokensUsed.toLocaleString()} / ${tokenQuota.toLocaleString()}`}
-            />
-            {tokenQuota > 0 && (
+            {!isUnlimited && (
+              <Statistic
+                title={t('usage.cards.remaining.used')}
+                value={`${tokensUsed.toLocaleString()} / ${tokenQuota.toLocaleString()}`}
+              />
+            )}
+            {isUnlimited && (
+              <div
+                style={{
+                  fontSize: 12,
+                  padding: '2px 8px',
+                  borderRadius: 12,
+                  background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
+                  color: '#fff',
+                  fontWeight: 'bold',
+                  display: 'inline-block',
+                  width: 'fit-content',
+                  boxShadow: '0 2px 4px rgba(114, 46, 209, 0.2)',
+                }}
+              >
+                Безлимит
+              </div>
+            )}
+            {!isUnlimited && tokenQuota > 0 && (
               <Progress
                 percent={usagePercent}
                 showInfo={false}

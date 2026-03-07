@@ -8,7 +8,7 @@ import { type NewGeneration, type NewGenerationBatch } from '@/database/schemas'
 import { asyncTasks, generationBatches, generations } from '@/database/schemas';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { keyVaults, serverDatabase } from '@/libs/trpc/lambda/middleware';
-import { incrementImageUsage } from '@/server/middleware/imageLimit';
+    import { checkImageLimit, incrementImageUsage } from '@/server/middleware/imageLimit';
 import { createAsyncCaller } from '@/server/routers/async/caller';
 import { FileService } from '@/server/services/file';
 import {
@@ -144,6 +144,9 @@ export const imageRouter = router({
 
     // Defensive check: ensure no full URLs enter the database
     validateNoUrlsInConfig(configForDatabase, 'configForDatabase');
+
+    // Check if user has exceeded their daily image limit
+    await checkImageLimit(userId, imageNum);
 
     const chargeResult = await chargeBeforeGenerate({
       clientIp: ctx.clientIp,
