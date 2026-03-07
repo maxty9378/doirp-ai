@@ -1,7 +1,5 @@
 import { ENABLE_BUSINESS_FEATURES } from '@lobechat/business-const';
-import { CURRENT_ONBOARDING_VERSION } from '@lobechat/const';
 import { type LobeChatDatabase } from '@lobechat/database';
-import { MAX_ONBOARDING_STEPS } from '@lobechat/types';
 
 import { initNewUserForBusiness } from '@/business/server/user';
 import { UserModel } from '@/database/models/user';
@@ -36,22 +34,17 @@ export class UserService {
       }
     }
 
-    // Automatically complete onboarding and set defaults for new users
+    // Set default preference for new users (language). Onboarding is NOT auto-completed so new users see /onboarding.
     try {
       const userModel = new UserModel(this.db, user.id);
       await userModel.updateUser({
-        onboarding: {
-          version: CURRENT_ONBOARDING_VERSION,
-          currentStep: MAX_ONBOARDING_STEPS,
-          finishedAt: new Date().toISOString(),
-        },
         preference: {
-          language: 'ru-RU', // Set Russian as default interface language
+          language: 'ru-RU',
         },
       });
-      console.info(`Auto-completed onboarding and set defaults for user ${user.id}`);
+      console.info(`Set default preference for new user ${user.id}`);
     } catch (error) {
-      console.error('Failed to auto-complete onboarding:', error);
+      console.error('Failed to set default preference for new user:', error);
     }
 
     const analytics = await initializeServerAnalytics();
