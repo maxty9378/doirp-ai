@@ -99,6 +99,7 @@
     "reinstall:desktop": "rm -rf pnpm-lock.yaml && rm -rf node_modules && pnpm -r exec rm -rf node_modules && pnpm install --node-linker=hoisted",
     "release": "semantic-release",
     "release:branch": "tsx ./scripts/releaseWorkflow/index.ts",
+    "reset:onboarding": "tsx scripts/reset-onboarding.ts",
     "seed:admin": "tsx scripts/seed-admin.ts",
     "self-hosting:docker": "docker build -t lobehub:local .",
     "self-hosting:docker-cn": "docker build -t lobehub-local --build-arg USE_CN_MIRROR=true .",

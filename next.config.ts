@@ -3,17 +3,31 @@ import { defineConfig } from './src/libs/next/config/define-config';
 const isVercel = !!process.env.VERCEL_ENV;
 
 const nextConfig = defineConfig({
-  // Vercel serverless optimization: exclude musl binaries and ffmpeg from all routes
-  // Vercel uses Amazon Linux (glibc), not Alpine Linux (musl)
-  // ffmpeg-static (~76MB) is only needed by /api/webhooks/video/* route
-  // This saves ~120MB (29MB canvas-musl + 16MB sharp-musl + 76MB ffmpeg)
+  // Vercel serverless: keep unzipped function size under 250 MB
+  // https://vercel.com/guides/troubleshooting-function-250mb-limit
   outputFileTracingExcludes: isVercel
     ? {
         '*': [
+          // Musl binaries (Vercel uses glibc). Saves ~120MB.
           'node_modules/.pnpm/@napi-rs+canvas-*-musl*',
           'node_modules/.pnpm/@img+sharp-libvips-*musl*',
           'node_modules/ffmpeg-static/**',
           'node_modules/.pnpm/ffmpeg-static*/**',
+          // Build cache (not needed at runtime)
+          '.next/cache/**',
+          // Dev/test tooling (not needed in serverless)
+          'node_modules/playwright/**',
+          'node_modules/@playwright/**',
+          'node_modules/electron/**',
+          'node_modules/.pnpm/playwright@*/**',
+          'node_modules/.pnpm/electron@*/**',
+          // Test files in dependencies
+          'node_modules/**/__tests__/**',
+          'node_modules/**/*.test.js',
+          'node_modules/**/*.test.ts',
+          'node_modules/**/*.test.mjs',
+          'node_modules/**/*.spec.js',
+          'node_modules/**/*.spec.ts',
         ],
       }
     : undefined,

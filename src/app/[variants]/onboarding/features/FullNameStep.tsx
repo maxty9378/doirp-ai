@@ -26,14 +26,19 @@ const FullNameStep = memo<FullNameStepProps>(({ onBack, onNext }) => {
   const [isNavigating, setIsNavigating] = useState(false);
   const isNavigatingRef = useRef(false);
 
-  const handleNext = useCallback(() => {
+  const handleNext = useCallback(async () => {
     if (isNavigatingRef.current) return;
     isNavigatingRef.current = true;
     setIsNavigating(true);
-    if (value.trim()) {
-      updateFullName(value.trim());
+    try {
+      if (value.trim()) {
+        await updateFullName(value.trim());
+      }
+      onNext();
+    } finally {
+      isNavigatingRef.current = false;
+      setIsNavigating(false);
     }
-    onNext();
   }, [value, updateFullName, onNext]);
 
   const handleBack = useCallback(() => {
