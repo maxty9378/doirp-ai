@@ -1,6 +1,9 @@
 import { ENABLE_BUSINESS_FEATURES } from '@lobechat/business-const';
+import { TRPCClientError } from '@trpc/client';
+import i18n from 'i18next';
 
 import { markUserValidAction } from '@/business/client/markUserValidAction';
+import { message } from '@/components/AntdStaticMethods';
 import { imageService } from '@/services/image';
 import { type StoreSetter } from '@/store/types';
 
@@ -84,13 +87,23 @@ export class CreateImageActionImpl {
       }
 
       // 5. Create image via service
-      await imageService.createImage({
-        generationTopicId: finalTopicId!,
-        provider,
-        model,
-        imageNum,
-        params: parameters as any,
-      });
+      try {
+        await imageService.createImage({
+          generationTopicId: finalTopicId!,
+          provider,
+          model,
+          imageNum,
+          params: parameters as any,
+        });
+      } catch (err) {
+        const isDailyLimit =
+          err instanceof TRPCClientError &&
+          (err.data?.code === 'TOO_MANY_REQUESTS' || err.message?.includes('лимит'));
+        if (isDailyLimit) {
+          message.warning(i18n.t('limit.dailyReached', { ns: 'image' }));
+        }
+        throw err;
+      }
 
       // 6. Only refresh generation batches if it's not a new topic
       if (!isNewTopic) {
@@ -139,13 +152,23 @@ export class CreateImageActionImpl {
       await removeGenerationBatch(generationBatchId, activeGenerationTopicId);
 
       // 2. Create image via service
-      await imageService.createImage({
-        generationTopicId: activeGenerationTopicId,
-        provider: batch.provider,
-        model: batch.model,
-        imageNum,
-        params: batch.config as any,
-      });
+      try {
+        await imageService.createImage({
+          generationTopicId: activeGenerationTopicId,
+          provider: batch.provider,
+          model: batch.model,
+          imageNum,
+          params: batch.config as any,
+        });
+      } catch (err) {
+        const isDailyLimit =
+          err instanceof TRPCClientError &&
+          (err.data?.code === 'TOO_MANY_REQUESTS' || err.message?.includes('лимит'));
+        if (isDailyLimit) {
+          message.warning(i18n.t('limit.dailyReached', { ns: 'image' }));
+        }
+        throw err;
+      }
 
       // 3. Refresh generation batches to show the real data
       await store.refreshGenerationBatches();

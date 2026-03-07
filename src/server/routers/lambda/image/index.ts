@@ -8,7 +8,7 @@ import { type NewGeneration, type NewGenerationBatch } from '@/database/schemas'
 import { asyncTasks, generationBatches, generations } from '@/database/schemas';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { keyVaults, serverDatabase } from '@/libs/trpc/lambda/middleware';
-    import { checkImageLimit, incrementImageUsage } from '@/server/middleware/imageLimit';
+import { checkImageLimit } from '@/server/middleware/imageLimit';
 import { createAsyncCaller } from '@/server/routers/async/caller';
 import { FileService } from '@/server/services/file';
 import {
@@ -236,8 +236,6 @@ export const imageRouter = router({
     });
 
     log('Database transaction completed successfully. Starting async task triggers directly.');
-
-    await incrementImageUsage(userId, imageNum);
 
     // Step 2: Trigger background image generation tasks using after() API
     log('Starting async image generation tasks with after()');

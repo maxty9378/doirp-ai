@@ -14,6 +14,7 @@ import { FileModel } from '@/database/models/file';
 import { GenerationModel } from '@/database/models/generation';
 import { GenerationBatchModel } from '@/database/models/generationBatch';
 import { asyncAuthedProcedure, asyncRouter as router } from '@/libs/trpc/async';
+import { incrementImageUsage } from '@/server/middleware/imageLimit';
 import { initModelRuntimeFromDB } from '@/server/modules/ModelRuntime';
 import { GenerationService } from '@/server/services/generation';
 import { sanitizeFileName } from '@/utils/sanitizeFileName';
@@ -352,6 +353,8 @@ export const imageRouter = router({
           await ctx.asyncTaskModel.update(taskId, {
             status: AsyncTaskStatus.Success,
           });
+
+          await incrementImageUsage(ctx.userId, 1);
 
           log('Async image generation completed successfully: %s', taskId);
           return { success: true };

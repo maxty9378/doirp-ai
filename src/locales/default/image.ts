@@ -46,6 +46,8 @@ export default {
   'generation.metadata.count': '{{count}} Images',
   'generation.status.failed': 'Generation Failed',
   'generation.status.generating': 'Generating...',
+  'limit.dailyReached':
+    'На сегодня ваш лимит генерации изображений исчерпан (10/10). Для вашего аккаунта доступно 10 картинок в сутки. Возвращайтесь завтра!',
   'notSupportGuide.desc':
     'The current deployment mode does not support AI image generation. Switch to the <1>server database deployment mode</1>, or use <3>LobeHub Cloud</3>.',
   'notSupportGuide.features.fileIntegration.desc':

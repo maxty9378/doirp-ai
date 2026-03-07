@@ -37,7 +37,7 @@ const CustomTextLogo = memo<FlexboxProps & { size: number }>(({ size, style, ...
 });
 
 const CustomImageLogo = memo<Omit<ImageProps, 'alt' | 'src'> & { size: number }>(
-  ({ size, ...rest }) => {
+  ({ size, style, ...rest }) => {
     if (!BRANDING_LOGO_URL) {
       return <CustomTextLogo size={size} {...rest} />;
     }
@@ -47,7 +47,12 @@ const CustomImageLogo = memo<Omit<ImageProps, 'alt' | 'src'> & { size: number }>
         height={size}
         priority
         src={BRANDING_LOGO_URL}
-        style={{ objectFit: 'contain', ...rest.style }}
+        style={{
+          height: size,
+          objectFit: 'contain',
+          width: 'auto',
+          ...style,
+        }}
         unoptimized={true}
         width={size}
         {...rest}

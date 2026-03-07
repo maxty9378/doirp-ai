@@ -45,6 +45,10 @@ export const users = pgTable(
 
     // better-auth admin
     role: text('role'),
+    /** Daily image generations count (lazy reset by last_image_date). Used for daily limit. */
+    dailyImageCount: integer('daily_image_count').notNull().default(0),
+    /** Date of last image generation (for lazy reset at day boundary). */
+    lastImageDate: timestamptz('last_image_date'),
     banned: boolean('banned').default(false),
     banReason: text('ban_reason'),
     banExpires: timestamptz('ban_expires'),
@@ -124,8 +128,8 @@ export type InstalledPluginItem = typeof userInstalledPlugins.$inferSelect;
 /** Default token quota per user when not specified (1M tokens = 100k credits at 10 tokens/credit). */
 export const DEFAULT_USER_TOKEN_QUOTA = 1_000_000;
 
-/** Daily image generation limit per user (ОДО Creative focus). */
-export const DAILY_IMAGE_LIMIT = 5;
+/** Daily image generation limit per user (role !== 'admin'). */
+export const DAILY_IMAGE_LIMIT = 10;
 
 export const userCodes = pgTable(
   'user_codes',

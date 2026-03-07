@@ -66,6 +66,7 @@
     "dev:docker:down": "docker compose -f docker-compose/dev/docker-compose.yml down",
     "dev:docker:reset": "docker compose -f docker-compose/dev/docker-compose.yml down -v && rm -rf docker-compose/dev/data && npm run dev:docker && pnpm db:migrate",
     "dev:mobile": "next dev -p 3018",
+    "dev:lite": "cross-env NODE_OPTIONS=--max-old-space-size=6144 next dev -p 3010 --webpack",
     "dev:turbopack": "next dev -p 3010",
     "dev:webpack": "next dev -p 3010 --webpack",
     "docs:cdn": "npm run workflow:docs-cdn && npm run lint:mdx",
