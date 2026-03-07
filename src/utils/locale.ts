@@ -7,16 +7,10 @@ import { locales, normalizeLocale } from '@/locales/resources';
 import { RouteVariants } from './server/routeVariants';
 
 export const getAntdLocale = async (lang?: string) => {
-  let normalLang: any = normalizeLocale(lang);
-
-  // due to antd only have ar-EG locale, we need to convert ar to ar-EG
-  // refs: https://ant.design/docs/react/i18n
-
-  // And we don't want to handle it in `normalizeLocale` function
-  // because of other locale files are all `ar` not `ar-EG`
-  if (normalLang === 'ar') normalLang = 'ar-EG';
-
-  const { default: locale } = await import(`antd/locale/${normalLang.replace('-', '_')}.js`);
+  const normalLang = normalizeLocale(lang);
+  // antd: ru_RU для ru-RU
+  const antdLocaleKey = normalLang.replace('-', '_');
+  const { default: locale } = await import(`antd/locale/${antdLocaleKey}.js`);
 
   return locale;
 };
@@ -35,9 +29,7 @@ export const parseBrowserLanguage = (headers: Headers, defaultLang: string = DEF
    * 2) The available locales (they must contain the default locale).
    * 3) The default locale.
    */
-  const availableLocales = locales.map((locale) =>
-    (locale as string) === 'ar' ? 'ar-EG' : locale,
-  );
+  const availableLocales = [...locales];
   const defaultLocale: string = availableLocales.includes(defaultLang as any)
     ? defaultLang
     : availableLocales[0];

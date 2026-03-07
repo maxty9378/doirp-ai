@@ -13,7 +13,7 @@ You are developing an open-source, modern-design AI Agent Workspace: LobeHub (pr
 - **State Management**: Zustand, SWR
 - **Database**: PostgreSQL, PGLite, Drizzle ORM
 - **Testing**: Vitest, Testing Library
-- **Package Manager**: pnpm (monorepo structure)
+- **Package Manager**: pnpm (monorepo); для локальной разработки рекомендуется **Bun** (быстрее установка и запуск).
 
 ## Directory Structure
 
@@ -47,18 +47,20 @@ lobe-chat/
 
 ### Package Management
 
-- Use `pnpm` as the primary package manager
-- Use `bun` to run npm scripts
-- Use `bunx` to run executable npm packages
+- **Рекомендуется Bun** (быстрая установка и запуск): установите [Bun](https://bun.sh), затем:
+  - `bun install` — установка зависимостей (значительно быстрее `npm install` / `pnpm install`)
+  - `bun run dev` — запуск dev-сервера
+- Альтернатива: `pnpm` (монорепо, CI). Скрипты запускайте через `bun` или `pnpm`: `bun run <script>`, `bunx` для исполняемых пакетов.
+- **Не используйте** `npm run dev` / `npm install` — теряете время; проект рассчитан на современные менеджеры пакетов.
 
 ### Dev Server (Cursor / Local)
 
-- Default local start command: `pnpm dev`
+- **Рекомендуемая команда:** `bun run dev` (или `pnpm dev`).
 - **Если всё зависает или падает с "heap out of memory"** — используйте облегчённый режим: `pnpm dev:lite` (лимит памяти 6 GB, сборка через Webpack). Если снова падает по памяти — закройте другие приложения или задайте больше: `$env:NODE_OPTIONS="--max-old-space-size=8192"; pnpm dev:webpack`. Перед запуском при проблемах очистите кэш: `Remove-Item -Recurse -Force .next`, затем `pnpm dev:lite`.
 - Avoid `pnpm dev:webpack` unless Webpack-specific debugging is required.
 - If you see repeated `webpack.cache.PackFileCacheStrategy` warnings, clear cache once and restart:
   - `Remove-Item -Recurse -Force .next`
-  - `pnpm dev`
+  - `bun run dev` или `pnpm dev`
 
 ### Code Style Guidelines
 

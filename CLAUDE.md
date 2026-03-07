@@ -40,9 +40,8 @@ lobe-chat/
 
 ### Package Management
 
-- `pnpm` for dependency management
-- `bun` to run npm scripts
-- `bunx` for executable npm packages
+- **Рекомендуется Bun** для локальной разработки: `bun install` (зависимости), `bun run dev` (сервер). Не используйте `npm install` / `npm run dev` — медленнее.
+- `pnpm` — для монорепо и CI. Скрипты: `bun run <script>` или `pnpm run <script>`; исполняемые пакеты: `bunx`.
 
 ### Testing
 

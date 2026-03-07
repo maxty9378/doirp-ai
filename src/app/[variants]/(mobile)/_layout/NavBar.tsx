@@ -4,7 +4,7 @@ import { Icon } from '@lobehub/ui';
 import { type TabBarProps } from '@lobehub/ui/mobile';
 import { TabBar } from '@lobehub/ui/mobile';
 import { createStaticStyles } from 'antd-style';
-import { Compass, MessageSquare, User } from 'lucide-react';
+import { MessageSquare, User } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,6 @@ import { useNavigate } from 'react-router-dom';
 import { MOBILE_TABBAR_HEIGHT } from '@/const/layoutTokens';
 import { useActiveTabKey } from '@/hooks/useActiveTabKey';
 import { SidebarTabKey } from '@/store/global/initialState';
-import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
   active: css`
@@ -33,43 +32,30 @@ const NavBar = memo(() => {
   const activeKey = useActiveTabKey();
   const navigate = useNavigate();
 
-  const { showMarket } = useServerConfigStore(featureFlagsSelectors);
-
   const items: TabBarProps['items'] = useMemo(
-    () =>
-      [
-        {
-          icon: (active: boolean) => (
-            <Icon className={active ? styles.active : undefined} icon={MessageSquare} />
-          ),
-          key: SidebarTabKey.Chat,
-          onClick: () => {
-            navigate('/agent');
-          },
-          title: t('tab.chat'),
+    () => [
+      {
+        icon: (active: boolean) => (
+          <Icon className={active ? styles.active : undefined} icon={MessageSquare} />
+        ),
+        key: SidebarTabKey.Chat,
+        onClick: () => {
+          navigate('/agent');
         },
-        showMarket && {
-          icon: (active: boolean) => (
-            <Icon className={active ? styles.active : undefined} icon={Compass} />
-          ),
-          key: SidebarTabKey.Community,
-          onClick: () => {
-            navigate('/community');
-          },
-          title: t('tab.community'),
+        title: t('tab.chat'),
+      },
+      {
+        icon: (active: boolean) => (
+          <Icon className={active ? styles.active : undefined} icon={User} />
+        ),
+        key: SidebarTabKey.Me,
+        onClick: () => {
+          navigate('/me');
         },
-        {
-          icon: (active: boolean) => (
-            <Icon className={active ? styles.active : undefined} icon={User} />
-          ),
-          key: SidebarTabKey.Me,
-          onClick: () => {
-            navigate('/me');
-          },
-          title: t('tab.me'),
-        },
-      ].filter(Boolean) as TabBarProps['items'],
-    [navigate, showMarket, t],
+        title: t('tab.me'),
+      },
+    ],
+    [navigate, t],
   );
 
   return (

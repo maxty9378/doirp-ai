@@ -708,9 +708,11 @@ Or clone it for local development:
 ```fish
 $ git clone https://github.com/lobehub/lobe-chat.git
 $ cd lobe-chat
-$ pnpm install
-$ pnpm dev
+$ bun install    # or pnpm install
+$ bun run dev    # or pnpm dev
 ```
+
+> **Tip:** Use [Bun](https://bun.sh) for faster installs and dev server: `bun install` and `bun run dev` are significantly faster than npm/pnpm.
 
 If you would like to learn more details, please feel free to look at our [📘 Development Guide][docs-dev-guide].
 

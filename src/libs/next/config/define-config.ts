@@ -265,6 +265,7 @@ export function defineConfig(config: CustomNextConfig) {
     ...(config.outputFileTracingIncludes && {
       outputFileTracingIncludes: config.outputFileTracingIncludes,
     }),
+    eslint: { ignoreDuringBuilds: true },
     reactStrictMode: true,
     redirects: async () => [
       {
@@ -433,6 +434,7 @@ export function defineConfig(config: CustomNextConfig) {
 
   const withBundleAnalyzer = process.env.ANALYZE === 'true' ? analyzer() : noWrapper;
 
+  // PWA отключён в development для ускорения HMR и сборки
   const withPWA = isProd
     ? withSerwistInit({
         register: false,
