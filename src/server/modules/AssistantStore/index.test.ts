@@ -55,13 +55,13 @@ describe('AssistantStore', () => {
   it('should return the agent URL with default language when no language is provided', () => {
     const agentMarket = new AssistantStore();
     const url = agentMarket.getAgentUrl('agent-123');
-    expect(url).toBe(`${baseURL}/agent-123.en-US.json`);
+    expect(url).toBe(`${baseURL}/agent-123.ru-RU.json`);
   });
 
   it('should return the agent URL for a supported language', () => {
     const agentMarket = new AssistantStore();
-    const url = agentMarket.getAgentUrl('agent-123', 'zh-CN');
-    expect(url).toBe(`${baseURL}/agent-123.zh-CN.json`);
+    const url = agentMarket.getAgentUrl('agent-123', 'ru-RU');
+    expect(url).toBe(`${baseURL}/agent-123.ru-RU.json`);
   });
 
   it('should return the agent URL without language suffix if the provided language is not supported', () => {
@@ -177,7 +177,7 @@ describe('AssistantStore', () => {
     EdgeConfig.isEnabled.mockReturnValue(false);
 
     const store = new AssistantStore();
-    const result = await store.getAgentIndex('zh-CN');
+    const result = await store.getAgentIndex('ru-RU');
     expect(result).toEqual([
       { identifier: 'agent1', meta: {}, author: '', createAt: '', createdAt: '', homepage: '' },
     ]);

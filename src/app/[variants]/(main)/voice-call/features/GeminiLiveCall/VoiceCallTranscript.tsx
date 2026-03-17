@@ -71,9 +71,15 @@ const styles = createStaticStyles(({ css }) => ({
     flex: 1;
     overflow-y: auto;
     padding: 20px;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 16px;
+    align-items: flex-start;
+
+    @media (max-width: 720px) {
+      grid-template-columns: 1fr;
+    }
+
     &::-webkit-scrollbar {
       width: 6px;
     }
@@ -84,74 +90,93 @@ const styles = createStaticStyles(({ css }) => ({
   `,
   placeholder: css`
     text-align: center;
-    opacity: 0.5;
-    margin-top: auto;
-    margin-bottom: auto;
+    opacity: 0.6;
+    margin: auto;
     color: var(--colorTextSecondary);
     font-size: 14px;
   `,
-  bubbleRow: css`
-    display: flex;
-    width: 100%;
-    gap: 12px;
-  `,
-  rowAi: css`
-    flex-direction: row;
-  `,
-  rowUser: css`
-    flex-direction: row-reverse;
-  `,
-  bubbleWrap: css`
+  column: css`
     display: flex;
     flex-direction: column;
-    max-width: 80%;
+    gap: 12px;
+    min-width: 0;
   `,
-  bubbleAi: css`
-    align-items: flex-start;
-    .bubble-text {
-      background: var(--colorFillTertiary);
-      color: var(--colorText);
-      border-radius: 12px 12px 12px 2px;
-    }
+  columnHeader: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--colorTextSecondary);
   `,
-  bubbleUser: css`
-    align-items: flex-end;
-    .bubble-text {
-      background: #1677ff;
-      color: #fff;
-      border-radius: 12px 12px 2px 12px;
-    }
-  `,
-  bubbleText: css`
-    padding: 12px 16px;
+  bubble: css`
+    padding: 10px 14px;
     font-size: 14px;
     line-height: 1.5;
+    border-radius: 12px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    word-break: break-word;
   `,
-  bubbleLabel: css`
+  bubbleAi: css`
+    background: var(--colorFillTertiary);
+    color: var(--colorText);
+    border-radius: 12px 12px 12px 2px;
+  `,
+  bubbleUser: css`
+    background: #1677ff;
+    color: #fff;
+    border-radius: 12px 12px 2px 12px;
+  `,
+  columnEmpty: css`
     font-size: 12px;
-    opacity: 0.6;
-    margin-bottom: 4px;
     color: var(--colorTextSecondary);
-    padding: 0 4px;
-  `,
-  avatar: css`
-    flex-shrink: 0;
-    margin-top: 20px;
+    opacity: 0.7;
   `,
 }));
 
-const EMPTY_PLACEHOLDER = 'Поздоровайтесь с клиентом...';
+const EMPTY_PLACEHOLDER = 'Диалог появится здесь, как только вы начнете говорить.';
 
-export interface VoiceCallTranscriptProps {
-  agentId: string;
-  checkpoints: VoiceCallCheckpoint[];
-  score: number;
-  scrollRef: RefObject<HTMLDivElement | null>;
-  transcript: TranscriptEntry[];
+export interface ScoreLevelLabelsConfig {
+  high?: string;
+  low?: string;
+  mid?: string;
 }
 
-const VoiceCallTranscript = memo(({ agentId, checkpoints, score, scrollRef, transcript }: VoiceCallTranscriptProps) => {
+export interface VoiceCallTranscriptProps {
+  agentId?: string;
+  assistantLabel?: string;
+  checkpoints: VoiceCallCheckpoint[];
+  /** Цели сценария из редактора; если заданы, используем их как подписи чекпоинтов */
+  goals?: string[];
+  /** Оставшееся время до автозавершения (секунды), если известно */
+  remainingSeconds?: number;
+  score: number;
+  /** Подписи уровней счёта: low (score < -10), mid (-10..10), high (> 10) */
+  scoreLevelLabels?: ScoreLevelLabelsConfig | null;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  showCheckpoints?: boolean;
+  showScore?: boolean;
+  transcript: TranscriptEntry[];
+  userLabel?: string;
+}
+
+const DEFAULT_SCORE_LOW = 'Нужно улучшить';
+const DEFAULT_SCORE_MID = 'Неплохо';
+const DEFAULT_SCORE_HIGH = 'Отлично';
+
+const VoiceCallTranscript = memo(({
+  assistantLabel,
+  checkpoints,
+  goals,
+  remainingSeconds,
+  score,
+  scoreLevelLabels,
+  scrollRef,
+  showCheckpoints = true,
+  showScore = true,
+  transcript,
+  userLabel,
+}: VoiceCallTranscriptProps) => {
   const getScoreColor = (s: number) => {
     if (s < -10) return '#ff4d4f';
     if (s > 10) return '#52c41a';
@@ -159,76 +184,116 @@ const VoiceCallTranscript = memo(({ agentId, checkpoints, score, scrollRef, tran
   };
 
   const getScoreLabel = (s: number) => {
-    if (s < -10) return 'ЛПР злится';
-    if (s > 10) return 'Лояльность растет';
-    return 'Нейтрально';
+    if (s < -10) return scoreLevelLabels?.low?.trim() || DEFAULT_SCORE_LOW;
+    if (s > 10) return scoreLevelLabels?.high?.trim() || DEFAULT_SCORE_HIGH;
+    return scoreLevelLabels?.mid?.trim() || DEFAULT_SCORE_MID;
   };
 
-  // Normalizing score for the bar (assuming -50 to 50 range roughly)
   const normalizedScore = Math.max(0, Math.min(100, 50 + score));
 
-  const isLpr = agentId === 'voice-simulator-lpr' || agentId === 'training-tp-price-objection';
-  const aiName = isLpr ? 'Марина Ивановна' : 'Собеседник';
+  const resolvedAssistantLabel = assistantLabel || 'ИИ-агент';
+  const resolvedUserLabel = userLabel || 'Вы';
+
+  const formatSeconds = (total: number) => {
+    const clamped = Math.max(0, total);
+    const m = Math.floor(clamped / 60);
+    const s = clamped % 60;
+    const mm = m.toString().padStart(2, '0');
+    const ss = s.toString().padStart(2, '0');
+    return `${mm}:${ss}`;
+  };
+
+  const checkpointItems =
+    goals && goals.length > 0
+      ? goals.map((goal, index) => ({
+          id: `goal-${index}`,
+          label: goal,
+          done: checkpoints[index]?.done ?? false,
+        }))
+      : checkpoints;
+
+  const aiMessages = transcript.filter((msg) => msg.role === 'ai');
+  const userMessages = transcript.filter((msg) => msg.role === 'user');
 
   return (
     <div className={styles.transcriptWrap}>
       <div className={styles.transcriptHeader}>
-        <div style={{ fontWeight: 600, fontSize: 14 }}>История диалога</div>
-        <div className={styles.scoreWrap}>
-          <span>{getScoreLabel(score)}</span>
-          <div className={styles.scoreScale}>
-            <div
-              className={styles.scoreFill}
-              style={{
-                width: `${normalizedScore}%`,
-                background: getScoreColor(score),
-              }}
-            />
-          </div>
-          <span style={{ minWidth: 24, textAlign: 'right' }}>{score > 0 ? `+${score}` : score}</span>
+        <div style={{ fontWeight: 600, fontSize: 14 }}>Диалог</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          {typeof remainingSeconds === 'number' && remainingSeconds >= 0 && (
+            <span style={{ fontSize: 12, color: 'var(--colorTextSecondary)' }}>
+              Авторазрыв через {formatSeconds(remainingSeconds)}
+            </span>
+          )}
+          {showScore && (
+            <div className={styles.scoreWrap}>
+              <span>{getScoreLabel(score)}</span>
+              <div className={styles.scoreScale}>
+                <div
+                  className={styles.scoreFill}
+                  style={{
+                    width: `${normalizedScore}%`,
+                    background: getScoreColor(score),
+                  }}
+                />
+              </div>
+              <span style={{ minWidth: 24, textAlign: 'right' }}>{score > 0 ? `+${score}` : score}</span>
+            </div>
+          )}
         </div>
       </div>
 
-      <div className={styles.checkpointWrap}>
-        {checkpoints.map((checkpoint) => (
-          <div
-            className={`${styles.checkpointItem} ${checkpoint.done ? styles.checkpointDone : ''}`}
-            key={checkpoint.id}
-          >
-            {checkpoint.done ? '[x] ' : '[ ] '}
-            {checkpoint.label}
-          </div>
-        ))}
-      </div>
+      {showCheckpoints && checkpointItems.length > 0 && (
+        <div className={styles.checkpointWrap}>
+          {checkpointItems.map((checkpoint) => (
+            <div
+              className={`${styles.checkpointItem} ${checkpoint.done ? styles.checkpointDone : ''}`}
+              key={checkpoint.id}
+            >
+              {checkpoint.done ? '[x] ' : '[ ] '}
+              {checkpoint.label}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className={styles.transcriptLog} ref={scrollRef}>
         {transcript.length === 0 ? (
           <div className={styles.placeholder}>{EMPTY_PLACEHOLDER}</div>
         ) : (
-          transcript.map((msg, i) => {
-            const isAi = msg.role === 'ai';
-            return (
-              <div
-                key={i}
-                className={`${styles.bubbleRow} ${isAi ? styles.rowAi : styles.rowUser}`}
-              >
-                <div className={styles.avatar}>
-                  {isAi ? (
-                    <Avatar avatar={isLpr ? '💼' : '🤖'} size={32} />
-                  ) : (
-                    <Avatar avatar={'😎'} background={'#1677ff'} size={32} />
-                  )}
-                </div>
-                
-                <div className={`${styles.bubbleWrap} ${isAi ? styles.bubbleAi : styles.bubbleUser}`}>
-                  <div className={styles.bubbleLabel}>{isAi ? aiName : 'Вы'}</div>
-                  <div className={`bubble-text ${styles.bubbleText}`}>
+          <>
+            <div className={styles.column}>
+              <div className={styles.columnHeader}>
+                <Avatar avatar={'ИИ'} size={24} />
+                <span>{resolvedAssistantLabel}</span>
+              </div>
+              {aiMessages.length === 0 ? (
+                <div className={styles.columnEmpty}>Пока нет сообщений от ИИ.</div>
+              ) : (
+                aiMessages.map((msg, i) => (
+                  <div key={`ai-${i}`} className={`${styles.bubble} ${styles.bubbleAi}`}>
                     {msg.text}
                   </div>
-                </div>
+                ))
+              )}
+            </div>
+
+            <div className={styles.column}>
+              <div className={styles.columnHeader}>
+                <Avatar avatar={'Вы'} background={'#1677ff'} size={24} />
+                <span>{resolvedUserLabel}</span>
               </div>
-            );
-          })
+              {userMessages.length === 0 ? (
+                <div className={styles.columnEmpty}>Пока нет ваших фраз.</div>
+              ) : (
+                userMessages.map((msg, i) => (
+                  <div key={`user-${i}`} className={`${styles.bubble} ${styles.bubbleUser}`}>
+                    {msg.text}
+                  </div>
+                ))
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>

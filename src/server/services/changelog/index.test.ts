@@ -184,7 +184,7 @@ describe('ChangelogService', () => {
       };
       (global.fetch as any).mockResolvedValue(mockResponse);
 
-      const result = await service.getPostById('post1', { locale: 'zh-CN' });
+      const result = await service.getPostById('post1', { locale: 'ru-RU' });
       expect(result).toEqual({
         content: '中文内容',
         date: '2023-01-01',

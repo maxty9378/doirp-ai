@@ -27,6 +27,10 @@ export const getLLMConfig = () => {
 
       ENABLED_GOOGLE: z.boolean(),
       GOOGLE_API_KEY: z.string().optional(),
+      /** Optional separate API key for TTS/audio (Gemini). If set, used by /webapi/tts/google and generate-legend-audio. */
+      GOOGLE_TTS_API_KEY: z.string().optional(),
+      /** Base URL for Gemini API (TTS, generateContent). Override if direct access is blocked (e.g. region). */
+      GOOGLE_API_BASE: z.string().optional(),
 
       ENABLED_VERTEXAI: z.boolean(),
 
@@ -246,6 +250,8 @@ export const getLLMConfig = () => {
 
       ENABLED_GOOGLE: process.env.ENABLED_GOOGLE !== '0',
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
+      GOOGLE_TTS_API_KEY: process.env.GOOGLE_TTS_API_KEY,
+      GOOGLE_API_BASE: process.env.GOOGLE_API_BASE,
 
       ENABLED_VERTEXAI: !!process.env.VERTEXAI_CREDENTIALS,
 

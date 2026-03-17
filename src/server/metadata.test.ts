@@ -39,7 +39,7 @@ describe('Metadata', () => {
         url: 'https://example.com/custom',
         type: 'article',
         tags: ['tag1', 'tag2'],
-        locale: 'fr-FR',
+        locale: 'ru-RU',
         alternate: true,
       });
 
@@ -51,7 +51,7 @@ describe('Metadata', () => {
           description: 'Custom description',
           images: [{ url: 'https://custom-image.com', alt: `Custom Title · ${BRANDING_NAME}` }],
           type: 'article',
-          locale: 'fr-FR',
+          locale: 'ru-RU',
         }),
         twitter: expect.objectContaining({
           title: `Custom Title · ${BRANDING_NAME}`,
@@ -70,7 +70,7 @@ describe('Metadata', () => {
       const result = (meta as any).genAlternateLocales('en', '/test');
 
       expect(result).toHaveProperty('x-default', expect.stringContaining('/test'));
-      expect(result).toHaveProperty('zh-CN', expect.stringContaining('hl=zh-CN'));
+      expect(result).toHaveProperty('ru-RU', expect.stringContaining('hl=ru-RU'));
       expect(result).not.toHaveProperty('en');
     });
   });

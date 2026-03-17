@@ -1,6 +1,6 @@
 'use client';
 
-import { Flexbox } from '@lobehub/ui';
+import { Flexbox, Text } from '@lobehub/ui';
 import { memo } from 'react';
 
 import PageTitle from '@/components/PageTitle';
@@ -19,8 +19,31 @@ const TrainingPage = memo(() => {
     <>
       <PageTitle title="Тренажеры" />
       <NavHeader right={<WideScreenButton />} />
-      <Flexbox height={'100%'} style={{ overflowY: 'auto', paddingBottom: '16vh' }} width={'100%'}>
-        <WideScreenContainer>{isLogin && <TrainingAgents />}</WideScreenContainer>
+      <Flexbox
+        height="100%"
+        style={{ overflowY: 'auto', paddingBottom: '16vh', paddingInline: 16, paddingTop: 8 }}
+        width="100%"
+      >
+        <WideScreenContainer>
+          {isLogin ? (
+            <>
+              <TrainingAgents />
+            </>
+          ) : (
+            <Flexbox
+              align="center"
+              justify="center"
+              style={{
+                minHeight: 280,
+                color: 'var(--colorTextSecondary)',
+                textAlign: 'center',
+                padding: 24,
+              }}
+            >
+              <Text>Войдите в аккаунт, чтобы видеть тренажёры и запускать их.</Text>
+            </Flexbox>
+          )}
+        </WideScreenContainer>
       </Flexbox>
     </>
   );

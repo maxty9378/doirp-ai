@@ -651,6 +651,69 @@
       "when": 1772804241829,
       "tag": "0092_pink_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1773646293589,
+      "tag": "0093_yellow_sentinels",
+      "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1773700000000,
+      "tag": "0094_voice_call_sessions",
+      "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "7",
+      "when": 1773800000000,
+      "tag": "0095_training_analyze_debrief_prompts",
+      "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "7",
+      "when": 1773900000000,
+      "tag": "0096_training_editor_ui_prompts",
+      "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1774000000000,
+      "tag": "0097_training_in_call_prompts",
+      "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1774100000000,
+      "tag": "0098_training_in_call_prompts_defaults",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1774200000000,
+      "tag": "0099_training_prompts_labels_opening_and_intro_toggle",
+      "breakpoints": true
+    },
+    {
+      "idx": 100,
+      "version": "7",
+      "when": 1774300000000,
+      "tag": "0100_gfd_stress_sync_editable",
+      "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1774400000000,
+      "tag": "0101_gfd_efirny_press_labels",
+      "breakpoints": true
     }
   ],
   "version": "6"

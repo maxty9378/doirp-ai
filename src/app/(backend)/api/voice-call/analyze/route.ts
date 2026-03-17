@@ -4,8 +4,9 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
+import { getTrainingScenarioByKey } from '@/server/services/training';
 
-const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
 
 export interface TranscriptEntryInput {
@@ -29,14 +30,12 @@ export interface AnalyzeResponse {
 
 function formatTranscript(entries: TranscriptEntryInput[]): string {
   return entries
-    .map((e) =>
-      e.role === 'ai' ? 'Клиент/ЛПР: ' + e.text : 'Пользователь/Стажер: ' + e.text,
-    )
+    .map((e) => (e.role === 'ai' ? 'Собеседник: ' : 'Пользователь: ') + e.text)
     .join('\n');
 }
 
 const ANALYZE_PROMPT = (transcript: string) =>
-  `Ты — эксперт по продажам и тренер. Оцени транскрипт диалога стажера с клиентом (ЛПР) в тренажере.
+  `Ты — эксперт по коммуникациям и кризис-менеджменту. Оцени транскрипт стресс-интервью маркетолога компании с провокационным собеседником.
 
 Транскрипт:
 """
@@ -47,27 +46,35 @@ ${transcript}
 {
   "overallScore": число от 0 до 100 (общий балл в процентах),
   "competencies": [
-    { "name": "Управление конфликтами", "score": число 0-100 },
-    { "name": "Активное слушание и эмпатия", "score": число 0-100 },
-    { "name": "Навыки убеждения", "score": число 0-100 },
-    { "name": "Работа с возражениями", "score": число 0-100 },
-    { "name": "Ориентация на выгоду", "score": число 0-100 }
+    { "name": "Стрессоустойчивость", "score": число 0-100 },
+    { "name": "Аргументация и фактология", "score": число 0-100 },
+    { "name": "Управление конфликтом/эмоциями", "score": число 0-100 },
+    { "name": "Следование этике бренда", "score": число 0-100 }
   ],
   "summary": "Краткое текстовое резюме (2-4 предложения): сильные стороны и области для улучшения.",
   "strengths": ["сильная сторона 1", "сильная сторона 2"],
   "improvements": ["что конкретно улучшить 1", "что конкретно улучшить 2"],
-  "recommendedAction": "Рекомендованное следующее действие для закрепления навыка",
+  "recommendedAction": "Рекомендованное следующее действие для развития навыков коммуникации",
   "phraseFeedback": [
     {
-      "userPhrase": "реплика стажера из транскрипта",
+      "userPhrase": "реплика маркетолога из транскрипта",
       "suggestedPhrase": "как лучше было сказать в этой ситуации",
       "advice": "краткое пояснение, почему так лучше"
     }
   ]
 }
 
-Правила для phraseFeedback: разбери по очереди реплики стажера. Для каждой реплики дай один объект с предлагаемым улучшением. Если реплика была удачной — suggestedPhrase может совпадать или быть с небольшим улучшением, advice — что сделано хорошо.
+Правила для phraseFeedback: разбери по очереди реплики маркетолога. Для каждой реплики дай один объект с предлагаемым улучшением. Если реплика была удачной — suggestedPhrase может совпадать или быть с небольшим улучшением, advice — что сделано хорошо.
 Пиши все тексты по-русски.`;
+
+function buildAnalyzePrompt(transcript: string, scenarioId?: string | null): Promise<string> {
+  if (!scenarioId?.trim()) return Promise.resolve(ANALYZE_PROMPT(transcript));
+  return getTrainingScenarioByKey(scenarioId.trim()).then((scenario) => {
+    const custom = scenario?.analyzePrompt?.trim();
+    if (custom) return custom.replace(/\{\{transcript\}\}/g, transcript);
+    return ANALYZE_PROMPT(transcript);
+  });
+}
 
 export const runtime = 'nodejs';
 
@@ -78,14 +85,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json()) as { transcript?: TranscriptEntryInput[] };
+    const body = (await req.json()) as { transcript?: TranscriptEntryInput[]; scenarioId?: string };
     const entries = Array.isArray(body?.transcript) ? body.transcript : [];
     const transcript = formatTranscript(entries);
     if (!transcript.trim()) {
       return NextResponse.json({ error: 'transcript is required (array of { role, text })' }, { status: 400 });
     }
 
-    const { GOOGLE_API_KEY } = getLLMConfig();
+    const promptText = await buildAnalyzePrompt(transcript, body.scenarioId);
+
+    const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
     if (!apiKey) {
       return NextResponse.json(
@@ -94,12 +103,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const endpoint = `${GOOGLE_API_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
+    const endpoint = `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: ANALYZE_PROMPT(transcript) }] }],
+        contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
           maxOutputTokens: 4096,
           temperature: 0.3,

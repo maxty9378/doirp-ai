@@ -2,10 +2,10 @@
 
 import { SESSION_CHAT_URL } from '@lobechat/const';
 import { ActionIcon, Avatar, Block, Flexbox, Text } from '@lobehub/ui';
-import { App, Dropdown, Modal } from 'antd';
+import { Dropdown, Modal, message } from 'antd';
 import { cssVar } from 'antd-style';
 import { BotIcon, MoreVertical, Upload } from 'lucide-react';
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import GroupBlock from '@/app/[variants]/(main)/home/features/components/GroupBlock';
@@ -25,9 +25,26 @@ import { useSessionStore } from '@/store/session';
 
 import { compressImageForBanner } from './compressBannerImage';
 import TrainingAgentItem from './Item';
+import TrainingScenarioCard, {
+  type TrainingScenarioFromApi,
+} from './TrainingScenarioCard';
 
 const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
 const FIELD_FIGHTER_AGENT_ID = 'training-tp-price-objection';
+const GFD_STRESS_KEY = 'training-gfd-stress';
+
+/** Обложка GFD — статический файл из public */
+const GFD_COVER_IMAGE = '/images/voice-call/gfd-cover.png';
+
+/** Карточка GFD всегда показывается (даже если API не вернул сценарии) */
+const GFD_STRESS_FALLBACK: TrainingScenarioFromApi = {
+  key: GFD_STRESS_KEY,
+  title: 'GFD: Стресс‑интервью на выставке',
+  description:
+    'Публичное интервью на выставке: провокационная журналистка проверяет маркетолога GFD на стрессоустойчивость.',
+  bannerUrl: GFD_COVER_IMAGE,
+};
+
 const TRAINING_CARD_WIDTH = 380;
 const TRAINING_CARD_WITH_BANNER_MIN_HEIGHT = 320;
 const TRAINING_BANNER_FALLBACK_COVER = '/images/voice-call/field-fighter-cover.svg';
@@ -46,7 +63,6 @@ const toTrainingBannerUrl = (path: string) => {
 
 const TrainingAgents = memo(() => {
   const navigate = useNavigate();
-  const { message } = App.useApp();
   const isAdmin = useIsAdmin();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activePresetKey, setActivePresetKey] = useState<string | null>(null);
@@ -57,6 +73,44 @@ const TrainingAgents = memo(() => {
   const hnBannerFileInputRef = useRef<HTMLInputElement | null>(null);
   const [isHnBannerUploading, setIsHnBannerUploading] = useState(false);
   const hnBannerUrl = useTrainingBannerUrl('hn');
+  const [voiceScenarios, setVoiceScenarios] = useState<TrainingScenarioFromApi[]>([]);
+  const [voiceScenariosLoading, setVoiceScenariosLoading] = useState(true);
+  const [voiceScenarioStartingKey, setVoiceScenarioStartingKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setVoiceScenariosLoading(true);
+    fetch('/api/training/scenarios', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : { scenarios: [] }))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.scenarios)) {
+          setVoiceScenarios(
+            data.scenarios.map((s: { key: string; title: string; description?: string; bannerUrl?: string }) => ({
+              key: s.key,
+              title: s.title,
+              description: s.description ?? null,
+              bannerUrl: s.bannerUrl ?? null,
+            })),
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setVoiceScenariosLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openVoiceScenario = useCallback(
+    (key: string) => {
+      if (voiceScenarioStartingKey) return;
+      setVoiceScenarioStartingKey(key);
+      navigate(`/voice-call?agentId=${encodeURIComponent(key)}`);
+      setVoiceScenarioStartingKey(null);
+    },
+    [navigate, voiceScenarioStartingKey],
+  );
 
   const openHardNegotiationSession = useCallback(
     async (preset: InitialTrainingAgentPreset) => {
@@ -239,10 +293,25 @@ const TrainingAgents = memo(() => {
       )}
 
       <ScrollShadowWithButton>
+        {/* GFD — всегда первый и сразу, без ожидания API; остальные сценарии не показываем (не листаются, не активны) */}
+        {(() => {
+          const gfdFromApi = voiceScenarios.find((s) => s.key === GFD_STRESS_KEY);
+          const gfdScenario = gfdFromApi ?? GFD_STRESS_FALLBACK;
+          return (
+            <TrainingScenarioCard
+              key={gfdScenario.key}
+              loading={voiceScenarioStartingKey === gfdScenario.key}
+              scenario={gfdScenario}
+              onClick={() => openVoiceScenario(gfdScenario.key)}
+            />
+          );
+        })()}
+
         {INITIAL_TRAINING_AGENT_PRESETS.filter(
           (preset) => preset.marketIdentifier === FIELD_FIGHTER_MARKET_ID,
         ).map((preset) => (
           <TrainingAgentItem
+            inDevelopment
             isAdmin={isAdmin}
             isUploadingBanner={isBannerUploading}
             key={preset.key}
@@ -256,7 +325,7 @@ const TrainingAgents = memo(() => {
         ))}
 
         <Block
-          clickable
+          clickable={false}
           flex={'none'}
           justify={'space-between'}
           variant={'filled'}
@@ -264,11 +333,12 @@ const TrainingAgents = memo(() => {
           style={{
             backgroundColor: cssVar.colorFillQuaternary,
             borderRadius: cssVar.borderRadiusLG,
-            cursor: 'pointer',
+            cursor: 'not-allowed',
             minHeight: TRAINING_CARD_WITH_BANNER_MIN_HEIGHT,
+            opacity: 0.45,
+            filter: 'grayscale(0.85)',
             overflow: 'hidden',
           }}
-          onClick={() => setHardNegotiationsModalOpen(true)}
         >
           <div
             style={{
@@ -282,6 +352,27 @@ const TrainingAgents = memo(() => {
               width: '100%',
             }}
           >
+            <span
+              style={{
+                backdropFilter: 'blur(6px)',
+                background:
+                  'linear-gradient(135deg, rgba(16, 185, 129, 0.96) 0%, rgba(5, 150, 105, 0.96) 100%)',
+                border: '1px solid rgba(167, 243, 208, 0.65)',
+                borderRadius: 999,
+                color: '#ecfdf5',
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                padding: '5px 10px',
+                position: 'absolute',
+                left: 10,
+                textTransform: 'uppercase',
+                top: 10,
+                zIndex: 5,
+              }}
+            >
+              В разработке
+            </span>
             {isAdmin && (
               <div
                 style={{ position: 'absolute', right: 4, top: 4, zIndex: 10 }}
@@ -340,7 +431,7 @@ const TrainingAgents = memo(() => {
                 Управленческие поединки в чате
               </Text>
               <Text fontSize={12} style={{ lineHeight: '16px', minHeight: 16 }} type={'secondary'}>
-                Нажмите, чтобы выбрать режим
+                В разработке
               </Text>
             </Flexbox>
             <Avatar

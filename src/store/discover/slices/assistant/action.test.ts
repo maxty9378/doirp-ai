@@ -21,7 +21,7 @@ describe('AssistantAction', () => {
       ];
 
       vi.spyOn(discoverService, 'getAssistantCategories').mockResolvedValue(mockCategories as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = {} as any;
       const { result } = renderHook(() => useStore.getState().useAssistantCategories(params));
@@ -37,7 +37,7 @@ describe('AssistantAction', () => {
       const mockCategories = [{ id: 'cat-1', name: 'Custom Category' }];
 
       vi.spyOn(discoverService, 'getAssistantCategories').mockResolvedValue(mockCategories as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { filter: 'popular' } as any;
       const { result } = renderHook(() => useStore.getState().useAssistantCategories(params));
@@ -59,7 +59,7 @@ describe('AssistantAction', () => {
       };
 
       vi.spyOn(discoverService, 'getAssistantDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'test-assistant' };
       const { result } = renderHook(() => useStore.getState().useAssistantDetail(params));
@@ -79,7 +79,7 @@ describe('AssistantAction', () => {
       };
 
       vi.spyOn(discoverService, 'getAssistantDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'test-assistant' };
       const { result } = renderHook(() => useStore.getState().useAssistantDetail(params));
@@ -119,7 +119,7 @@ describe('AssistantAction', () => {
       };
 
       vi.spyOn(discoverService, 'getAssistantList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const { result } = renderHook(() => useStore.getState().useAssistantList());
 
@@ -140,7 +140,7 @@ describe('AssistantAction', () => {
       };
 
       vi.spyOn(discoverService, 'getAssistantList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 2, pageSize: 10, category: 'productivity' } as any;
       const { result } = renderHook(() => useStore.getState().useAssistantList(params));
@@ -158,7 +158,7 @@ describe('AssistantAction', () => {
 
     it('should convert page and pageSize to numbers', async () => {
       vi.spyOn(discoverService, 'getAssistantList').mockResolvedValue({ items: [] } as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 3, pageSize: 15 } as any;
       const { result } = renderHook(() => useStore.getState().useAssistantList(params));
@@ -180,7 +180,7 @@ describe('AssistantAction', () => {
       };
 
       vi.spyOn(discoverService, 'getAssistantList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { search: 'coding', page: 1, pageSize: 21 } as any;
       const { result } = renderHook(() => useStore.getState().useAssistantList(params));
@@ -203,7 +203,7 @@ describe('AssistantAction', () => {
       };
 
       vi.spyOn(discoverService, 'getAssistantList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = {
         category: 'development',

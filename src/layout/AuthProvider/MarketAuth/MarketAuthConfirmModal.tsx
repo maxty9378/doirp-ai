@@ -1,7 +1,8 @@
 'use client';
 
 import { BRANDING_NAME } from '@lobechat/business-const';
-import { Block, Modal, Text } from '@lobehub/ui';
+import { Block, Text } from '@lobehub/ui';
+import { Modal } from 'antd';
 import { createStaticStyles, cx } from 'antd-style';
 import { memo } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
@@ -72,12 +73,8 @@ const MarketAuthConfirmModal = memo<MarketAuthConfirmModalProps>(
         open={open}
         title={null}
         width={440}
-        classNames={{
-          container: cx(styles.container, isDarkMode && styles.container_dark),
-        }}
-        paddings={{
-          desktop: 24,
-        }}
+        className={cx(styles.container, isDarkMode && styles.container_dark)}
+        styles={{ body: { padding: 24 } }}
         onCancel={onCancel}
         onOk={onConfirm}
       >

@@ -58,7 +58,7 @@ describe('ModelAction', () => {
       };
 
       vi.spyOn(discoverService, 'getModelDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'gpt-4' };
       const { result } = renderHook(() => useStore.getState().useModelDetail(params));
@@ -77,7 +77,7 @@ describe('ModelAction', () => {
       };
 
       vi.spyOn(discoverService, 'getModelDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'gpt-4' };
       const { result } = renderHook(() => useStore.getState().useModelDetail(params));
@@ -92,7 +92,7 @@ describe('ModelAction', () => {
 
     it('should return undefined when model is not found', async () => {
       vi.spyOn(discoverService, 'getModelDetail').mockResolvedValue(undefined);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'non-existent-model' };
       const { result } = renderHook(() => useStore.getState().useModelDetail(params));
@@ -132,7 +132,7 @@ describe('ModelAction', () => {
       };
 
       vi.spyOn(discoverService, 'getModelList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const { result } = renderHook(() => useStore.getState().useModelList());
 
@@ -153,7 +153,7 @@ describe('ModelAction', () => {
       };
 
       vi.spyOn(discoverService, 'getModelList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 2, pageSize: 10, category: 'llm' } as any;
       const { result } = renderHook(() => useStore.getState().useModelList(params));
@@ -171,7 +171,7 @@ describe('ModelAction', () => {
 
     it('should convert page and pageSize to numbers', async () => {
       vi.spyOn(discoverService, 'getModelList').mockResolvedValue({ items: [] } as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 3, pageSize: 15 } as any;
       const { result } = renderHook(() => useStore.getState().useModelList(params));
@@ -193,7 +193,7 @@ describe('ModelAction', () => {
       };
 
       vi.spyOn(discoverService, 'getModelList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { category: 'vision' } as any;
       const { result } = renderHook(() => useStore.getState().useModelList(params));
@@ -216,7 +216,7 @@ describe('ModelAction', () => {
       };
 
       vi.spyOn(discoverService, 'getModelList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ja-JP');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const { result } = renderHook(() => useStore.getState().useModelList());
 
@@ -234,7 +234,7 @@ describe('ModelAction', () => {
       };
 
       vi.spyOn(discoverService, 'getModelList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { search: 'gpt', page: 1, pageSize: 10 } as any;
       const { result } = renderHook(() => useStore.getState().useModelList(params));

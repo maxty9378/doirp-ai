@@ -265,7 +265,6 @@ export function defineConfig(config: CustomNextConfig) {
     ...(config.outputFileTracingIncludes && {
       outputFileTracingIncludes: config.outputFileTracingIncludes,
     }),
-    eslint: { ignoreDuringBuilds: true },
     reactStrictMode: true,
     redirects: async () => [
       {
@@ -357,7 +356,12 @@ export function defineConfig(config: CustomNextConfig) {
       'pdfjs-dist',
     ],
 
-    transpilePackages: ['@mohtasham/md-to-docx', 'mermaid', 'better-auth-harmony'],
+    transpilePackages: [
+      '@lobechat/database',
+      '@mohtasham/md-to-docx',
+      'better-auth-harmony',
+      'mermaid',
+    ],
     turbopack: {
       rules: isTest
         ? void 0

@@ -21,7 +21,7 @@ describe('PluginAction', () => {
       ];
 
       vi.spyOn(discoverService, 'getPluginCategories').mockResolvedValue(mockCategories as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = {} as any;
       const { result } = renderHook(() => useStore.getState().usePluginCategories(params));
@@ -43,7 +43,7 @@ describe('PluginAction', () => {
       };
 
       vi.spyOn(discoverService, 'getPluginDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'test-plugin', withManifest: true };
       const { result } = renderHook(() => useStore.getState().usePluginDetail(params));
@@ -92,7 +92,7 @@ describe('PluginAction', () => {
       };
 
       vi.spyOn(discoverService, 'getPluginList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const { result } = renderHook(() => useStore.getState().usePluginList());
 
@@ -113,7 +113,7 @@ describe('PluginAction', () => {
       };
 
       vi.spyOn(discoverService, 'getPluginList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 2, pageSize: 10, category: 'development' } as any;
       const { result } = renderHook(() => useStore.getState().usePluginList(params));
@@ -131,7 +131,7 @@ describe('PluginAction', () => {
 
     it('should convert page and pageSize to numbers', async () => {
       vi.spyOn(discoverService, 'getPluginList').mockResolvedValue({ items: [] } as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 3, pageSize: 15 } as any;
       const { result } = renderHook(() => useStore.getState().usePluginList(params));

@@ -49,6 +49,7 @@ const RootLayout = async ({ children, params }: RootLayoutProps) => {
   return (
     <html suppressHydrationWarning dir={direction} lang={locale}>
       <head>
+        <meta charSet="utf-8" />
         <script dangerouslySetInnerHTML={{ __html: `(${outdateBrowserScript.toString()})();` }} />
         {process.env.DEBUG_REACT_SCAN === '1' && (
           <Script
@@ -143,7 +144,7 @@ export const generateViewport = async (props: DynamicLayoutProps): ResolvingView
 export const generateStaticParams = () => {
   const mobileOptions = isDesktop ? [false] : [true, false];
   // only static for several page, other go to dynamic
-  const staticLocales: Locales[] = [DEFAULT_LANG, 'zh-CN'];
+  const staticLocales: Locales[] = [DEFAULT_LANG];
 
   const variants: { variants: string }[] = [];
 

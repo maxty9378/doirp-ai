@@ -62,8 +62,10 @@ export enum SettingsTabs {
   Storage = 'storage',
   SystemTools = 'system-tools',
   TTS = 'tts',
+  TrainingAdmin = 'training-admin',
   Usage = 'usage',
   Users = 'users',
+  VoiceService = 'voice-service',
   /* eslint-enable typescript-sort-keys/string-enum */
 }
 

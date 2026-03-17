@@ -7,12 +7,13 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { VOICE_CALL_PRESETS, VOICE_SIMULATOR_LPR_PRESET } from '@/config/initialAgents';
 import { getLLMConfig } from '@/envs/llm';
+import { getTrainingScenarioByKey } from '@/server/services/training';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 
 const GEMINI_TTS_MODEL = 'gemini-2.5-pro-preview-tts';
 const LEGEND_VOICE = 'Charon';
 const DEFAULT_SAMPLE_RATE = 24_000;
-const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 
 const sanitizeAgentId = (agentId: string) => agentId.replaceAll(/[^\w-]/g, '-');
 
@@ -82,19 +83,28 @@ export async function POST(request: Request) {
     const body = (await request.json().catch(() => ({}))) as { agentId?: string };
     const agentId = body.agentId || 'training-tp-price-objection';
     const preset = VOICE_CALL_PRESETS[agentId] || VOICE_SIMULATOR_LPR_PRESET;
+    const scenario = await getTrainingScenarioByKey(agentId);
 
-    const legendText = buildLegendText(preset);
+    const legendText = scenario
+      ? buildLegendText({
+          goals: scenario.goals || [],
+          scenario_context: scenario.legend || '',
+          title: scenario.title,
+          user_role: scenario.userRole || '',
+        })
+      : buildLegendText(preset);
     if (!legendText) {
       return NextResponse.json({ error: 'Legend text is empty' }, { status: 400 });
     }
 
-    const { GOOGLE_API_KEY } = getLLMConfig();
-    const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
+    const { GOOGLE_API_KEY, GOOGLE_TTS_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
+    const apiKey = apiKeyManager.pick(GOOGLE_TTS_API_KEY ?? GOOGLE_API_KEY);
     if (!apiKey) {
       return NextResponse.json({ error: 'GOOGLE_API_KEY is not configured' }, { status: 503 });
     }
 
-    const endpoint = `${GOOGLE_API_BASE}/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
+    const endpoint = `${baseUrl}/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const googleResponse = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -1,7 +1,19 @@
 'use client';
 
+import { Flexbox } from '@lobehub/ui';
+import { type FC } from 'react';
 import { Outlet } from 'react-router-dom';
 
-const VoiceCallLayout = () => <Outlet />;
+import Sidebar from './Sidebar';
+import { styles } from './style';
+
+const VoiceCallLayout: FC = () => (
+  <>
+    <Sidebar />
+    <Flexbox className={styles.mainContainer} flex={1} height="100%">
+      <Outlet />
+    </Flexbox>
+  </>
+);
 
 export default VoiceCallLayout;

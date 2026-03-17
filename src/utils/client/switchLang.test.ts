@@ -21,7 +21,7 @@ describe('switchLang', () => {
   });
 
   it('should change language to the specified locale', () => {
-    const locale: LocaleMode = 'en-US';
+    const locale: LocaleMode = 'ru-RU';
     switchLang(locale);
 
     expect(changeLanguage).toHaveBeenCalledWith(locale);
@@ -30,7 +30,7 @@ describe('switchLang', () => {
   });
 
   it('should change language based on navigator.language when locale is "auto"', () => {
-    const navigatorLanguage = 'fr';
+    const navigatorLanguage = 'ru-RU';
     vi.spyOn(navigator, 'language', 'get').mockReturnValue(navigatorLanguage);
 
     switchLang('auto');

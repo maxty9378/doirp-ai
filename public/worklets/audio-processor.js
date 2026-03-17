@@ -1,7 +1,7 @@
 class AudioProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
-    this.buffer = new Int16Array(2048);
+    this.buffer = new Int16Array(512);
     this.bufferIndex = 0;
   }
 
@@ -17,7 +17,7 @@ class AudioProcessor extends AudioWorkletProcessor {
       volumeSum += Math.abs(channel[i]);
     }
     // Отправляем пачку данных (2048 сэмплов), когда буфер заполнен
-    if (this.bufferIndex >= 2048) {
+    if (this.bufferIndex >= 512) {
       const bufferCopy = this.buffer.buffer.slice(0);
       this.port.postMessage(
         {
@@ -27,7 +27,7 @@ class AudioProcessor extends AudioWorkletProcessor {
         [bufferCopy],
       );
 
-      this.buffer = new Int16Array(2048);
+      this.buffer = new Int16Array(512);
       this.bufferIndex = 0;
     }
     return true;
@@ -35,3 +35,4 @@ class AudioProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor('audio-processor', AudioProcessor);
+

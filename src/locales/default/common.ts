@@ -27,6 +27,7 @@ export default {
   'autoGenerateTooltipDisabled': 'Add an Agent Profile first to use Autocomplete',
   'back': 'Back',
   'batchDelete': 'Batch Delete',
+  'badge.beta': 'Бета',
   'blog': 'Product Blog',
   'branching': 'Create Subtopic',
   'branchingDisable':
@@ -489,6 +490,7 @@ export default {
   'tab.search': 'Search',
   'tab.setting': 'Settings',
   'tab.video': 'Video',
+  'tab.voiceService': 'Сервис озвучки',
   'telemetry.allow': 'Allow',
   'telemetry.deny': 'Deny',
   'telemetry.desc':

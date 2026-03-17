@@ -1,7 +1,7 @@
 'use client';
 
 import { Flexbox, Tag } from '@lobehub/ui';
-import { Bot, HomeIcon, SearchIcon } from 'lucide-react';
+import { Bot, HomeIcon, Mic2, SearchIcon } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
@@ -24,6 +24,7 @@ interface Item {
   hidden?: boolean | undefined;
   icon: NavItemProps['icon'];
   isNew?: boolean;
+  isBeta?: boolean;
   key: string;
   onClick?: () => void;
   title: NavItemProps['title'];
@@ -77,9 +78,17 @@ const Nav = memo(() => {
       },
       {
         icon: Bot,
+        isBeta: true,
         key: 'training',
         title: 'Тренажеры',
         url: '/training',
+      },
+      {
+        icon: Mic2,
+        isBeta: true,
+        key: 'voice-service',
+        title: t('tab.voiceService'),
+        url: '/voice-service',
       },
     ],
     [enableBusinessFeatures, showAiImage, t, toggleCommandMenu],
@@ -90,11 +99,16 @@ const Nav = memo(() => {
       {t('new')}
     </Tag>
   );
+  const betaBadge = (
+    <Tag color="orange" size="small">
+      {t('badge.beta', { defaultValue: 'Бета' })}
+    </Tag>
+  );
 
   return (
     <Flexbox gap={1} paddingInline={4}>
       {items.map((item) => {
-        const extra = item.isNew ? newBadge : undefined;
+        const extra = item.isNew ? newBadge : item.isBeta ? betaBadge : undefined;
         const content = (
           <NavItem
             active={tab === item.key}

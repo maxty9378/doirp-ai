@@ -22,7 +22,7 @@ describe('MCPAction', () => {
       };
 
       vi.spyOn(discoverService, 'getMcpDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'test-mcp', version: '1.0.0' };
       const { result } = renderHook(() => useStore.getState().useFetchMcpDetail(params));
@@ -52,7 +52,7 @@ describe('MCPAction', () => {
       };
 
       vi.spyOn(discoverService, 'getMcpList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const { result } = renderHook(() => useStore.getState().useFetchMcpList({}));
 
@@ -73,7 +73,7 @@ describe('MCPAction', () => {
       };
 
       vi.spyOn(discoverService, 'getMcpList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 2, pageSize: 10, category: 'data-analysis' } as any;
       const { result } = renderHook(() => useStore.getState().useFetchMcpList(params));
@@ -91,7 +91,7 @@ describe('MCPAction', () => {
 
     it('should convert page and pageSize to numbers', async () => {
       vi.spyOn(discoverService, 'getMcpList').mockResolvedValue({ items: [] } as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 3, pageSize: 15 } as any;
       const { result } = renderHook(() => useStore.getState().useFetchMcpList(params));
@@ -115,7 +115,7 @@ describe('MCPAction', () => {
       ];
 
       vi.spyOn(discoverService, 'getMcpCategories').mockResolvedValue(mockCategories as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = {} as any;
       const { result } = renderHook(() => useStore.getState().useMcpCategories(params));

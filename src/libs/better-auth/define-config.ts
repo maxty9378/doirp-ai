@@ -34,6 +34,7 @@ import { UserService } from '@/server/services/user';
 // Configure HTTP proxy for OAuth provider requests in development (e.g., Google token exchange)
 // Node.js native fetch doesn't respect system proxy settings
 // Ref: https://github.com/better-auth/better-auth/issues/7396
+// undici ProxyAgent supports only http: and https:; socks5:// must be skipped to avoid InvalidArgumentError
 if (process.env.NODE_ENV === 'development') {
   const proxyUrl =
     process.env.HTTPS_PROXY ||
@@ -41,8 +42,9 @@ if (process.env.NODE_ENV === 'development') {
     process.env.HTTP_PROXY ||
     process.env.http_proxy;
 
-  if (proxyUrl) {
-    const proxyAgent = new ProxyAgent(proxyUrl);
+  const trimmed = typeof proxyUrl === 'string' ? proxyUrl.trim() : '';
+  if (trimmed && (trimmed.startsWith('http:') || trimmed.startsWith('https:'))) {
+    const proxyAgent = new ProxyAgent(trimmed);
     setGlobalDispatcher(proxyAgent);
   }
 }

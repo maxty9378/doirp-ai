@@ -1,4 +1,4 @@
-import { Button, Flexbox } from '@lobehub/ui';
+import { Button } from '@lobehub/ui';
 import { ImageIcon } from 'lucide-react';
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -39,7 +39,7 @@ const ImageUrlsUpload = memo(() => {
   const canAddFromGallery = (value?.length ?? 0) < REFERENCE_IMAGES_MAX_COUNT;
 
   return (
-    <Flexbox gap={8} vertical>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <MultiImagesUpload
         maxCount={REFERENCE_IMAGES_MAX_COUNT}
         value={value}
@@ -64,7 +64,7 @@ const ImageUrlsUpload = memo(() => {
         onClose={() => setGalleryOpen(false)}
         onSelect={handlePickFromGallery}
       />
-    </Flexbox>
+    </div>
   );
 });
 

@@ -1,4 +1,3 @@
-import webpack from 'webpack';
 import { defineConfig } from './src/libs/next/config/define-config';
 
 const isVercel = !!process.env.VERCEL_ENV;
@@ -48,21 +47,6 @@ const nextConfig = defineConfig({
       webpackConfig.infrastructureLogging = {
         level: 'error',
       };
-      // Прогресс компиляции: проценты и текущий этап в одной строке
-      webpackConfig.plugins = webpackConfig.plugins || [];
-      webpackConfig.plugins.push(
-        new webpack.ProgressPlugin((percentage, message, ...args) => {
-          const pct = Math.round(percentage * 100);
-          if (process.stdout.isTTY) {
-            if (percentage < 1) {
-              const msg = [message, ...args].filter(Boolean).join(' ') || 'compiling...';
-              process.stdout.write(`\r○ Compiling ${pct}% ${msg.slice(0, 50)}    `);
-            } else {
-              process.stdout.write(`\r✓ Compiled\n`);
-            }
-          }
-        }),
-      );
     }
 
     return webpackConfig;

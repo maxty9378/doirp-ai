@@ -1,12 +1,45 @@
+import { headers } from 'next/headers';
+import { execFile } from 'node:child_process';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 import { NextResponse } from 'next/server';
 
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import fetch from 'node-fetch';
+import { SocksProxyAgent } from 'socks-proxy-agent';
+
+import { auth } from '@/auth';
+import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
+
+const getProxyAgent = (): any | undefined => {
+  const url =
+    process.env.HTTPS_PROXY ||
+    process.env.https_proxy ||
+    process.env.HTTP_PROXY ||
+    process.env.http_proxy;
+  if (!url?.trim()) return undefined;
+  const u = url.trim();
+  if (u.startsWith('socks')) return new SocksProxyAgent(u);
+  return new HttpsProxyAgent(u);
+};
 
 const GEMINI_TTS_MODEL = 'gemini-2.5-pro-preview-tts';
 const DEFAULT_VOICE = 'Kore';
 const DEFAULT_SAMPLE_RATE = 24_000;
-const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const execFileAsync = promisify(execFile);
+
+let _ffmpegPath: string | null = null;
+
+const getFfmpegPath = () => {
+  if (_ffmpegPath) return _ffmpegPath;
+  _ffmpegPath = require('ffmpeg-static') as string;
+  return _ffmpegPath;
+};
 
 const toWavFromPcm16 = (pcm16: Buffer, sampleRate = DEFAULT_SAMPLE_RATE) => {
   const channels = 1;
@@ -33,10 +66,65 @@ const toWavFromPcm16 = (pcm16: Buffer, sampleRate = DEFAULT_SAMPLE_RATE) => {
   return Buffer.concat([header, pcm16]);
 };
 
+const toMp3 = async (input: Buffer, inputExt = 'wav') => {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'tts-mp3-'));
+  const inputPath = path.join(tempDir, `input.${inputExt}`);
+  const outputPath = path.join(tempDir, 'output.mp3');
+
+  try {
+    await fs.writeFile(inputPath, input);
+    const ffmpegPath = getFfmpegPath();
+    await execFileAsync(ffmpegPath, [
+      '-y',
+      '-i',
+      inputPath,
+      '-codec:a',
+      'libmp3lame',
+      '-b:a',
+      '192k',
+      outputPath,
+    ]);
+    return await fs.readFile(outputPath);
+  } finally {
+    await fs.rm(tempDir, { force: true, recursive: true });
+  }
+};
+
+const ensureAdmin = async () => {
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  const user = session?.user as { email?: string; username?: string } | undefined;
+  const username = user?.username;
+  const email = user?.email?.toLowerCase();
+
+  const byUsername = username === ADMIN_USERNAME;
+  const byEmail = ADMIN_EMAIL && email === ADMIN_EMAIL.toLowerCase();
+
+  if (!byUsername && !byEmail) return null;
+
+  return session;
+};
+
 export const runtime = 'nodejs';
 
 export const POST = async (req: Request) => {
   try {
+    const requestHeaders = await headers();
+    const host = requestHeaders.get('host') || '';
+    const isLocalHost =
+      host.startsWith('localhost') ||
+      host.startsWith('127.0.0.1') ||
+      host.startsWith('[::1]');
+    const allowLocalBypass =
+      process.env.NODE_ENV !== 'production' && isLocalHost && process.env.LOCAL_TTS_BYPASS !== '0';
+
+    const session = await ensureAdmin();
+    if (!session && !allowLocalBypass) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const payload = (await req.json()) as { text?: string; voice?: string };
     const text = payload?.text?.trim();
 
@@ -44,17 +132,18 @@ export const POST = async (req: Request) => {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
 
-    const { GOOGLE_API_KEY } = getLLMConfig();
-    const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
+    const { GOOGLE_API_KEY, GOOGLE_TTS_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
+    const apiKey = apiKeyManager.pick(GOOGLE_TTS_API_KEY ?? GOOGLE_API_KEY);
 
     if (!apiKey) {
       return NextResponse.json({ error: 'GOOGLE_API_KEY is not configured' }, { status: 500 });
     }
 
+    const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
     const voiceName = payload?.voice?.trim() || DEFAULT_VOICE;
-    const endpoint = `${GOOGLE_API_BASE}/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const endpoint = `${baseUrl}/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
-    const googleResponse = await fetch(endpoint, {
+    const fetchOptions = {
       body: JSON.stringify({
         contents: [{ parts: [{ text }] }],
         generationConfig: {
@@ -67,10 +156,16 @@ export const POST = async (req: Request) => {
         },
       }),
       headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
+      method: 'POST' as const,
+    };
+
+    const agent = getProxyAgent();
+    const googleResponse = await fetch(endpoint, {
+      ...fetchOptions,
+      ...(agent && { agent }),
     });
 
-    const result = (await googleResponse.json()) as {
+    let result: {
       candidates?: Array<{
         content?: {
           parts?: Array<{
@@ -80,12 +175,28 @@ export const POST = async (req: Request) => {
       }>;
       error?: { message?: string };
     };
+    try {
+      result = (await googleResponse.json()) as typeof result;
+    } catch {
+      const text = await googleResponse.text().catch(() => '');
+      return NextResponse.json(
+        {
+          error:
+            googleResponse.status === 429
+              ? 'Превышен лимит запросов к API озвучки (429). Попробуйте позже или проверьте квоту ключа.'
+              : `Ошибка ответа Gemini (${googleResponse.status}): ${text.slice(0, 200)}`,
+        },
+        { status: googleResponse.status >= 400 ? googleResponse.status : 502 },
+      );
+    }
 
     if (!googleResponse.ok) {
-      return NextResponse.json(
-        { error: result?.error?.message || 'Failed to synthesize speech with Gemini' },
-        { status: googleResponse.status || 500 },
-      );
+      const message =
+        result?.error?.message ||
+        (googleResponse.status === 429
+          ? 'Превышен лимит запросов к API озвучки (429). Попробуйте позже.'
+          : 'Не удалось синтезировать речь через Gemini.');
+      return NextResponse.json({ error: message }, { status: googleResponse.status || 500 });
     }
 
     const inlineData = result?.candidates?.[0]?.content?.parts?.[0]?.inlineData;
@@ -108,15 +219,24 @@ export const POST = async (req: Request) => {
         ? 'audio/wav'
         : mimeType || 'audio/wav';
 
-    return new Response(outputBuffer, {
+    const needsMp3 = !outputMimeType.toLowerCase().includes('audio/mpeg');
+    const mp3Buffer = needsMp3
+      ? await toMp3(outputBuffer, outputMimeType.toLowerCase().includes('wav') ? 'wav' : 'bin')
+      : outputBuffer;
+
+    return new Response(mp3Buffer, {
       headers: {
         'Cache-Control': 'no-store',
-        'Content-Type': outputMimeType,
+        'Content-Type': 'audio/mpeg',
       },
       status: 200,
     });
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('[webapi/tts/google] Failed to synthesize speech', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json(
+      { error: message.includes('fetch') ? 'Нет доступа к API Gemini. Проверьте сеть или GOOGLE_API_BASE.' : message },
+      { status: 500 },
+    );
   }
 };

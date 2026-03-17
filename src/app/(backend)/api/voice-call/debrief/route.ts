@@ -4,23 +4,32 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
+import { getTrainingScenarioByKey } from '@/server/services/training';
 
-const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
 
 const DEBRIEF_PROMPT = (transcript: string) =>
-  `Ты — эксперт по продажам и наставник. Ниже транскрипт диалога торгового представителя (ТП) с ЛПР (Марина Ивановна) в рамках тренажера по возражению "Дорого".
+  `Ты — эксперт по коммуникациям и кризис-менеджменту. Ниже транскрипт стресс-интервью маркетолога компании с провокационной журналисткой.
 
-Транскрипт (реплики ЛПР):
+Транскрипт:
 """
 ${transcript}
 """
 
-Дай краткий разбор для менеджера (3–5 предложений):
-1. Укажи 2 ошибки ТП в этом диалоге.
-2. Укажи 1 сильную сторону менеджера.
+Дай краткий разбор для сотрудника (3–5 предложений):
 
+Укажи 2 ошибки (где поддался на провокацию или использовал слабый аргумент).
+Укажи 1 сильную сторону (удачный ответ или сохранение хладнокровия).
 Пиши по-русски, конкретно и доброжелательно. Без вступления.`;
+
+async function buildDebriefPrompt(transcript: string, scenarioId?: string | null): Promise<string> {
+  if (!scenarioId?.trim()) return DEBRIEF_PROMPT(transcript);
+  const scenario = await getTrainingScenarioByKey(scenarioId.trim());
+  const custom = scenario?.debriefPrompt?.trim();
+  if (custom) return custom.replace(/\{\{transcript\}\}/g, transcript);
+  return DEBRIEF_PROMPT(transcript);
+}
 
 export const runtime = 'nodejs';
 
@@ -31,13 +40,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json()) as { transcript?: string };
+    const body = (await req.json()) as { transcript?: string; scenarioId?: string };
     const transcript = typeof body?.transcript === 'string' ? body.transcript.trim() : '';
     if (!transcript) {
       return NextResponse.json({ error: 'transcript is required' }, { status: 400 });
     }
 
-    const { GOOGLE_API_KEY } = getLLMConfig();
+    const promptText = await buildDebriefPrompt(transcript, body.scenarioId);
+
+    const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
     if (!apiKey) {
       return NextResponse.json(
@@ -46,12 +57,13 @@ export async function POST(req: Request) {
       );
     }
 
-    const endpoint = `${GOOGLE_API_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+    const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
+    const endpoint = `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: DEBRIEF_PROMPT(transcript) }] }],
+        contents: [{ parts: [{ text: promptText }] }],
         generationConfig: {
           maxOutputTokens: 512,
           temperature: 0.4,

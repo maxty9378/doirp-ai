@@ -84,6 +84,12 @@ const componentMap = {
   [SettingsTabs.Users]: dynamic(() => import('../users'), {
     loading: () => <Loading debugId="Settings > Users" />,
   }),
+  [SettingsTabs.TrainingAdmin]: dynamic(() => import('../training-admin'), {
+    loading: () => <Loading debugId="Settings > TrainingAdmin" />,
+  }),
+  [SettingsTabs.VoiceService]: dynamic(() => import('../voice-service'), {
+    loading: () => <Loading debugId="Settings > VoiceService" />,
+  }),
 };
 
 interface SettingsContentProps {
@@ -108,6 +114,7 @@ const SettingsContent = ({ mobile, activeTab }: SettingsContentProps) => {
         SettingsTabs.Stats,
         SettingsTabs.Security,
         SettingsTabs.Users,
+        SettingsTabs.VoiceService,
         ...(enableBusinessFeatures
           ? [
               SettingsTabs.Plans,

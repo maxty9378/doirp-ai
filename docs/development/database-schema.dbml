@@ -1292,6 +1292,54 @@ table sessions {
   }
 }
 
+table training_knowledge_entries {
+  id text [pk, not null]
+  scenario_id text [not null]
+  product_ingredient text [not null]
+  official_usp text [not null]
+  attack_myth text [not null]
+  accessed_at "timestamp with time zone" [not null, default: `now()`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+    scenario_id [name: 'training_knowledge_entries_scenario_id_idx']
+    product_ingredient [name: 'training_knowledge_entries_product_idx']
+  }
+}
+
+table training_scenarios {
+  id text [pk, not null]
+  key text [not null]
+  title text [not null]
+  description text
+  legend text
+  user_role text
+  goals jsonb [default: `[]`]
+  system_prompt text
+  assistant_label text
+  user_label text
+  voice_name text
+  banner_url text
+  context_window integer
+  silence_nudge_after_ms integer
+  silence_nudge_cooldown_ms integer
+  silence_hard_hangup_ms integer
+  silence_nudge_phrases jsonb [default: `[]`]
+  show_legend boolean [default: true]
+  enable_checkpoints boolean [default: false]
+  enable_scoring boolean [default: false]
+  is_active boolean [default: true]
+  accessed_at "timestamp with time zone" [not null, default: `now()`]
+  created_at "timestamp with time zone" [not null, default: `now()`]
+  updated_at "timestamp with time zone" [not null, default: `now()`]
+
+  indexes {
+    key [name: 'training_scenarios_key_unique', unique]
+    is_active [name: 'training_scenarios_active_idx']
+  }
+}
+
 table threads {
   id text [pk, not null]
   title text
@@ -1453,6 +1501,8 @@ table users {
   email_verified_at "timestamp with time zone"
   preference jsonb
   role text
+  daily_image_count integer [not null, default: 0]
+  last_image_date "timestamp with time zone"
   banned boolean [default: false]
   ban_reason text
   ban_expires "timestamp with time zone"

@@ -75,7 +75,7 @@ const Layout: FC = () => {
           <NavPanel />
           <DesktopLayoutContainer>
             <MarketAuthProvider isDesktop={isDesktop}>
-              {!isVoiceCall && (
+              {!isVoiceCall && pathname === '/' && (
                 <DesktopHomeLayout>
                   <DesktopHome />
                 </DesktopHomeLayout>

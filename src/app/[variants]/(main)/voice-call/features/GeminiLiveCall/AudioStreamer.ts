@@ -1,3 +1,6 @@
+/** Сколько миллисекунд накапливать перед первым воспроизведением (сглаживает заикание первой фразы). */
+const PREBUFFER_MS = 220;
+
 export class AudioStreamer {
   private context: AudioContext;
   private nextPlayTime: number = 0;
@@ -6,6 +9,9 @@ export class AudioStreamer {
   public isPlaying: boolean = false;
   public onPlayStateChange?: (playing: boolean) => void;
   private activeNodes: AudioBufferSourceNode[] = [];
+  /** Накапливаем сэмплы до первого воспроизведения. */
+  private prebufferSamples: number[] = [];
+  private prebufferFilled: boolean = false;
 
   constructor(context: AudioContext) {
     this.context = context;
@@ -23,23 +29,45 @@ export class AudioStreamer {
 
       const numSamples = Math.floor(bytes.length / 2);
       const pcm16 = new Int16Array(bytes.buffer, 0, numSamples);
-      const audioBuffer = this.context.createBuffer(1, pcm16.length, this.sampleRate);
-      const channelData = audioBuffer.getChannelData(0);
-
+      const samples: number[] = [];
       for (let i = 0; i < pcm16.length; i++) {
-        channelData[i] = pcm16[i] / 32768.0;
+        samples.push(pcm16[i] / 32768.0);
       }
+
+      if (!this.prebufferFilled) {
+        const needed = Math.floor((this.sampleRate * PREBUFFER_MS) / 1000);
+        for (const s of samples) this.prebufferSamples.push(s);
+        if (this.prebufferSamples.length >= needed) {
+          const first = this.prebufferSamples.slice(0, needed);
+          this.prebufferSamples = this.prebufferSamples.slice(needed);
+          this.prebufferFilled = true;
+          this.scheduleBuffer(this.samplesToBuffer(first));
+          if (this.prebufferSamples.length > 0) {
+            this.scheduleBuffer(this.samplesToBuffer(this.prebufferSamples));
+            this.prebufferSamples = [];
+          }
+        }
+        return;
+      }
+
+      const audioBuffer = this.samplesToBuffer(samples);
       this.scheduleBuffer(audioBuffer);
     } catch (e) {
       console.error('AudioStreamer decode error:', e);
     }
   }
 
+  private samplesToBuffer(samples: number[]): AudioBuffer {
+    const buffer = this.context.createBuffer(1, samples.length, this.sampleRate);
+    buffer.getChannelData(0).set(samples);
+    return buffer;
+  }
+
   private scheduleBuffer(buffer: AudioBuffer): void {
     if (this.context.state === 'suspended') this.context.resume();
 
     if (this.nextPlayTime < this.context.currentTime) {
-      this.nextPlayTime = this.context.currentTime + 0.05;
+      this.nextPlayTime = this.context.currentTime + 0.02;
     }
     const source = this.context.createBufferSource();
     source.buffer = buffer;
@@ -62,6 +90,8 @@ export class AudioStreamer {
   }
 
   stop(): void {
+    this.prebufferSamples = [];
+    this.prebufferFilled = false;
     this.activeNodes.forEach((node) => {
       try {
         node.stop();

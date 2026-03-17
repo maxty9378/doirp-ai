@@ -68,8 +68,10 @@ If you don't have it, please run \`openssl rand -base64 32\` to create one.
     // Prevent exhausting managed Postgres limits in dev (many worker processes),
     // which can cause random ECONNRESET/timeout errors in tRPC queries.
     const poolMaxFromEnv = Number.parseInt(process.env.DATABASE_POOL_MAX || '', 10);
+    const isDev = process.env.NODE_ENV !== 'production';
+    const poolMaxDefault = isTimeweb ? (isDev ? 1 : 2) : 10;
     const poolMax =
-      Number.isFinite(poolMaxFromEnv) && poolMaxFromEnv > 0 ? poolMaxFromEnv : isTimeweb ? 2 : 10;
+      Number.isFinite(poolMaxFromEnv) && poolMaxFromEnv > 0 ? poolMaxFromEnv : poolMaxDefault;
 
     const client = new NodePool({
       allowExitOnIdle: process.env.NODE_ENV !== 'production',

@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 
-const GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
+const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
 
 interface TranscriptEntry {
@@ -26,12 +26,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'transcript is required (non-empty array)' }, { status: 400 });
     }
 
-    const { GOOGLE_API_KEY } = getLLMConfig();
+    const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
     if (!apiKey) {
       return NextResponse.json({ error: 'No API key' }, { status: 503 });
     }
 
+    const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
     const prompt = `Ты — опытный бизнес-тренер. Ниже представлен транскрипт текущего звонка между стажером-продавцом (user) и недовольным клиентом (ai).
 Твоя задача: напиши ОДНУ короткую, идеальную фразу (прямую речь), которую стажер должен сказать прямо сейчас, чтобы отработать возражение и успокоить клиента.
 Не пиши никаких вступлений, только саму фразу, которую нужно произнести вслух.
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
 ${transcript.map((t) => `${t.role.toUpperCase()}: ${t.text}`).join('\n')}`;
 
     const response = await fetch(
-      `${GOOGLE_API_BASE}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -27,6 +27,9 @@ const setNavPanelSnapshot = (snapshot: NavPanelSnapshot) => {
   listeners.forEach((listener) => listener());
 };
 
+/** Сброс контента панели (например при уходе с маршрута voice-call) — снова покажется домашний сайдбар */
+export const clearNavPanelSnapshot = () => setNavPanelSnapshot(null);
+
 const NavPanel = memo(() => {
   const panelContent = useSyncExternalStore(
     subscribeNavPanel,

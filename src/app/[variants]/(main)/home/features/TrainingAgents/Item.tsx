@@ -15,6 +15,7 @@ const FIELD_FIGHTER_ICON = '/images/voice-call/trainer-ai-mic.svg';
 const TRAINING_BANNER_FALLBACK_ICON = '/images/voice-call/trainer-ai-mic.svg';
 
 interface TrainingAgentItemProps {
+  inDevelopment?: boolean;
   isAdmin?: boolean;
   isUploadingBanner?: boolean;
   loading?: boolean;
@@ -24,7 +25,7 @@ interface TrainingAgentItemProps {
 }
 
 const TrainingAgentItem = memo<TrainingAgentItemProps>(
-  ({ preset, onClick, loading, isAdmin, isUploadingBanner, onUpdateBanner }) => {
+  ({ preset, onClick, loading, isAdmin, isUploadingBanner, onUpdateBanner, inDevelopment }) => {
     const isFieldFighter = preset.marketIdentifier === FIELD_FIGHTER_MARKET_ID;
     const trainerBannerUrl = useTrainingBannerUrl();
 
@@ -45,9 +46,11 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
       },
     ];
 
+    const disabled = inDevelopment || loading;
+
     return (
       <Block
-        clickable
+        clickable={!disabled}
         flex={'none'}
         justify={'space-between'}
         variant={'filled'}
@@ -55,12 +58,13 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
         style={{
           backgroundColor: cssVar.colorFillQuaternary,
           borderRadius: cssVar.borderRadiusLG,
-          cursor: loading ? 'wait' : 'pointer',
+          cursor: disabled ? 'not-allowed' : loading ? 'wait' : 'pointer',
           minHeight: TRAINING_CARD_MIN_HEIGHT,
-          opacity: loading ? 0.7 : 1,
+          opacity: disabled ? 0.45 : loading ? 0.7 : 1,
+          filter: disabled ? 'grayscale(0.85)' : undefined,
           overflow: 'hidden',
         }}
-        onClick={loading ? undefined : onClick}
+        onClick={disabled ? undefined : onClick}
       >
         {isFieldFighter && (
           <div
@@ -75,7 +79,7 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
               width: '100%',
             }}
           >
-            {isAdmin && (
+            {isAdmin && !inDevelopment && (
               <div
                 style={{ position: 'absolute', right: 4, top: 4, zIndex: 10 }}
                 onClick={(e) => e.stopPropagation()}
@@ -95,26 +99,28 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
                 </Dropdown>
               </div>
             )}
-            <span
-              style={{
-                backdropFilter: 'blur(6px)',
-                background:
-                  'linear-gradient(135deg, rgba(16, 185, 129, 0.96) 0%, rgba(5, 150, 105, 0.96) 100%)',
-                border: '1px solid rgba(167, 243, 208, 0.65)',
-                borderRadius: 999,
-                color: '#ecfdf5',
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                padding: '5px 10px',
-                position: 'absolute',
-                left: 10,
-                textTransform: 'uppercase',
-                top: 10,
-              }}
-            >
-              В разработке
-            </span>
+            {inDevelopment && (
+              <span
+                style={{
+                  backdropFilter: 'blur(6px)',
+                  background:
+                    'linear-gradient(135deg, rgba(16, 185, 129, 0.96) 0%, rgba(5, 150, 105, 0.96) 100%)',
+                  border: '1px solid rgba(167, 243, 208, 0.65)',
+                  borderRadius: 999,
+                  color: '#ecfdf5',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  padding: '5px 10px',
+                  position: 'absolute',
+                  left: 10,
+                  textTransform: 'uppercase',
+                  top: 10,
+                }}
+              >
+                В разработке
+              </span>
+            )}
           </div>
         )}
 
@@ -144,7 +150,7 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
               {description}
             </Text>
             <Text fontSize={12} style={{ lineHeight: '16px', minHeight: 16 }} type={'secondary'}>
-              {loading ? 'Запуск...' : 'Нажмите, чтобы начать'}
+              {inDevelopment ? 'В разработке' : loading ? 'Запуск...' : 'Нажмите, чтобы начать'}
             </Text>
           </Flexbox>
           {isFieldFighter ? (

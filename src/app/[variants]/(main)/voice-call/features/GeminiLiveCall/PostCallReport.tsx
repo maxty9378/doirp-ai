@@ -22,11 +22,18 @@ export interface PostCallReportData {
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
   wrap: css`
-    max-width: 560px;
     width: 100%;
-    max-height: 85vh;
-    overflow-y: auto;
     padding: 4px;
+  `,
+  topRow: css`
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 24px;
+    margin-bottom: 28px;
+    @media (min-width: 900px) {
+      grid-template-columns: 280px 1fr;
+      align-items: start;
+    }
   `,
   section: css`
     margin-bottom: 20px;
@@ -59,13 +66,13 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     margin-bottom: 10px;
   `,
   competencyName: css`
-    flex: 0 0 160px;
+    flex: 0 0 200px;
     font-size: 13px;
     color: ${cssVar.colorText};
   `,
   competencyBar: css`
     flex: 1;
-    max-width: 200px;
+    max-width: 280px;
   `,
   summaryText: css`
     font-size: 14px;
@@ -124,50 +131,54 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
 
   return (
     <div className={styles.wrap}>
-      <div className={styles.section}>
-        <div className={styles.sectionTitle}>
-          <Award size={16} />
-          Общий результат
-        </div>
-        <div className={styles.scoreBig} style={{ color: scoreColor }}>
-          {Math.round(data.overallScore)}%
-        </div>
-        <div className={styles.scoreLabel}>Оценка за диалог</div>
-      </div>
-
-      {data.competencies?.length > 0 && (
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>
-            <Target size={16} />
-            Компетенции
-          </div>
-          {data.competencies.map((c) => (
-            <div key={c.name} className={styles.competencyRow}>
-              <span className={styles.competencyName}>{c.name}</span>
-              <div className={styles.competencyBar}>
-                <Progress
-                  percent={Math.min(100, Math.max(0, c.score))}
-                  size="small"
-                  strokeColor={c.score >= 60 ? '#22c55e' : c.score >= 40 ? '#eab308' : '#ef4444'}
-                />
-              </div>
-              <Text type="secondary" style={{ fontSize: 12, minWidth: 32 }}>
-                {c.score}%
-              </Text>
+      <div className={styles.topRow}>
+        <div>
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>
+              <Award size={16} />
+              Общий результат
             </div>
-          ))}
-        </div>
-      )}
-
-      {data.summary && (
-        <div className={styles.section}>
-          <div className={styles.sectionTitle}>
-            <MessageSquare size={16} />
-            Резюме
+            <div className={styles.scoreBig} style={{ color: scoreColor }}>
+              {Math.round(data.overallScore)}%
+            </div>
+            <div className={styles.scoreLabel}>Оценка за диалог</div>
           </div>
-          <div className={styles.summaryText}>{data.summary}</div>
+
+          {data.competencies?.length > 0 && (
+            <div className={styles.section}>
+              <div className={styles.sectionTitle}>
+                <Target size={16} />
+                Компетенции
+              </div>
+              {data.competencies.map((c) => (
+                <div key={c.name} className={styles.competencyRow}>
+                  <span className={styles.competencyName}>{c.name}</span>
+                  <div className={styles.competencyBar}>
+                    <Progress
+                      percent={Math.min(100, Math.max(0, c.score))}
+                      size="small"
+                      strokeColor={c.score >= 60 ? '#22c55e' : c.score >= 40 ? '#eab308' : '#ef4444'}
+                    />
+                  </div>
+                  <Text type="secondary" style={{ fontSize: 12, minWidth: 32 }}>
+                    {c.score}%
+                  </Text>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+
+        {data.summary && (
+          <div className={styles.section}>
+            <div className={styles.sectionTitle}>
+              <MessageSquare size={16} />
+              Резюме
+            </div>
+            <div className={styles.summaryText}>{data.summary}</div>
+          </div>
+        )}
+      </div>
 
       {data.strengths?.length > 0 && (
         <div className={styles.section}>

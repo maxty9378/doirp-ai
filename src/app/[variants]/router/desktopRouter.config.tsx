@@ -388,6 +388,20 @@ export const desktopRoutes: RouteConfig[] = [
             ),
             index: true,
           },
+          {
+            element: dynamicElement(
+              () => import('../(main)/voice-call/sessions/[id]'),
+              'Desktop > Voice Call > Session Detail',
+            ),
+            path: 'sessions/:id',
+          },
+          {
+            element: dynamicElement(
+              () => import('../(main)/voice-call/sessions'),
+              'Desktop > Voice Call > Sessions',
+            ),
+            path: 'sessions',
+          },
         ],
         element: dynamicElement(
           () => import('../(main)/voice-call/_layout'),
@@ -420,6 +434,21 @@ export const desktopRoutes: RouteConfig[] = [
         ],
         errorElement: <ErrorBoundary resetPath="/training" />,
         path: 'training',
+      },
+
+      // Voice service routes
+      {
+        children: [
+          {
+            element: dynamicElement(
+              () => import('../(main)/voice-service'),
+              'Desktop > Voice Service',
+            ),
+            index: true,
+          },
+        ],
+        errorElement: <ErrorBoundary resetPath="/voice-service" />,
+        path: 'voice-service',
       },
 
       ...BusinessDesktopRoutesWithMainLayout,

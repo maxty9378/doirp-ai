@@ -28,7 +28,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'openai' };
       const { result } = renderHook(() => useStore.getState().useProviderDetail(params));
@@ -52,7 +52,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'anthropic', withReadme: true };
       const { result } = renderHook(() => useStore.getState().useProviderDetail(params));
@@ -74,7 +74,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderDetail').mockResolvedValue(mockDetail as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'google' };
       const { result } = renderHook(() => useStore.getState().useProviderDetail(params));
@@ -89,7 +89,7 @@ describe('ProviderAction', () => {
 
     it('should return undefined when provider is not found', async () => {
       vi.spyOn(discoverService, 'getProviderDetail').mockResolvedValue(undefined);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { identifier: 'non-existent' };
       const { result } = renderHook(() => useStore.getState().useProviderDetail(params));
@@ -134,7 +134,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const { result } = renderHook(() => useStore.getState().useProviderList());
 
@@ -158,7 +158,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 2, pageSize: 10, q: 'openai' } as any;
       const { result } = renderHook(() => useStore.getState().useProviderList(params));
@@ -184,7 +184,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { page: 3, pageSize: 15 } as any;
       const { result } = renderHook(() => useStore.getState().useProviderList(params));
@@ -209,7 +209,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('zh-CN');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const { result } = renderHook(() => useStore.getState().useProviderList());
 
@@ -233,7 +233,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { order: 'asc', sort: 'identifier' } as any;
       const { result } = renderHook(() => useStore.getState().useProviderList(params));
@@ -260,7 +260,7 @@ describe('ProviderAction', () => {
       };
 
       vi.spyOn(discoverService, 'getProviderList').mockResolvedValue(mockList as any);
-      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('en-US');
+      vi.spyOn(globalHelpers, 'getCurrentLanguage').mockReturnValue('ru-RU');
 
       const params = { q: 'openai' } as any;
       const { result } = renderHook(() => useStore.getState().useProviderList(params));
