@@ -24,6 +24,12 @@ const BottomMenu = memo(() => {
     () =>
       [
         {
+          icon: getRouteById('meet')!.icon,
+          key: SidebarTabKey.Meet,
+          title: 'Звонки ДОиРП',
+          url: '/meet',
+        },
+        {
           icon: getRouteById('settings')!.icon,
           key: SidebarTabKey.Setting,
           title: t('tab.setting'),

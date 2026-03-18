@@ -411,6 +411,19 @@ export const desktopRoutes: RouteConfig[] = [
         path: 'voice-call',
       },
 
+      // Meet routes
+      {
+        children: [
+          {
+            element: dynamicElement(() => import('../(main)/meet'), 'Desktop > Meet'),
+            index: true,
+          },
+        ],
+        element: dynamicElement(() => import('../(main)/meet/_layout'), 'Desktop > Meet > Layout'),
+        errorElement: <ErrorBoundary resetPath="/meet" />,
+        path: 'meet',
+      },
+
       // Image routes
       {
         children: [

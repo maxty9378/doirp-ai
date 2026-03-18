@@ -4,6 +4,7 @@ import {
   FilePenIcon,
   Image,
   LibraryBigIcon,
+  PhoneCall,
   Settings,
   ShapesIcon,
   Video,
@@ -35,6 +36,16 @@ export interface NavigationRoute {
  * Used by both Electron navigation and CommandMenu (CMDK)
  */
 export const NAVIGATION_ROUTES: NavigationRoute[] = [
+  {
+    cmdkKey: 'cmdk.meet',
+    electronKey: 'navigation.meet',
+    icon: PhoneCall,
+    id: 'meet',
+    keywords: ['meet', 'calls', 'video'],
+    keywordsKey: 'cmdk.keywords.meet',
+    path: '/meet',
+    pathPrefix: '/meet',
+  },
   {
     cmdkKey: 'cmdk.community',
     electronKey: 'navigation.discover',
@@ -119,5 +130,5 @@ export const getRouteById = (id: string): NavigationRoute | undefined =>
  */
 export const getNavigableRoutes = (): NavigationRoute[] =>
   NAVIGATION_ROUTES.filter((r) =>
-    ['community', 'video', 'image', 'resource', 'page', 'memory'].includes(r.id),
+    ['meet', 'community', 'video', 'image', 'resource', 'page', 'memory'].includes(r.id),
   );

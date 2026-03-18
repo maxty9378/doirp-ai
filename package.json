@@ -505,6 +505,8 @@
       "ffmpeg-static"
     ],
     "overrides": {
+      "pdfjs-dist": "5.4.530",
+      "lucide-react": "0.562.0",
       "@base-ui/react": "^1.2.0",
       "@types/react": "19.2.13",
       "better-auth": "1.4.6",

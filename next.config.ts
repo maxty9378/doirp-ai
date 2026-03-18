@@ -13,14 +13,37 @@ const nextConfig = defineConfig({
           'node_modules/.pnpm/@img+sharp-libvips-*musl*',
           'node_modules/ffmpeg-static/**',
           'node_modules/.pnpm/ffmpeg-static*/**',
+          
+          // Other platform binaries (Vercel is Linux x64 glibc)
+          'node_modules/.pnpm/@napi-rs+canvas-*-win32*',
+          'node_modules/.pnpm/@napi-rs+canvas-*-darwin*',
+          'node_modules/.pnpm/@img+sharp-*-win32*',
+          'node_modules/.pnpm/@img+sharp-*-darwin*',
+          'node_modules/.pnpm/@next+swc-*-musl*',
+          'node_modules/.pnpm/@next+swc-*-win32*',
+          'node_modules/.pnpm/@next+swc-*-darwin*',
+
+          // Heavy libraries that should not be in runtime bundle
+          'node_modules/.pnpm/onnxruntime-node@*/**',
+          'node_modules/.pnpm/playwright*/**',
+          'node_modules/.pnpm/@playwright*/**',
+          'node_modules/.pnpm/electron*/**',
+          'node_modules/.pnpm/puppeteer*/**',
+          
+          // Build/Test/Dev tooling
+          'node_modules/typescript*/**',
+          'node_modules/eslint*/**',
+          'node_modules/prettier*/**',
+          'node_modules/vitest*/**',
+          'node_modules/.pnpm/typescript*/**',
+          'node_modules/.pnpm/eslint*/**',
+          'node_modules/.pnpm/prettier*/**',
+          'node_modules/.pnpm/vitest*/**',
+          'node_modules/.pnpm/knip*/**',
+          
           // Build cache (not needed at runtime)
           '.next/cache/**',
-          // Dev/test tooling (not needed in serverless)
-          'node_modules/playwright/**',
-          'node_modules/@playwright/**',
-          'node_modules/electron/**',
-          'node_modules/.pnpm/playwright@*/**',
-          'node_modules/.pnpm/electron@*/**',
+          
           // Test files in dependencies
           'node_modules/**/__tests__/**',
           'node_modules/**/*.test.js',
