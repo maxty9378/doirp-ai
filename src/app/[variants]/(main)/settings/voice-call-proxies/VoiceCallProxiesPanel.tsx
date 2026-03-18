@@ -1,18 +1,11 @@
 'use client';
 
-import { Flexbox } from '@lobehub/ui';
+import { Flexbox, Form, type FormGroupItemType } from '@lobehub/ui';
 import { App, Button, Input, Switch, Table, Tag, Tooltip } from 'antd';
-import { createStyles } from 'antd-style';
+import { Cable, HardDrive } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 
-const useStyles = createStyles(({ css, token }) => ({
-  adminCard: css`
-    border: 1px solid ${token.colorBorderSecondary};
-    border-radius: 16px;
-    padding: 16px;
-    background: ${token.colorBgContainer};
-  `,
-}));
+import { FORM_STYLE } from '@/const/layoutTokens';
 
 export type VoiceCallProxyRow = {
   createdAt?: string;
@@ -35,7 +28,6 @@ const formatDateTime = (v?: string | null) => {
 
 export const VoiceCallProxiesPanel = () => {
   const { message } = App.useApp();
-  const { styles } = useStyles();
   const [proxyLoading, setProxyLoading] = useState(false);
   const [proxyError, setProxyError] = useState<string | null>(null);
   const [proxyUrl, setProxyUrl] = useState('');
@@ -209,97 +201,127 @@ export const VoiceCallProxiesPanel = () => {
   }, [checkProxies]);
 
   return (
-    <div className={styles.adminCard}>
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 6 }}>
-        Прокси для голосового тренажёра (Gemini Live)
-      </div>
-      <div style={{ color: 'var(--colorTextSecondary)', fontSize: 13, marginBottom: 12 }}>
-        Список прокси хранится в базе данных. Серверный WebSocket‑прокси использует включённые записи по приоритету
-        (меньше — раньше). Для применения изменений перезапустите процесс прокси на сервере.
-      </div>
-
-      <Flexbox horizontal gap={8} style={{ alignItems: 'flex-start', marginBottom: 12 }}>
-        <Input.TextArea
-          autoSize={{ minRows: 3, maxRows: 8 }}
-          placeholder={
-            'Форматы: http(s)://USER:PASS@HOST:PORT, socks5://HOST:PORT, HOST:PORT или HOST:PORT:USER:PASS.\nМожно вставить список — по одной строке.'
-          }
-          value={proxyUrl}
-          onChange={(e) => setProxyUrl(e.target.value)}
-        />
-        <Flexbox gap={8}>
-          <Button loading={proxyLoading} type="primary" onClick={addProxy}>
-            Добавить
-          </Button>
-          <Button loading={proxyLoading} onClick={fetchProxies}>
-            Обновить
-          </Button>
-          <Button loading={proxyLoading} onClick={() => void checkProxies()}>
-            Проверить сейчас
-          </Button>
-        </Flexbox>
-      </Flexbox>
-
-      {proxyError && <div style={{ color: 'var(--colorError)', marginBottom: 12 }}>{proxyError}</div>}
-
-      <Table
-        columns={[
-          {
-            dataIndex: 'enabled',
-            render: (value: boolean, record: VoiceCallProxyRow) => (
-              <Switch
-                checked={!!value}
-                onChange={(checked) => void patchProxy(record.id, { enabled: checked })}
-              />
-            ),
-            title: 'Вкл',
-            width: 70,
-          },
-          { dataIndex: 'priority', title: 'Приоритет', width: 90 },
-          {
-            dataIndex: 'lastCheckOk',
-            render: (_: unknown, record: VoiceCallProxyRow) => {
-              const ok = record.lastCheckOk;
-              const tipLines = [
-                record.lastCheckAt ? `Проверка: ${formatDateTime(record.lastCheckAt)}` : 'Проверка: нет данных',
-                typeof record.lastCheckLatencyMs === 'number'
-                  ? `Время ответа: ${record.lastCheckLatencyMs} мс`
-                  : 'Время ответа: —',
-                record.lastCheckError ? `Ошибка: ${record.lastCheckError}` : null,
-              ].filter(Boolean) as string[];
-
-              const label = ok === null || ok === undefined ? 'Не проверено' : ok ? 'Доступен' : 'Недоступен';
-              const color = ok === null || ok === undefined ? 'default' : ok ? 'green' : 'red';
-
-              return (
-                <Tooltip title={tipLines.join('\n')}>
-                  <Tag color={color as any}>{label}</Tag>
-                </Tooltip>
-              );
+    <Form
+      itemsType="group"
+      variant="filled"
+      {...FORM_STYLE}
+      items={[
+        {
+          title: 'Добавление прокси',
+          icon: Cable,
+          children: [
+            {
+              desc: 'Форматы: http(s)://USER:PASS@HOST:PORT, socks5://HOST:PORT, HOST:PORT или HOST:PORT:USER:PASS. Можно вставить список — по одной строке.',
+              label: 'Список для добавления',
+              minWidth: undefined,
+              children: (
+                <Flexbox gap={12} width={'100%'}>
+                  <Input.TextArea
+                    autoSize={{ minRows: 3, maxRows: 8 }}
+                    placeholder="23.95.150.145:6114:user:pass&#13;&#10;http://user:pass@198.23.239.134:6540"
+                    value={proxyUrl}
+                    onChange={(e) => setProxyUrl(e.target.value)}
+                  />
+                  <Flexbox horizontal justify={'flex-end'}>
+                    <Button loading={proxyLoading} type="primary" onClick={addProxy}>
+                      Добавить
+                    </Button>
+                  </Flexbox>
+                </Flexbox>
+              ),
             },
-            title: 'Статус',
-            width: 140,
-          },
-          { dataIndex: 'url', title: 'URL' },
-          {
-            render: (_: unknown, record: VoiceCallProxyRow) => (
-              <Flexbox horizontal gap={8}>
-                <Button onClick={() => void checkProxies([record.id])}>Проверить</Button>
-                <Button danger onClick={() => void deleteProxy(record.id)}>
-                  Удалить
-                </Button>
-              </Flexbox>
-            ),
-            title: 'Действия',
-            width: 220,
-          },
-        ]}
-        dataSource={proxies}
-        loading={proxyLoading}
-        pagination={false}
-        rowKey="id"
-        size="small"
-      />
-    </div>
+          ],
+        },
+        {
+          title: 'База прокси (Gemini Live)',
+          icon: HardDrive,
+          extra: (
+            <Flexbox horizontal gap={8}>
+              <Button size="small" loading={proxyLoading} onClick={fetchProxies}>
+                Обновить
+              </Button>
+              <Button size="small" loading={proxyLoading} onClick={() => void checkProxies()}>
+                Проверить все сейчас
+              </Button>
+            </Flexbox>
+          ),
+          children: [
+            {
+              desc: 'Серверный WebSocket-прокси использует включённые записи по приоритету (меньше — раньше). Для применения изменений перезапустите процесс прокси на сервере.',
+              label: 'Управление пулом',
+              minWidth: '100%',
+              children: (
+                <Flexbox gap={16} width={'100%'}>
+                  {proxyError && <div style={{ color: 'var(--colorError)' }}>{proxyError}</div>}
+                  <Table
+                    columns={[
+                      {
+                        dataIndex: 'enabled',
+                        render: (value: boolean, record: VoiceCallProxyRow) => (
+                          <Switch
+                            checked={!!value}
+                            onChange={(checked) => void patchProxy(record.id, { enabled: checked })}
+                          />
+                        ),
+                        title: 'Вкл',
+                        width: 70,
+                      },
+                      { dataIndex: 'priority', title: 'Приоритет', width: 90 },
+                      {
+                        dataIndex: 'lastCheckOk',
+                        render: (_: unknown, record: VoiceCallProxyRow) => {
+                          const ok = record.lastCheckOk;
+                          const tipLines = [
+                            record.lastCheckAt
+                              ? `Проверка: ${formatDateTime(record.lastCheckAt)}`
+                              : 'Проверка: нет данных',
+                            typeof record.lastCheckLatencyMs === 'number'
+                              ? `Время ответа: ${record.lastCheckLatencyMs} мс`
+                              : 'Время ответа: —',
+                            record.lastCheckError ? `Ошибка: ${record.lastCheckError}` : null,
+                          ].filter(Boolean) as string[];
+
+                          const label =
+                            ok === null || ok === undefined ? 'Не проверено' : ok ? 'Доступен' : 'Недоступен';
+                          const color = ok === null || ok === undefined ? 'default' : ok ? 'green' : 'red';
+
+                          return (
+                            <Tooltip title={tipLines.join('\n')}>
+                              <Tag color={color as any}>{label}</Tag>
+                            </Tooltip>
+                          );
+                        },
+                        title: 'Статус',
+                        width: 140,
+                      },
+                      { dataIndex: 'url', title: 'URL' },
+                      {
+                        render: (_: unknown, record: VoiceCallProxyRow) => (
+                          <Flexbox horizontal gap={8}>
+                            <Button size="small" onClick={() => void checkProxies([record.id])}>
+                              Проверить
+                            </Button>
+                            <Button size="small" danger onClick={() => void deleteProxy(record.id)}>
+                              Удалить
+                            </Button>
+                          </Flexbox>
+                        ),
+                        title: 'Действия',
+                        width: 180,
+                      },
+                    ]}
+                    dataSource={proxies}
+                    loading={proxyLoading}
+                    pagination={false}
+                    rowKey="id"
+                    size="small"
+                  />
+                </Flexbox>
+              ),
+            },
+          ],
+        },
+      ]}
+    />
   );
 };
