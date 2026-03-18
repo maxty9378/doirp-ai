@@ -169,11 +169,16 @@ export async function GET(request: Request) {
       trainingScenario?.scenario.userLabel ||
       (isTpPrice ? 'Вы (Торговый представитель)' : 'Вы');
 
-    // const geminiWsUrl =
-    //  process.env.VOICE_CALL_WS_PROXY_URL?.replace(/^http/, 'ws') || null;
+    const rawProxyUrl =
+      process.env.VOICE_CALL_WS_PROXY_URL?.trim() ||
+      (process.env.NODE_ENV === 'development' ? 'ws://localhost:3011' : null);
+    const geminiWsUrl = rawProxyUrl
+      ? rawProxyUrl.replace(/^http/, 'ws')
+      : null;
 
     const payload: Record<string, unknown> = {
       apiKey,
+      ...(geminiWsUrl ? { geminiWsUrl } : {}),
       systemInstruction,
       voiceName,
       assistantLabel,
