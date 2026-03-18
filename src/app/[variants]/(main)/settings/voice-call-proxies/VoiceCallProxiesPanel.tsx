@@ -211,11 +211,12 @@ export const VoiceCallProxiesPanel = () => {
           icon: Cable,
           children: [
             {
-              desc: 'Форматы: http(s)://USER:PASS@HOST:PORT, socks5://HOST:PORT, HOST:PORT или HOST:PORT:USER:PASS. Можно вставить список — по одной строке.',
-              label: 'Список для добавления',
-              minWidth: undefined,
+              minWidth: '100%',
               children: (
                 <Flexbox gap={12} width={'100%'}>
+                  <div style={{ color: 'var(--colorTextSecondary)', fontSize: 14 }}>
+                    Список для добавления. Форматы: <code>http(s)://USER:PASS@HOST:PORT</code>, <code>socks5://HOST:PORT</code>, <code>HOST:PORT</code> или <code>HOST:PORT:USER:PASS</code>. Можно вставить список — по одной строке.
+                  </div>
                   <Input.TextArea
                     autoSize={{ minRows: 3, maxRows: 8 }}
                     placeholder="23.95.150.145:6114:user:pass&#13;&#10;http://user:pass@198.23.239.134:6540"
@@ -247,11 +248,12 @@ export const VoiceCallProxiesPanel = () => {
           ),
           children: [
             {
-              desc: 'Серверный WebSocket-прокси использует включённые записи по приоритету (меньше — раньше). Для применения изменений перезапустите процесс прокси на сервере.',
-              label: 'Управление пулом',
               minWidth: '100%',
               children: (
                 <Flexbox gap={16} width={'100%'}>
+                  <div style={{ color: 'var(--colorTextSecondary)', fontSize: 14 }}>
+                    Серверный WebSocket-прокси использует включённые записи по приоритету (меньше — раньше). Для применения изменений перезапустите процесс прокси на сервере.
+                  </div>
                   {proxyError && <div style={{ color: 'var(--colorError)' }}>{proxyError}</div>}
                   <Table
                     columns={[
