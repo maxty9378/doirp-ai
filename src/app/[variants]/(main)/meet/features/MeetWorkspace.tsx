@@ -1,13 +1,18 @@
 'use client';
 
 import {
+  ControlBar,
+  GridLayout,
   LiveKitRoom,
-  VideoConference,
-  RoomAudioRenderer,
+  ParticipantTile,
   PreJoin,
+  RoomAudioRenderer,
+  VideoConference,
+  useTracks,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Button, Input, Form, Typography } from 'antd';
+import { Track } from 'livekit-client';
 import { Flexbox } from '@lobehub/ui';
 import { memo, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -119,9 +124,11 @@ const MeetWorkspace = memo(() => {
             }}
             onSubmit={() => setPreJoinPassed(true)}
             translations={{
-              joinButton: 'Войти',
+              joinButton: 'Войти в конференцию',
               userNameField: 'Ваше имя',
               connecting: 'Подключение...',
+              audioButton: 'Микрофон',
+              videoButton: 'Камера',
             }}
           />
         </div>
@@ -143,15 +150,96 @@ const MeetWorkspace = memo(() => {
         setPreJoinPassed(false);
       }}
     >
-      <VideoConference />
+      <VideoConference
+        chatMessageFormatter={(msg) => msg.message}
+        // In the latest version of livekit components, 
+        // we might have to use internal components if we want full translation.
+        // But for now, let's try to see if we can use CSS or other hacks if props aren't enough.
+        // Actually, there's no easy prop for prefab translation.
+      />
       <RoomAudioRenderer />
       <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000 }}>
         <Button size="small" type="primary" onClick={copyInviteLink}>
           Пригласить
         </Button>
       </div>
+      <style>{`
+        /* Control Bar Translations */
+        .lk-control-bar button[data-lk-source="microphone"] .lk-button-label { display: none; }
+        .lk-control-bar button[data-lk-source="microphone"]::after { content: 'Микрофон'; font-size: 0.75rem; }
+        
+        .lk-control-bar button[data-lk-source="camera"] .lk-button-label { display: none; }
+        .lk-control-bar button[data-lk-source="camera"]::after { content: 'Камера'; font-size: 0.75rem; }
+        
+        .lk-control-bar button[data-lk-source="screen_share"] .lk-button-label { display: none; }
+        .lk-control-bar button[data-lk-source="screen_share"]::after { content: 'Экран'; font-size: 0.75rem; }
+        
+        .lk-control-bar button.lk-chat-toggle .lk-button-label { display: none; }
+        .lk-control-bar button.lk-chat-toggle::after { content: 'Чат'; font-size: 0.75rem; }
+        
+        .lk-control-bar button.lk-disconnect-button .lk-button-label { display: none; }
+        .lk-control-bar button.lk-disconnect-button::after { content: 'Выйти'; font-size: 0.75rem; }
+        
+        /* Chat Translations */
+        .lk-chat-header { visibility: hidden; position: relative; height: 3rem; }
+        .lk-chat-header::after { 
+          content: 'Сообщения'; 
+          visibility: visible; 
+          position: absolute; 
+          left: 1rem; 
+          top: 0; 
+          height: 100%; 
+          display: flex; 
+          align-items: center; 
+          font-weight: 600; 
+          font-size: 0.875rem;
+          color: var(--lk-fg);
+        }
+        
+        .lk-chat-form-controls button { color: transparent !important; position: relative; }
+        .lk-chat-form-controls button::after { 
+          content: 'Отправить'; 
+          color: white; 
+          position: absolute; 
+          left: 0; 
+          top: 0; 
+          width: 100%; 
+          height: 100%; 
+          display: flex; 
+          align-items: center; 
+          justify-content: center; 
+          font-size: 0.75rem; 
+        }
+        
+        .lk-chat-form-input::placeholder { color: transparent; }
+        .lk-chat-form-input-container { position: relative; }
+        .lk-chat-form-input-container::before { 
+          content: 'Введите сообщение...'; 
+          position: absolute; 
+          left: 1rem; 
+          top: 50%; 
+          transform: translateY(-50%); 
+          pointer-events: none; 
+          color: var(--lk-fg-3); 
+          font-size: 0.875rem; 
+        }
+        .lk-chat-form-input:focus ~ .lk-chat-form-input-container::before,
+        .lk-chat-form-input:not(:placeholder-shown) ~ .lk-chat-form-input-container::before { 
+          display: none; 
+        }
+        
+        /* Participant Tile translations */
+        .lk-participant-name::after {
+          content: ' (вы)';
+          display: none;
+        }
+        .lk-participant-tile[data-lk-local-participant="true"] .lk-participant-name::after {
+          display: inline;
+        }
+      `}</style>
     </LiveKitRoom>
   );
 });
+
 
 export default MeetWorkspace;
