@@ -745,9 +745,23 @@ export function useGeminiLive({
         wsRef.current = null;
         if (!isSetupCompleteRef.current) {
           connectionLockRef.current = false;
-          reportError(
-            `Live-соединение закрыто до старта (code: ${event.code}). Проверьте VPN/антивирус/прокси и доступ к generativelanguage.googleapis.com.`,
-          );
+          const reasonStr = String(event.reason || '');
+          const reasonLower = reasonStr.toLowerCase();
+          const isLocationBlock =
+            event.code === 1007 &&
+            /location|not supported|region|country|geo/i.test(reasonLower);
+          const isProdHost =
+            typeof window !== 'undefined' &&
+            !/^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+          if (isLocationBlock && isProdHost) {
+            reportError(
+              'Google Live API недоступен из браузера в этом регионе (прямое подключение). На продакшене задайте в Vercel переменную VOICE_CALL_WS_PROXY_URL=wss://ваш-хост-прокси/ и запустите scripts/voice-call-ws-proxy.mts на отдельном сервере (VPS, Railway, Fly.io) с HTTPS_PROXY до Google. Логи Vercel не показывают WebSocket браузера — соединение идёт с устройства пользователя.',
+            );
+          } else {
+            reportError(
+              `Live-соединение закрыто до старта (code: ${event.code}${reasonStr ? `: ${reasonStr}` : ''}). Проверьте VPN/прокси или настройку VOICE_CALL_WS_PROXY_URL на продакшене.`,
+            );
+          }
           return;
         }
         setStatus('idle');

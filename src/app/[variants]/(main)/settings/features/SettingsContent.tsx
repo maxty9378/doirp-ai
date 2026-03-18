@@ -87,6 +87,9 @@ const componentMap = {
   [SettingsTabs.TrainingAdmin]: dynamic(() => import('../training-admin'), {
     loading: () => <Loading debugId="Settings > TrainingAdmin" />,
   }),
+  [SettingsTabs.VoiceCallProxies]: dynamic(() => import('../voice-call-proxies'), {
+    loading: () => <Loading debugId="Settings > VoiceCallProxies" />,
+  }),
   [SettingsTabs.VoiceService]: dynamic(() => import('../voice-service'), {
     loading: () => <Loading debugId="Settings > VoiceService" />,
   }),
@@ -114,6 +117,7 @@ const SettingsContent = ({ mobile, activeTab }: SettingsContentProps) => {
         SettingsTabs.Stats,
         SettingsTabs.Security,
         SettingsTabs.Users,
+        SettingsTabs.VoiceCallProxies,
         SettingsTabs.VoiceService,
         ...(enableBusinessFeatures
           ? [

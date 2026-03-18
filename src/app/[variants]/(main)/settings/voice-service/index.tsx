@@ -17,6 +17,7 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import PageTitle from '@/components/PageTitle';
 import SettingHeader from '@/app/[variants]/(main)/settings/features/SettingHeader';
@@ -126,6 +127,12 @@ const useStyles = createStyles(({ css, token }) => ({
     margin-top: 12px;
     position: relative;
   `,
+  adminCard: css`
+    border: 1px solid ${token.colorBorderSecondary};
+    border-radius: 16px;
+    padding: 16px;
+    background: ${token.colorBgContainer};
+  `,
 }));
 
 type WordHighlightContextValue = {
@@ -206,9 +213,10 @@ const HighlightWrapper = ({
 
 const VoiceServicePage = () => {
   const { t } = useTranslation('setting');
-  const { modal } = App.useApp();
+  const { modal, message } = App.useApp();
   const { styles } = useStyles();
   const isAdmin = useIsAdmin();
+  const navigate = useNavigate();
   const [voice, setVoice] = useState(DEFAULT_VOICE);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -724,6 +732,21 @@ const VoiceServicePage = () => {
                   </Flexbox>
                 </>
               )}
+
+              {isAdmin && (
+                <div className={styles.adminCard}>
+                  <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 8 }}>
+                    Прокси для голосового тренажёра
+                  </div>
+                  <div style={{ color: 'var(--colorTextSecondary)', fontSize: 13, marginBottom: 12 }}>
+                    Управление списком прокси вынесено в отдельный раздел настроек.
+                  </div>
+                  <Button type="primary" onClick={() => navigate('/settings/voice-call-proxies')}>
+                    Открыть «Прокси тренажёра»
+                  </Button>
+                </div>
+              )}
+
               {error && <div style={{ color: 'var(--colorError)', fontSize: 14 }}>{error}</div>}
             </Flexbox>
           </Flexbox>

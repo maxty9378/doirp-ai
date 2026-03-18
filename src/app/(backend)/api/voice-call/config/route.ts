@@ -169,9 +169,13 @@ export async function GET(request: Request) {
       trainingScenario?.scenario.userLabel ||
       (isTpPrice ? 'Вы (Торговый представитель)' : 'Вы');
 
+    /** Публичный WS-прокси (VPS + nginx). Локальный dev без переменной — через него, чтобы не требовать :3011. */
+    const DEV_DEFAULT_VOICE_WS = 'wss://apidoirp.ru/voice-call-ws';
     const rawProxyUrl =
       process.env.VOICE_CALL_WS_PROXY_URL?.trim() ||
-      (process.env.NODE_ENV === 'development' ? 'ws://localhost:3011' : null);
+      (process.env.NODE_ENV === 'development'
+        ? process.env.VOICE_CALL_WS_PROXY_DEV?.trim() || DEV_DEFAULT_VOICE_WS
+        : null);
     const geminiWsUrl = rawProxyUrl
       ? rawProxyUrl.replace(/^http/, 'ws')
       : null;

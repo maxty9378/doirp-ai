@@ -33,6 +33,7 @@ const prefixes = {
   threads: 'thd',
   topics: 'tpc',
   user: 'user',
+  voiceCallProxies: 'vcp',
   voiceCallSessions: 'vcs',
 } as const;
 

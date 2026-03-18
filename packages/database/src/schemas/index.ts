@@ -18,6 +18,7 @@ export * from './rbac';
 export * from './relations';
 export * from './session';
 export * from './training';
+export * from './voiceCallProxy';
 export * from './topic';
 export * from './user';
 export * from './userMemories';

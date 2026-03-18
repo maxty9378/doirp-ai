@@ -825,6 +825,7 @@ When I am ___, I need ___
   'tab.uploadZip.desc': 'Upload a local .zip or .skill file',
   'tab.trainingAdmin': 'Тренажёры',
   'tab.users': 'Users',
+  'tab.voiceCallProxies': 'Прокси тренажёра',
   'tab.voiceService': 'Сервис озвучки',
   'voiceService.inputLabel': 'Текст для озвучки',
   'voiceService.input.placeholder': 'Вставьте или введите текст для озвучки.',

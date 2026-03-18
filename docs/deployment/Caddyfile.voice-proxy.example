@@ -1,0 +1,6 @@
+# Пример для /etc/caddy/Caddyfile
+# Замените на свой поддомен; A-запись → IP VPS
+
+voice.example.com {
+	reverse_proxy 127.0.0.1:3011
+}

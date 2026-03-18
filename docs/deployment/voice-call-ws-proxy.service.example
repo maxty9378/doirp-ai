@@ -1,0 +1,17 @@
+# Скопировать в /etc/systemd/system/voice-call-ws-proxy.service
+# Пути поправить: which bun, путь к клону репозитория
+
+[Unit]
+Description=Voice call WebSocket proxy (Gemini Live)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/lobe-voice-proxy
+EnvironmentFile=/opt/lobe-voice-proxy/.env.voice-proxy
+ExecStart=/root/.bun/bin/bun run scripts/voice-call-ws-proxy.mts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

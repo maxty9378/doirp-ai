@@ -65,6 +65,7 @@ export enum SettingsTabs {
   TrainingAdmin = 'training-admin',
   Usage = 'usage',
   Users = 'users',
+  VoiceCallProxies = 'voice-call-proxies',
   VoiceService = 'voice-service',
   /* eslint-enable typescript-sort-keys/string-enum */
 }

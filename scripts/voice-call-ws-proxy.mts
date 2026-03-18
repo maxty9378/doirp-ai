@@ -10,6 +10,10 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import http from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
 import { SocksProxyAgent } from 'socks-proxy-agent';
+import { asc, desc, eq } from 'drizzle-orm';
+
+import { serverDB } from '@/database/server';
+import { voiceCallProxies } from '@lobechat/database/schemas';
 
 const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
@@ -46,9 +50,24 @@ const envProxy =
 
 const fallbackUrls = FALLBACK_PROXY_LIST.map(parseProxyEntry).filter(Boolean);
 /** Список URL прокси для перебора (при отказе Google по региону пробуем следующий) */
-const PROXY_URLS: string[] = envProxy?.trim()
-  ? [envProxy.trim(), ...fallbackUrls]
-  : fallbackUrls;
+let PROXY_URLS: string[] = envProxy?.trim() ? [envProxy.trim(), ...fallbackUrls] : fallbackUrls;
+
+async function loadProxyUrlsFromDb(): Promise<string[]> {
+  try {
+    const rows = await serverDB
+      .select()
+      .from(voiceCallProxies)
+      .where(eq(voiceCallProxies.enabled, 1))
+      .orderBy(asc(voiceCallProxies.priority), desc(voiceCallProxies.createdAt));
+
+    return rows
+      .map((r) => (typeof r.url === 'string' ? r.url.trim() : ''))
+      .filter(Boolean);
+  } catch {
+    // DB может быть не настроена (например, запуск на VPS без DATABASE_URL) — тогда используем fallback
+    return [];
+  }
+}
 
 function getProxyAgentForUrl(url: string): InstanceType<typeof HttpsProxyAgent> | InstanceType<typeof SocksProxyAgent> | undefined {
   if (!url?.trim()) return undefined;
@@ -175,6 +194,23 @@ wss.on('connection', (clientWs, req) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[voice-call-ws-proxy] Listening on ws://0.0.0.0:${PORT}`);
-  if (PROXY_URLS.length) console.log(`[voice-call-ws-proxy] Using ${PROXY_URLS.length} proxy/proxies (will try next on location error)`);
-  else console.warn('[voice-call-ws-proxy] No proxies set — upstream will connect directly');
+  void loadProxyUrlsFromDb().then((dbUrls) => {
+    if (!dbUrls.length) {
+      if (PROXY_URLS.length)
+        console.log(
+          `[voice-call-ws-proxy] Using ${PROXY_URLS.length} proxy/proxies (will try next on location error)`,
+        );
+      else console.warn('[voice-call-ws-proxy] No proxies set — upstream will connect directly');
+      return;
+    }
+
+    const dedupedDb = Array.from(new Set(dbUrls));
+    const merged = envProxy?.trim()
+      ? [envProxy.trim(), ...dedupedDb, ...fallbackUrls]
+      : [...dedupedDb, ...fallbackUrls];
+    PROXY_URLS = merged;
+    console.log(
+      `[voice-call-ws-proxy] Loaded ${dedupedDb.length} proxy/proxies from DB (total: ${PROXY_URLS.length})`,
+    );
+  });
 });

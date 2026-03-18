@@ -714,6 +714,27 @@
       "when": 1774400000000,
       "tag": "0101_gfd_efirny_press_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1774500000000,
+      "tag": "0102_voice_call_proxies",
+      "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1774600000000,
+      "tag": "0103_voice_call_proxies_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1774700000000,
+      "tag": "0104_voice_call_proxies_accessed_at",
+      "breakpoints": true
     }
   ],
   "version": "6"
