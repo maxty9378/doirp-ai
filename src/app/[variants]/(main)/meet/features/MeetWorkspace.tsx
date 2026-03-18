@@ -117,7 +117,12 @@ const MeetWorkspace = memo(() => {
               videoEnabled: true,
               audioEnabled: true,
             }}
-            onJoinComplete={() => setPreJoinPassed(true)}
+            onSubmit={() => setPreJoinPassed(true)}
+            translations={{
+              joinButton: 'Войти',
+              userNameField: 'Ваше имя',
+              connecting: 'Подключение...',
+            }}
           />
         </div>
       </Flexbox>
