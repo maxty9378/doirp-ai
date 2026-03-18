@@ -1,21 +1,19 @@
 'use client';
 
 import {
-  ControlBar,
-  GridLayout,
   LiveKitRoom,
-  ParticipantTile,
   PreJoin,
   RoomAudioRenderer,
   VideoConference,
-  useTracks,
 } from '@livekit/components-react';
 import '@livekit/components-styles';
 import { Button, Input, Form, Typography } from 'antd';
-import { Track } from 'livekit-client';
 import { Flexbox } from '@lobehub/ui';
 import { memo, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
+
+import { useUserStore } from '@/store/user';
+import { authSelectors, userProfileSelectors } from '@/store/user/selectors';
 
 const { Title } = Typography;
 
@@ -28,6 +26,9 @@ const MeetWorkspace = memo(() => {
   const [preJoinPassed, setPreJoinPassed] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const isLogin = useUserStore(authSelectors.isLogin);
+  const displayName = useUserStore(userProfileSelectors.displayUserName);
   
   const serverUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL || '';
 
@@ -71,7 +72,7 @@ const MeetWorkspace = memo(() => {
   if (token === '') {
     return (
       <Flexbox align="center" justify="center" height="100%">
-        <div style={{ maxWidth: 400, width: '100%', padding: 24, background: 'var(--colorBgContainer)', borderRadius: 12, border: '1px solid var(--colorBorderSecondary)' }}>
+        <div style={{ maxWidth: 400, width: '100%', padding: 24, background: 'var(--colorBgContainer)', borderRadius: 12, border: '1px solid var(--colorBorderSecondary)', boxShadow: '0 8px 24px rgba(0,0,0,0.1)' }}>
           <Title level={2} style={{ marginBottom: 24, textAlign: 'center' }}>Звонки ДОиРП</Title>
           {error && <div style={{ color: 'red', marginBottom: 16 }}>{error}</div>}
           <Form layout="vertical" onFinish={() => joinRoom()}>
@@ -95,7 +96,7 @@ const MeetWorkspace = memo(() => {
                 onClick={() => joinRoom()}
                 disabled={!roomName || !serverUrl}
               >
-                Войти в комнату
+                Подключиться
               </Button>
               <Button size="large" block onClick={copyInviteLink} disabled={!roomName}>
                 Копировать ссылку для приглашения
@@ -121,10 +122,11 @@ const MeetWorkspace = memo(() => {
             defaults={{
               videoEnabled: true,
               audioEnabled: true,
+              userName: displayName || '',
             }}
             onSubmit={() => setPreJoinPassed(true)}
             translations={{
-              joinButton: 'Войти в конференцию',
+              joinButton: 'Подключиться',
               userNameField: 'Ваше имя',
               connecting: 'Подключение...',
               audioButton: 'Микрофон',
@@ -132,6 +134,66 @@ const MeetWorkspace = memo(() => {
             }}
           />
         </div>
+        <style>{`
+          /* Сильнодействующие хаки для перевода PreJoin */
+          
+          /* Скрываем поле ввода имени, если мы знаем его из профиля */
+          ${(isLogin && displayName && displayName !== 'anonymous') ? '.lk-prejoin-name { display: none !important; }' : ''}
+          
+          /* Если поле всё же показывается, переводим его заголовок */
+          .lk-prejoin-name label { font-size: 0 !important; }
+          .lk-prejoin-name label::before { content: 'Ваше имя'; font-size: 14px !important; }
+          
+          .lk-prejoin-container {
+            background: var(--colorBgContainer);
+            border-radius: 16px;
+            border: 1px solid var(--colorBorderSecondary);
+            box-shadow: var(--shadow-elevated);
+            color: var(--colorText);
+          }
+          
+          .lk-prejoin-container label {
+            color: var(--colorTextSecondary);
+          }
+
+          /* Перевод кнопок Микрофон и Камера в PreJoin */
+          .lk-device-menu-renderer button.lk-button {
+             position: relative;
+             color: transparent !important;
+          }
+          .lk-device-menu-renderer button.lk-button::after {
+             position: absolute;
+             left: 0; top: 0; width: 100%; height: 100%;
+             display: flex; align-items: center; justify-content: center;
+             color: var(--colorText);
+             font-size: 0.875rem;
+          }
+          .lk-device-menu-renderer[data-lk-device-type="audioinput"] button.lk-button::after { content: 'Микрофон'; }
+          .lk-device-menu-renderer[data-lk-device-type="videoinput"] button.lk-button::after { content: 'Камера'; }
+
+          .lk-prejoin-container button.lk-button {
+            border-radius: 8px;
+            font-family: var(--font-family);
+          }
+
+          /* Перевод основной кнопки Join Room */
+          .lk-prejoin-container button.lk-button-primary {
+            color: transparent !important;
+            position: relative !important;
+            background: var(--colorPrimary) !important;
+            opacity: 1 !important;
+          }
+          .lk-prejoin-container button.lk-button-primary::after {
+            content: 'Подключиться к звонку';
+            position: absolute;
+            left: 0; top: 0; width: 100%; height: 100%;
+            display: flex; align-items: center; justify-content: center;
+            color: white !important;
+            font-weight: 600;
+            font-size: 1rem;
+            visibility: visible !important;
+          }
+        `}</style>
       </Flexbox>
     );
   }
@@ -152,10 +214,6 @@ const MeetWorkspace = memo(() => {
     >
       <VideoConference
         chatMessageFormatter={(msg) => msg.message}
-        // In the latest version of livekit components, 
-        // we might have to use internal components if we want full translation.
-        // But for now, let's try to see if we can use CSS or other hacks if props aren't enough.
-        // Actually, there's no easy prop for prefab translation.
       />
       <RoomAudioRenderer />
       <div style={{ position: 'absolute', top: 16, right: 16, zIndex: 1000 }}>
@@ -164,6 +222,25 @@ const MeetWorkspace = memo(() => {
         </Button>
       </div>
       <style>{`
+        /* Общие стили темы LobeChat для LiveKit */
+        :root {
+          --lk-accent-bg: var(--colorPrimary);
+          --lk-accent-fg: white;
+          --lk-bg: var(--colorBgLayout);
+          --lk-fg: var(--colorText);
+          --lk-border-color: var(--colorBorderSecondary);
+        }
+
+        .lk-video-conference {
+          background-color: var(--colorBgLayout);
+        }
+
+        .lk-control-bar {
+          background-color: var(--colorBgContainer);
+          border-top: 1px solid var(--colorBorderSecondary);
+          padding: 12px;
+        }
+
         /* Control Bar Translations */
         .lk-control-bar button[data-lk-source="microphone"] .lk-button-label { display: none; }
         .lk-control-bar button[data-lk-source="microphone"]::after { content: 'Микрофон'; font-size: 0.75rem; }
@@ -177,11 +254,19 @@ const MeetWorkspace = memo(() => {
         .lk-control-bar button.lk-chat-toggle .lk-button-label { display: none; }
         .lk-control-bar button.lk-chat-toggle::after { content: 'Чат'; font-size: 0.75rem; }
         
+        .lk-control-bar button.lk-disconnect-button {
+          background-color: var(--colorError) !important;
+        }
         .lk-control-bar button.lk-disconnect-button .lk-button-label { display: none; }
-        .lk-control-bar button.lk-disconnect-button::after { content: 'Выйти'; font-size: 0.75rem; }
+        .lk-control-bar button.lk-disconnect-button::after { content: 'Выйти'; font-size: 0.75rem; color: white; }
         
         /* Chat Translations */
-        .lk-chat-header { visibility: hidden; position: relative; height: 3rem; }
+        .lk-chat {
+          background-color: var(--colorBgContainer);
+          border-left: 1px solid var(--colorBorderSecondary);
+        }
+
+        .lk-chat-header { visibility: hidden; position: relative; height: 3rem; border-bottom: 1px solid var(--colorBorderSecondary); }
         .lk-chat-header::after { 
           content: 'Сообщения'; 
           visibility: visible; 
@@ -193,10 +278,10 @@ const MeetWorkspace = memo(() => {
           align-items: center; 
           font-weight: 600; 
           font-size: 0.875rem;
-          color: var(--lk-fg);
+          color: var(--colorText);
         }
         
-        .lk-chat-form-controls button { color: transparent !important; position: relative; }
+        .lk-chat-form-controls button { color: transparent !important; position: relative; min-width: 80px; }
         .lk-chat-form-controls button::after { 
           content: 'Отправить'; 
           color: white; 
@@ -209,9 +294,17 @@ const MeetWorkspace = memo(() => {
           align-items: center; 
           justify-content: center; 
           font-size: 0.75rem; 
+          background: var(--colorPrimary);
+          border-radius: 8px;
         }
         
-        .lk-chat-form-input::placeholder { color: transparent; }
+        .lk-chat-form-input { 
+          color: var(--colorText); 
+          background: var(--colorBgLayout);
+          border: 1px solid var(--colorBorder);
+          border-radius: 8px;
+        }
+        .lk-chat-form-input::placeholder { color: transparent !important; }
         .lk-chat-form-input-container { position: relative; }
         .lk-chat-form-input-container::before { 
           content: 'Введите сообщение...'; 
@@ -220,13 +313,17 @@ const MeetWorkspace = memo(() => {
           top: 50%; 
           transform: translateY(-50%); 
           pointer-events: none; 
-          color: var(--lk-fg-3); 
+          color: var(--colorTextQuaternary); 
           font-size: 0.875rem; 
         }
         .lk-chat-form-input:focus ~ .lk-chat-form-input-container::before,
         .lk-chat-form-input:not(:placeholder-shown) ~ .lk-chat-form-input-container::before { 
           display: none; 
         }
+        
+        /* Settings / Other Labels if they appear */
+        .lk-settings-menu-header { visibility: hidden; position: relative; }
+        .lk-settings-menu-header::after { content: 'Настройки'; visibility: visible; position: absolute; left: 1rem; }
         
         /* Participant Tile translations */
         .lk-participant-name::after {
@@ -236,10 +333,13 @@ const MeetWorkspace = memo(() => {
         .lk-participant-tile[data-lk-local-participant="true"] .lk-participant-name::after {
           display: inline;
         }
+
+        /* Заменяем Leave Room в меню если есть */
+        .lk-button[data-lk-source="leave"] { font-size: 0 !important; }
+        .lk-button[data-lk-source="leave"]::before { content: 'Покинуть'; font-size: 14px !important; }
       `}</style>
     </LiveKitRoom>
   );
 });
-
 
 export default MeetWorkspace;

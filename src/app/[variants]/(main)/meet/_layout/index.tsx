@@ -1,12 +1,18 @@
 'use client';
 
-import { memo } from 'react';
+import { Flexbox } from '@lobehub/ui';
+import { memo, type FC } from 'react';
 import { Outlet } from 'react-router-dom';
 
-const MeetLayout = memo(() => {
+import Sidebar from './Sidebar';
+
+const MeetLayout: FC = memo(() => {
   return (
     <>
-      <Outlet />
+      <Sidebar />
+      <Flexbox flex={1} height="100%" style={{ position: 'relative' }}>
+        <Outlet />
+      </Flexbox>
     </>
   );
 });

@@ -1,6 +1,6 @@
 export default {
   'ModelSwitch.title': 'Model',
-  'active': 'Active',
+  'active': 'Активен',
   'agentBuilder.installPlugin.authRequired': 'Cloud MCP requires sign-in to continue',
   'agentBuilder.installPlugin.cancel': 'Cancel',
   'agentBuilder.installPlugin.clickApproveToConnect':
