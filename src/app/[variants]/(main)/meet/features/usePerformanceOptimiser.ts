@@ -1,10 +1,10 @@
-import type {
+import {
   isVideoTrack,
   type LocalVideoTrack,
   ParticipantEvent,
   type RemoteTrack,
   type RemoteTrackPublication,
-  Room,
+  type Room,
   RoomEvent,
   VideoQuality,
 } from 'livekit-client';
