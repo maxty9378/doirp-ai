@@ -11,7 +11,6 @@ export default {
   'navigation.image': 'Рисование',
   'navigation.knowledgeBase': 'База знаний',
   'navigation.lobehub': 'LobeHub',
-  'navigation.meet': 'Звонки ДОиРП beta 1.2',
   'navigation.memory': 'Память',
   'navigation.memoryContexts': 'Память - Контексты',
   'navigation.memoryExperiences': 'Память - Опыт',

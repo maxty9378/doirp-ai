@@ -137,7 +137,6 @@ export default {
   'cmdk.keyboard.ESC': 'ESC',
   'cmdk.keyboard.Enter': 'Enter',
   'cmdk.keyboard.Tab': 'Tab',
-  'cmdk.meet': 'Звонки ДОиРП beta 1.2',
 
   'cmdk.keywords.about': 'о версии инфо',
 
@@ -159,8 +158,6 @@ export default {
   'cmdk.keywords.hotkey': 'горячие клавиши ярлык клавиатура hotkey shortcut',
 
   'cmdk.keywords.image': 'изображение картинка фото image picture photo',
-
-  'cmdk.keywords.meet': 'звонки видео конференция meet calls video',
 
   'cmdk.keywords.memory': 'личности контексты предпочтения опыт memory identity',
 
@@ -485,7 +482,6 @@ export default {
   'tab.home': 'Главная',
   'tab.knowledgeBase': 'Библиотека',
   'tab.me': 'Я',
-  'tab.meet': 'Звонки',
   'tab.memory': 'Память',
   'tab.pages': 'Страницы',
   'resourceAssistant.desc':

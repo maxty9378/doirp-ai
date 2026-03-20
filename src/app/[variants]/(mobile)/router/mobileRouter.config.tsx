@@ -208,34 +208,6 @@ export const mobileRoutes: RouteConfig[] = [
         path: 'settings',
       },
 
-      // Meet routes
-      {
-        children: [
-          {
-            element: dynamicElement(() => import('../../(main)/meet'), 'Mobile > Meet'),
-            index: true,
-          },
-        ],
-        element: dynamicElement(
-          () => import('../../(main)/meet/_layout'),
-          'Mobile > Meet > Layout',
-        ),
-        errorElement: <ErrorBoundary resetPath="/meet" />,
-        path: 'meet',
-      },
-
-      // MAX routes
-      {
-        children: [
-          {
-            element: dynamicElement(() => import('../../(main)/max'), 'Mobile > MAX'),
-            index: true,
-          },
-        ],
-        errorElement: <ErrorBoundary resetPath="/max" />,
-        path: 'max',
-      },
-
       ...BusinessMobileRoutesWithMainLayout,
 
       // Me routes (mobile personal center)

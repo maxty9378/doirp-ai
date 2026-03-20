@@ -159,7 +159,6 @@ export function defineConfig() {
   const isPublicRoute = createRouteMatcher([
     // backend api
     '/api/auth(.*)',
-    '/api/max(.*)',
     '/api/webhooks(.*)',
     '/api/workflows(.*)',
     '/api/agent(.*)',

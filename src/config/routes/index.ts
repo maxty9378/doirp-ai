@@ -1,11 +1,9 @@
 import { type LucideIcon } from 'lucide-react';
 import {
-  Bot,
   BrainCircuit,
   FilePenIcon,
   Image,
   LibraryBigIcon,
-  PhoneCall,
   Settings,
   ShapesIcon,
   Video,
@@ -37,16 +35,6 @@ export interface NavigationRoute {
  * Used by both Electron navigation and CommandMenu (CMDK)
  */
 export const NAVIGATION_ROUTES: NavigationRoute[] = [
-  {
-    cmdkKey: 'cmdk.meet',
-    electronKey: 'navigation.meet',
-    icon: PhoneCall,
-    id: 'meet',
-    keywords: ['meet', 'calls', 'video'],
-    keywordsKey: 'cmdk.keywords.meet',
-    path: '/meet',
-    pathPrefix: '/meet',
-  },
   {
     cmdkKey: 'cmdk.community',
     electronKey: 'navigation.discover',
@@ -99,16 +87,6 @@ export const NAVIGATION_ROUTES: NavigationRoute[] = [
     useDynamicTitle: true,
   },
   {
-    cmdkKey: 'cmdk.max',
-    electronKey: 'navigation.max',
-    icon: Bot,
-    id: 'max',
-    keywords: ['max', 'builder', 'bot', 'constructor'],
-    keywordsKey: 'cmdk.keywords.max',
-    path: '/max',
-    pathPrefix: '/max',
-  },
-  {
     cmdkKey: 'cmdk.memory',
     electronKey: 'navigation.memory',
     icon: BrainCircuit,
@@ -141,5 +119,5 @@ export const getRouteById = (id: string): NavigationRoute | undefined =>
  */
 export const getNavigableRoutes = (): NavigationRoute[] =>
   NAVIGATION_ROUTES.filter((r) =>
-    ['meet', 'community', 'video', 'image', 'resource', 'page', 'memory', 'max'].includes(r.id),
+    ['community', 'video', 'image', 'resource', 'page', 'memory'].includes(r.id),
   );

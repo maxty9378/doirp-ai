@@ -408,19 +408,6 @@ export const desktopRoutes: RouteConfig[] = [
         path: 'voice-call',
       },
 
-      // Meet routes
-      {
-        children: [
-          {
-            element: dynamicElement(() => import('../(main)/meet'), 'Desktop > Meet'),
-            index: true,
-          },
-        ],
-        element: dynamicElement(() => import('../(main)/meet/_layout'), 'Desktop > Meet > Layout'),
-        errorElement: <ErrorBoundary resetPath="/meet" />,
-        path: 'meet',
-      },
-
       // Image routes
       {
         children: [
@@ -459,18 +446,6 @@ export const desktopRoutes: RouteConfig[] = [
         ],
         errorElement: <ErrorBoundary resetPath="/voice-service" />,
         path: 'voice-service',
-      },
-
-      // MAX routes
-      {
-        children: [
-          {
-            element: dynamicElement(() => import('../(main)/max'), 'Desktop > MAX'),
-            index: true,
-          },
-        ],
-        errorElement: <ErrorBoundary resetPath="/max" />,
-        path: 'max',
       },
 
       ...BusinessDesktopRoutesWithMainLayout,

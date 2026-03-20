@@ -90,12 +90,6 @@ const Nav = memo(() => {
         title: t('tab.voiceService'),
         url: '/voice-service',
       },
-      {
-        icon: getRouteById('max')!.icon,
-        key: SidebarTabKey.Max,
-        title: 'MAX',
-        url: '/max',
-      },
     ],
     [enableBusinessFeatures, showAiImage, t, toggleCommandMenu],
   );
