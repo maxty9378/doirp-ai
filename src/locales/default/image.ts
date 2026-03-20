@@ -12,9 +12,12 @@ export default {
   'config.pickFromGallery.button': 'Из сгенерированных и загруженных',
   'config.pickFromGallery.cancel': 'Отмена',
   'config.pickFromGallery.confirm': 'Добавить',
-  'config.pickFromGallery.empty': 'Нет загруженных изображений. Загрузите файлы или сгенерируйте изображения.',
-  'config.pickFromGallery.emptyGenerated': 'Нет сгенерированных изображений. Создайте их в темах раздела «Картина».',
-  'config.pickFromGallery.emptyUploaded': 'Нет загруженных изображений. Загрузите файлы в разделе «Файлы».',
+  'config.pickFromGallery.empty':
+    'Нет загруженных изображений. Загрузите файлы или сгенерируйте изображения.',
+  'config.pickFromGallery.emptyGenerated':
+    'Нет сгенерированных изображений. Создайте их в темах раздела «Картина».',
+  'config.pickFromGallery.emptyUploaded':
+    'Нет загруженных изображений. Загрузите файлы в разделе «Файлы».',
   'config.pickFromGallery.hint': 'Можно добавить ещё до {{max}} изображений в качестве референса.',
   'config.pickFromGallery.tabGenerated': 'Сгенерированные',
   'config.pickFromGallery.tabUploaded': 'Загруженные',
@@ -57,7 +60,7 @@ export default {
   'generation.status.failed': 'Generation Failed',
   'generation.status.generating': 'Generating...',
   'limit.dailyReached':
-    'На сегодня ваш лимит генерации изображений исчерпан (10/10). Для вашего аккаунта доступно 10 картинок в сутки. Возвращайтесь завтра!',
+    'Не удалось выполнить генерацию: на сегодня осталось {{remaining}} из {{limit}} (использовано {{used}}). Обновится через {{resetIn}}!',
   'notSupportGuide.desc':
     'The current deployment mode does not support AI image generation. Switch to the <1>server database deployment mode</1>, or use <3>LobeHub Cloud</3>.',
   'notSupportGuide.features.fileIntegration.desc':

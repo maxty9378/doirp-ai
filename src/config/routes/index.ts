@@ -1,5 +1,6 @@
 import { type LucideIcon } from 'lucide-react';
 import {
+  Bot,
   BrainCircuit,
   FilePenIcon,
   Image,
@@ -98,6 +99,16 @@ export const NAVIGATION_ROUTES: NavigationRoute[] = [
     useDynamicTitle: true,
   },
   {
+    cmdkKey: 'cmdk.max',
+    electronKey: 'navigation.max',
+    icon: Bot,
+    id: 'max',
+    keywords: ['max', 'builder', 'bot', 'constructor'],
+    keywordsKey: 'cmdk.keywords.max',
+    path: '/max',
+    pathPrefix: '/max',
+  },
+  {
     cmdkKey: 'cmdk.memory',
     electronKey: 'navigation.memory',
     icon: BrainCircuit,
@@ -130,5 +141,5 @@ export const getRouteById = (id: string): NavigationRoute | undefined =>
  */
 export const getNavigableRoutes = (): NavigationRoute[] =>
   NAVIGATION_ROUTES.filter((r) =>
-    ['meet', 'community', 'video', 'image', 'resource', 'page', 'memory'].includes(r.id),
+    ['meet', 'community', 'video', 'image', 'resource', 'page', 'memory', 'max'].includes(r.id),
   );

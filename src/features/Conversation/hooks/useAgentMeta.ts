@@ -6,12 +6,12 @@ import { agentSelectors } from '@/store/agent/selectors';
 
 import { contextSelectors, useConversationStore } from '../store';
 
-const LOBE_AI_TITLE = 'ДОиРП AI';
+const LOBE_AI_TITLE = 'ДОиРП ИИ';
 
 /**
  * Hook to get agent meta data for a specific agent or the current conversation.
  * Handles special cases for builtin agents (inbox, page agent, agent builder)
- * by showing app name (e.g. ДОиРП AI) title instead of the agent's own meta.
+ * by showing app name (e.g. ДОиРП ИИ) title instead of the agent's own meta.
  * Avatar is now returned from the backend (merged from builtin-agents package).
  *
  * @param messageAgentId - Optional agent ID from the message. If provided, uses this agent's meta.

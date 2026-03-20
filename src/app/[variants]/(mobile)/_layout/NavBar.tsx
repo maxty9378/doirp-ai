@@ -4,7 +4,7 @@ import { Icon } from '@lobehub/ui';
 import { type TabBarProps } from '@lobehub/ui/mobile';
 import { TabBar } from '@lobehub/ui/mobile';
 import { createStaticStyles } from 'antd-style';
-import { MessageSquare, User } from 'lucide-react';
+import { MessageSquare, User, Video } from 'lucide-react';
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -43,6 +43,16 @@ const NavBar = memo(() => {
           navigate('/agent');
         },
         title: t('tab.chat'),
+      },
+      {
+        icon: (active: boolean) => (
+          <Icon className={active ? styles.active : undefined} icon={Video} />
+        ),
+        key: SidebarTabKey.Meet,
+        onClick: () => {
+          navigate('/meet');
+        },
+        title: t('tab.meet'),
       },
       {
         icon: (active: boolean) => (

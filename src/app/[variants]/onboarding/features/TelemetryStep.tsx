@@ -69,9 +69,9 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
   return (
     <Flexbox align="flex-start" gap={16}>
       <Flexbox
+        horizontal
         align="center"
         gap={12}
-        horizontal
         style={{ flexShrink: 0, paddingBlock: 12, paddingInlineEnd: 12, paddingInlineStart: 0 }}
       >
         <ProductLogo size={LOGO_SIZE} />
@@ -118,7 +118,7 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
             pauseDuration={16_000}
             typingSpeed={64}
             sentences={[
-              t('telemetry.title', { name: 'ДОиРП AI' }),
+              t('telemetry.title', { name: 'ДОиРП ИИ' }),
               t('telemetry.title2'),
               t('telemetry.title3'),
             ]}

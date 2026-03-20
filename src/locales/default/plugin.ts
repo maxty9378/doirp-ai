@@ -517,7 +517,7 @@ export default {
   'skillDetail.tools': 'Tools',
   'skillDetail.trustWarning':
     "Only use connectors from developers you trust. LobeHub does not control which tools developers make available and cannot verify that they will work as intended or that they won't change.",
-  'skillInstallBanner.title': 'Добавить навыки в ДОиРП AI',
+  'skillInstallBanner.title': 'Добавить навыки в ДОиРП ИИ',
   'store.actions.cancel': 'Cancel',
   'store.actions.configure': 'Configure',
   'store.actions.confirmUninstall': 'Uninstalling will clear Skill config. Continue?',

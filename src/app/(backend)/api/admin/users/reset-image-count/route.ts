@@ -1,4 +1,4 @@
-import { userCodes } from '@lobechat/database/schemas';
+import { users } from '@lobechat/database/schemas';
 import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { type NextRequest } from 'next/server';
@@ -38,17 +38,17 @@ export async function POST(req: NextRequest) {
     }
 
     const result = await serverDB
-      .update(userCodes)
+      .update(users)
       .set({
         dailyImageCount: 0,
         lastImageDate: null,
         updatedAt: new Date(),
       })
-      .where(eq(userCodes.userId, userId))
-      .returning({ id: userCodes.id });
+      .where(eq(users.id, userId))
+      .returning({ id: users.id });
 
     if (result.length === 0) {
-      return NextResponse.json({ error: 'User not found in user_codes' }, { status: 404 });
+      return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true });

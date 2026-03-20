@@ -22,6 +22,7 @@ export function defineConfig(config: CustomNextConfig) {
 
   const enableReactScan = !!process.env.REACT_SCAN_MONITOR_API_KEY;
   const shouldUseCSP = process.env.ENABLED_CSP === '1';
+  const enableCodeInspector = process.env.ENABLE_CODE_INSPECTOR === '1';
 
   const isTest =
     process.env.NODE_ENV === 'test' || process.env.TEST === '1' || process.env.E2E === '1';
@@ -363,12 +364,13 @@ export function defineConfig(config: CustomNextConfig) {
       'mermaid',
     ],
     turbopack: {
-      rules: isTest
-        ? void 0
-        : codeInspectorPlugin({
-            bundler: 'turbopack',
-            hotKeys: ['altKey', 'ctrlKey'],
-          }),
+      rules:
+        isTest || !enableCodeInspector
+          ? void 0
+          : codeInspectorPlugin({
+              bundler: 'turbopack',
+              hotKeys: ['altKey', 'ctrlKey'],
+            }),
       ...config.turbopack,
     },
 

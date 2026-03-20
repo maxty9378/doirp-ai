@@ -21,7 +21,7 @@ const ChatHeaderTitle = memo(() => {
   const isInbox = useAgentStore(builtinAgentSelectors.isInboxAgent);
   const title = useAgentStore(agentSelectors.currentAgentTitle);
 
-  const displayTitle = isInbox ? 'ДОиРП AI' : title;
+  const displayTitle = isInbox ? 'ДОиРП ИИ' : title;
 
   return (
     <ChatHeader.Title

@@ -20,7 +20,7 @@ const Inbox = memo(() => {
 
   return (
     <Link
-      aria-label={'ДОиРП AI'}
+      aria-label={'ДОиРП ИИ'}
       to={SESSION_CHAT_URL(inboxAgentId, mobile)}
       onClick={(e) => {
         e.preventDefault();
@@ -31,7 +31,7 @@ const Inbox = memo(() => {
         active={isInboxActive}
         avatar={DEFAULT_INBOX_AVATAR}
         key={'inbox'}
-        title={'ДОиРП AI'}
+        title={'ДОиРП ИИ'}
         styles={{
           container: {
             gap: 12,

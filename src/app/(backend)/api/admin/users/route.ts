@@ -46,16 +46,17 @@ export async function GET() {
       .select({
         code: userCodes.code,
         createdAt: userCodes.createdAt,
-        dailyImageCount: userCodes.dailyImageCount,
+        dailyImageCount: users.dailyImageCount,
         email: userCodes.email,
         id: userCodes.id,
-        lastImageDate: userCodes.lastImageDate,
+        lastImageDate: users.lastImageDate,
         plainPassword: userCodes.plainPassword,
         tokenQuota: userCodes.tokenQuota,
         tokensUsed: userCodes.tokensUsed,
         userId: userCodes.userId,
       })
       .from(userCodes)
+      .innerJoin(users, eq(users.id, userCodes.userId))
       .orderBy(desc(userCodes.createdAt));
     const usersList = rows.map(({ plainPassword, ...rest }) => ({
       ...rest,
@@ -66,7 +67,10 @@ export async function GET() {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('Error listing admin users:', error);
     return NextResponse.json(
-      { error: 'Internal server error', details: process.env.NODE_ENV === 'development' ? message : undefined },
+      {
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? message : undefined,
+      },
       { status: 500 },
     );
   }
@@ -110,10 +114,7 @@ export async function POST(req: NextRequest) {
       where: eq(users.email, email),
     });
     if (existingUser) {
-      return NextResponse.json(
-        { error: 'Email already registered' },
-        { status: 400 },
-      );
+      return NextResponse.json({ error: 'Email already registered' }, { status: 400 });
     }
 
     // Create user with email + password (no login code)
@@ -185,13 +186,19 @@ export async function POST(req: NextRequest) {
       errMsg.includes('already registered')
     ) {
       return NextResponse.json(
-        { error: 'Email already registered', details: process.env.NODE_ENV === 'development' ? message : undefined },
+        {
+          error: 'Email already registered',
+          details: process.env.NODE_ENV === 'development' ? message : undefined,
+        },
         { status: 400 },
       );
     }
 
     return NextResponse.json(
-      { error: 'Internal server error', details: process.env.NODE_ENV === 'development' ? message : undefined },
+      {
+        error: 'Internal server error',
+        details: process.env.NODE_ENV === 'development' ? message : undefined,
+      },
       { status: 500 },
     );
   }

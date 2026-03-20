@@ -1,9 +1,10 @@
 import { TRPCError } from '@trpc/server';
 import debug from 'debug';
-
-import { serverDB } from '@/database/server';
-import { DAILY_IMAGE_LIMIT, users } from '@/database/schemas';
 import { eq } from 'drizzle-orm';
+
+import { ADMIN_EMAIL } from '@/const/admin';
+import { DAILY_IMAGE_LIMIT, users } from '@/database/schemas';
+import { serverDB } from '@/database/server';
 
 const log = debug('lobe:middleware:imageLimit');
 
@@ -21,6 +22,7 @@ export async function checkImageLimit(userId: string, count: number): Promise<vo
       dailyImageCount: users.dailyImageCount,
       lastImageDate: users.lastImageDate,
       role: users.role,
+      email: users.email,
     })
     .from(users)
     .where(eq(users.id, userId))
@@ -31,7 +33,11 @@ export async function checkImageLimit(userId: string, count: number): Promise<vo
     return;
   }
 
-  if (row.role === 'admin') {
+  const isAdmin =
+    row.role === 'admin' ||
+    (ADMIN_EMAIL && row.email && row.email.toLowerCase() === ADMIN_EMAIL.toLowerCase());
+
+  if (isAdmin) {
     log('Admin user %s, skipping image limit check', userId);
     return;
   }

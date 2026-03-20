@@ -4,10 +4,10 @@
 
 export const LOBE_CHAT_CLOUD = 'LobeHub Cloud';
 
-export const BRANDING_NAME = 'ДОиРП AI';
+export const BRANDING_NAME = 'ДОиРП ИИ';
 export const BRANDING_LOGO_URL = '/doirp_logo.png';
 
-export const ORG_NAME = 'ДОиРП AI';
+export const ORG_NAME = 'ДОиРП ИИ';
 
 export const BRANDING_URL = {
   help: undefined,
@@ -37,4 +37,4 @@ export const BRANDING_EMAIL = {
 export const BRANDING_PROVIDER = 'lobehub';
 
 export const COPYRIGHT = `© ${new Date().getFullYear()} ${ORG_NAME}`;
-export const COPYRIGHT_FULL = `${COPYRIGHT}. All rights reserved.`;
+export const COPYRIGHT_FULL = `${COPYRIGHT}. Все права защищены.`;

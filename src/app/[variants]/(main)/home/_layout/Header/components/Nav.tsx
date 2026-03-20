@@ -23,8 +23,8 @@ interface Item {
   adminOnly?: boolean;
   hidden?: boolean | undefined;
   icon: NavItemProps['icon'];
-  isNew?: boolean;
   isBeta?: boolean;
+  isNew?: boolean;
   key: string;
   onClick?: () => void;
   title: NavItemProps['title'];
@@ -89,6 +89,12 @@ const Nav = memo(() => {
         key: 'voice-service',
         title: t('tab.voiceService'),
         url: '/voice-service',
+      },
+      {
+        icon: getRouteById('max')!.icon,
+        key: SidebarTabKey.Max,
+        title: 'MAX',
+        url: '/max',
       },
     ],
     [enableBusinessFeatures, showAiImage, t, toggleCommandMenu],

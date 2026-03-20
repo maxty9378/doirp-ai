@@ -53,7 +53,7 @@ const SessionItem = memo<SessionItemProps>(({ id }) => {
       ];
     });
 
-  // Only hide the model tag for the inbox session itself (ДОиРП AI)
+  // Only hide the model tag for the inbox session itself (ДОиРП ИИ)
   const showModel = sessionType === 'agent' && model && id !== INBOX_SESSION_ID;
 
   const handleDoubleClick = () => {

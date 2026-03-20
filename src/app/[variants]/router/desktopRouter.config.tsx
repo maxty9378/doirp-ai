@@ -382,10 +382,7 @@ export const desktopRoutes: RouteConfig[] = [
       {
         children: [
           {
-            element: dynamicElement(
-              () => import('../(main)/voice-call'),
-              'Desktop > Voice Call',
-            ),
+            element: dynamicElement(() => import('../(main)/voice-call'), 'Desktop > Voice Call'),
             index: true,
           },
           {
@@ -462,6 +459,18 @@ export const desktopRoutes: RouteConfig[] = [
         ],
         errorElement: <ErrorBoundary resetPath="/voice-service" />,
         path: 'voice-service',
+      },
+
+      // MAX routes
+      {
+        children: [
+          {
+            element: dynamicElement(() => import('../(main)/max'), 'Desktop > MAX'),
+            index: true,
+          },
+        ],
+        errorElement: <ErrorBoundary resetPath="/max" />,
+        path: 'max',
       },
 
       ...BusinessDesktopRoutesWithMainLayout,

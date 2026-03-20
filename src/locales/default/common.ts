@@ -1,6 +1,6 @@
 export default {
   'about': 'О сервисе',
-  'app.name': 'ДОиРП AI',
+  'app.name': 'ДОиРП ИИ',
   'advanceSettings': 'Расширенные настройки',
   'alert.cloud.action': 'Попробовать сейчас',
   'alert.cloud.desc':
@@ -24,7 +24,8 @@ export default {
   'appLoading.showDetail': 'Показать подробности',
   'autoGenerate': 'Автозаполнение',
   'autoGenerateTooltip': 'Автозаполнение описания из профиля агента',
-  'autoGenerateTooltipDisabled': 'Сначала добавьте профиль агента, чтобы использовать автозаполнение',
+  'autoGenerateTooltipDisabled':
+    'Сначала добавьте профиль агента, чтобы использовать автозаполнение',
   'back': 'Назад',
   'batchDelete': 'Пакетное удаление',
   'badge.beta': 'Бета',
@@ -97,7 +98,8 @@ export default {
   'clientDB.solve.repair.desc': 'Ручное управление статусом миграции',
   'clientDB.solve.repair.runSQL': 'Выполнить вручную',
   'clientDB.solve.repair.sql.clear': 'Очистить',
-  'clientDB.solve.repair.sql.desc': 'Выполняйте пользовательские SQL-инструкции для исправления проблем с базой данных',
+  'clientDB.solve.repair.sql.desc':
+    'Выполняйте пользовательские SQL-инструкции для исправления проблем с базой данных',
   'clientDB.solve.repair.sql.markFinished': 'Отметить как завершенное',
   'clientDB.solve.repair.sql.placeholder': 'Введите SQL-инструкцию...',
   'clientDB.solve.repair.sql.result': 'Результат выполнения',
@@ -118,7 +120,7 @@ export default {
   'cmdk.askAIHeadingEmpty': 'Выберите функцию ИИ',
   'cmdk.askAgentHeading': 'Спросить Агента',
   'cmdk.askAgentPlaceholder': 'Спросите {{agent}} о чем-нибудь...',
-  'cmdk.askLobeAI': 'Спросить у ДОиРП AI',
+  'cmdk.askLobeAI': 'Спросить у ДОиРП ИИ',
   'cmdk.community': 'Сообщество',
   'cmdk.communitySupport': 'Поддержка сообщества',
   'cmdk.contactUs': 'Связаться с нами',
@@ -135,7 +137,7 @@ export default {
   'cmdk.keyboard.ESC': 'ESC',
   'cmdk.keyboard.Enter': 'Enter',
   'cmdk.keyboard.Tab': 'Tab',
-  'cmdk.meet': 'Звонки ДОиРП',
+  'cmdk.meet': 'Звонки ДОиРП beta 1.2',
 
   'cmdk.keywords.about': 'о версии инфо',
 
@@ -275,7 +277,7 @@ export default {
   'copySuccess': 'Скопировано',
   'dataStatistics.messages': 'Сообщения',
   'dataStatistics.sessions': 'Агенты',
-  'dataStatistics.today': "Новые сегодня",
+  'dataStatistics.today': 'Новые сегодня',
   'dataStatistics.topics': 'Темы',
   'defaultAgent': 'Пользовательский агент',
   'defaultSession': 'Пользовательский агент',
@@ -434,7 +436,7 @@ export default {
   'privacy': 'Политика конфиденциальности',
   'productHunt.actionLabel': 'Поддержать нас',
   'productHunt.description': 'Поддержите нас на Product Hunt. Ваша поддержка очень важна для нас!',
-  'productHunt.title': "Мы на Product Hunt!",
+  'productHunt.title': 'Мы на Product Hunt!',
   'regenerate': 'Сгенерировать заново',
   'releaseNotes': 'Подробности версии',
   'rename': 'Переименовать',
@@ -483,6 +485,7 @@ export default {
   'tab.home': 'Главная',
   'tab.knowledgeBase': 'Библиотека',
   'tab.me': 'Я',
+  'tab.meet': 'Звонки',
   'tab.memory': 'Память',
   'tab.pages': 'Страницы',
   'resourceAssistant.desc':

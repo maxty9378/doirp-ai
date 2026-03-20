@@ -24,7 +24,7 @@ const Agent = memo<PropsWithChildren>(() => {
     agentSelectors.currentAgentBackgroundColor(s),
   ]);
 
-  const displayTitle = isInbox ? 'ДОиРП AI' : title || t('defaultSession', { ns: 'common' });
+  const displayTitle = isInbox ? 'ДОиРП ИИ' : title || t('defaultSession', { ns: 'common' });
 
   if (isLoading) return <SkeletonItem height={32} padding={0} />;
 

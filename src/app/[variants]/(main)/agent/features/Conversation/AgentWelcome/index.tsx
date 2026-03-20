@@ -37,7 +37,7 @@ const InboxWelcome = memo(() => {
     return agentSystemRoleMsg;
   }, [openingMessage, agentSystemRoleMsg, meta.description]);
 
-  const displayTitle = isInbox ? 'ДОиРП AI' : meta.title || t('defaultSession', { ns: 'common' });
+  const displayTitle = isInbox ? 'ДОиРП ИИ' : meta.title || t('defaultSession', { ns: 'common' });
 
   return (
     <>
@@ -60,7 +60,7 @@ const InboxWelcome = memo(() => {
         </Text>
         <Flexbox width={'min(100%, 640px)'}>
           <Markdown fontSize={fontSize} variant={'chat'}>
-            {isInbox ? t('guide.defaultMessageWithoutCreate', { appName: 'ДОиРП AI' }) : message}
+            {isInbox ? t('guide.defaultMessageWithoutCreate', { appName: 'ДОиРП ИИ' }) : message}
           </Markdown>
         </Flexbox>
         {openingQuestions.length > 0 && (

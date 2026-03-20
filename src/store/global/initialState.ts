@@ -12,6 +12,7 @@ export enum SidebarTabKey {
   Home = 'home',
   Image = 'image',
   Knowledge = 'knowledge',
+  Max = 'max',
   Me = 'me',
   Meet = 'meet',
   Memory = 'memory',
@@ -62,8 +63,8 @@ export enum SettingsTabs {
   Stats = 'stats',
   Storage = 'storage',
   SystemTools = 'system-tools',
-  TTS = 'tts',
   TrainingAdmin = 'training-admin',
+  TTS = 'tts',
   Usage = 'usage',
   Users = 'users',
   VoiceCallProxies = 'voice-call-proxies',
@@ -182,19 +183,14 @@ export interface SystemStatus {
 }
 
 export interface GlobalState {
-  /**
-   * When true, the embedded voice call is active (e.g. Полевой боец).
-   * Used to hide/disable the main chat input during the call.
-   */
-  isVoiceCallActive?: boolean;
   hasNewVersion?: boolean;
   initClientDBError?: Error;
   initClientDBMigrations?: {
     sqls: MigrationSQL[];
     tableRecords: MigrationTableItem[];
   };
-
   initClientDBProcess?: { costTime?: number; phase: 'wasm' | 'dependencies'; progress: number };
+
   /**
    * Client database initialization state
    * Idle on startup, Ready when complete, Error on failure
@@ -207,6 +203,11 @@ export interface GlobalState {
    */
   isServerVersionOutdated?: boolean;
   isStatusInit?: boolean;
+  /**
+   * When true, the embedded voice call is active (e.g. Полевой боец).
+   * Used to hide/disable the main chat input during the call.
+   */
+  isVoiceCallActive?: boolean;
   latestVersion?: string;
   navigate?: NavigateFunction;
   /**

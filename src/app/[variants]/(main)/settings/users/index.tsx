@@ -7,6 +7,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
+import { DAILY_IMAGE_LIMIT } from '@lobechat/database/schemas';
 import { Flexbox, FormGroup } from '@lobehub/ui';
 import {
   App,
@@ -450,7 +451,9 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                     };
                     return (
                       <Space size="small">
-                        <Text>{count}/5</Text>
+                        <Text>
+                          {count}/{DAILY_IMAGE_LIMIT}
+                        </Text>
                         {count > 0 && (
                           <Tooltip
                             title={t('users.resetImageCount', {

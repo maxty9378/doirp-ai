@@ -26,7 +26,7 @@ const BottomMenu = memo(() => {
         {
           icon: getRouteById('meet')!.icon,
           key: SidebarTabKey.Meet,
-          title: 'Звонки ДОиРП',
+          title: 'Звонки ДОиРП beta 1.2',
           url: '/meet',
         },
         {
@@ -60,19 +60,21 @@ const BottomMenu = memo(() => {
       }}
     >
       {items.map((item) => (
-        <Link
-          key={item.key}
-          to={item.url}
-          onClick={(e) => {
-            e.preventDefault();
-            navigate(item.url);
-          }}
-        >
-          <NavItem active={tab === item.key} icon={item.icon} title={item.title} />
+        <Link key={item.key} to={item.url} onClick={(e) => e.preventDefault()}>
+          <NavItem
+            active={tab === item.key}
+            icon={item.icon}
+            title={item.title}
+            onClick={() => {
+              navigate(item.url);
+            }}
+          />
         </Link>
       ))}
     </Flexbox>
   );
 });
+
+BottomMenu.displayName = 'BottomMenu';
 
 export default BottomMenu;

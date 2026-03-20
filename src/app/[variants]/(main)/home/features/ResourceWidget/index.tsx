@@ -13,6 +13,8 @@ const TOKENS_PER_CREDIT = 10;
 interface ResourceLimitsData {
   dailyImageCount: number;
   imageLimit: number;
+  isImageUnlimited: boolean;
+  nextImageResetAt: string | null;
   remaining: number;
   tokenQuota: number;
   tokensUsed: number;
@@ -40,7 +42,11 @@ const ResourceWidget = memo(() => {
             <Skeleton.Button active size="small" style={{ width: 100, height: 20 }} />
             <Skeleton.Button active size="small" style={{ width: 60, height: 20 }} />
           </Flexbox>
-          <Skeleton.Button active size="small" style={{ width: '100%', height: 8, borderRadius: 4 }} />
+          <Skeleton.Button
+            active
+            size="small"
+            style={{ width: '100%', height: 8, borderRadius: 4 }}
+          />
           <Skeleton.Button active size="small" style={{ width: 120, height: 16 }} />
         </Flexbox>
         <Flexbox horizontal align="center" justify="space-between" style={{ width: '100%' }}>
@@ -55,15 +61,15 @@ const ResourceWidget = memo(() => {
     return null;
   }
 
-  const { tokenQuota, tokensUsed, remaining, dailyImageCount, imageLimit } = data;
-  
+  const { tokenQuota, tokensUsed, remaining, dailyImageCount, imageLimit, isImageUnlimited } = data;
+
   // Prevent negative remaining balance if user goes into overdraft
   const displayRemaining = Math.max(0, remaining);
   const displayTokensUsed = Math.min(tokensUsed, tokenQuota);
-  
+
   const creditsRemaining = Math.floor(displayRemaining / TOKENS_PER_CREDIT);
   const creditsQuota = Math.floor(tokenQuota / TOKENS_PER_CREDIT);
-  
+
   const usagePercent = tokenQuota > 0 ? Math.round((displayTokensUsed / tokenQuota) * 100) : 0;
   const remainingPercent = tokenQuota > 0 ? Math.round((displayRemaining / tokenQuota) * 100) : 100;
   const isLow = remainingPercent < 20;
@@ -80,7 +86,13 @@ const ResourceWidget = memo(() => {
               icon={Zap}
               size={14}
               style={{
-                color: isUnlimited ? '#722ed1' : isCritical ? '#ff4d4f' : isLow ? '#ffa34d' : theme.colorTextSecondary,
+                color: isUnlimited
+                  ? '#722ed1'
+                  : isCritical
+                    ? '#ff4d4f'
+                    : isLow
+                      ? '#ffa34d'
+                      : theme.colorTextSecondary,
               }}
             />
             <Text weight={500}>Учебные кредиты</Text>
@@ -147,9 +159,29 @@ const ResourceWidget = memo(() => {
             Использовано генераций:
           </Text>
         </Flexbox>
-        <Text style={{ fontSize: 13 }} weight={500} type={dailyImageCount >= imageLimit ? 'danger' : undefined}>
-          {dailyImageCount}/{imageLimit} сегодня
-        </Text>
+        {isImageUnlimited ? (
+          <div
+            style={{
+              fontSize: 12,
+              padding: '2px 8px',
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #1890ff 0%, #722ed1 100%)',
+              color: '#fff',
+              fontWeight: 'bold',
+              boxShadow: '0 2px 4px rgba(114, 46, 209, 0.2)',
+            }}
+          >
+            Безлимит
+          </div>
+        ) : (
+          <Text
+            style={{ fontSize: 13 }}
+            type={dailyImageCount >= imageLimit ? 'danger' : undefined}
+            weight={500}
+          >
+            {dailyImageCount}/{imageLimit} сегодня
+          </Text>
+        )}
       </Flexbox>
     </Flexbox>
   );

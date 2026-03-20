@@ -5,11 +5,7 @@ import { memo } from 'react';
 import SideBarHeaderLayout from '@/features/NavPanel/SideBarHeaderLayout';
 
 const Header = memo(() => {
-  return (
-    <SideBarHeaderLayout
-      title="Звонки"
-    />
-  );
+  return <SideBarHeaderLayout left="Звонки ДОиРП beta 1.2" />;
 });
 
 Header.displayName = 'MeetSidebarHeader';

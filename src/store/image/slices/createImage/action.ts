@@ -12,9 +12,51 @@ import { generationBatchSelectors } from '../generationBatch/selectors';
 import { imageGenerationConfigSelectors } from '../generationConfig/selectors';
 import { generationTopicSelectors } from '../generationTopic';
 
+interface DailyImageLimitData {
+  dailyImageCount: number;
+  imageLimit: number;
+  isImageUnlimited: boolean;
+  nextImageResetAt: string | null;
+}
+
 // ====== action interface ====== //
 
 // ====== helper functions ====== //
+function formatTimeUntilReset(resetAtIso: string | null | undefined): string {
+  if (!resetAtIso) return 'скоро';
+
+  const target = new Date(resetAtIso).getTime();
+  const diffMs = target - Date.now();
+  if (!Number.isFinite(diffMs) || diffMs <= 0) return 'сегодня';
+
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (hours > 0) return `${hours} ч ${minutes} мин`;
+  if (minutes > 0) return `${minutes} мин`;
+  return `${seconds} сек`;
+}
+
+async function getDailyImageLimitData(): Promise<DailyImageLimitData | null> {
+  try {
+    const res = await fetch('/api/user/token-limits');
+    if (!res.ok) return null;
+
+    const data = (await res.json()) as Partial<DailyImageLimitData>;
+    if (typeof data.dailyImageCount !== 'number') return null;
+    if (typeof data.imageLimit !== 'number') return null;
+    return {
+      dailyImageCount: data.dailyImageCount,
+      imageLimit: data.imageLimit,
+      isImageUnlimited: Boolean(data.isImageUnlimited),
+      nextImageResetAt: typeof data.nextImageResetAt === 'string' ? data.nextImageResetAt : null,
+    };
+  } catch {
+    return null;
+  }
+}
 
 // ====== action implementation ====== //
 
@@ -100,7 +142,33 @@ export class CreateImageActionImpl {
           err instanceof TRPCClientError &&
           (err.data?.code === 'TOO_MANY_REQUESTS' || err.message?.includes('лимит'));
         if (isDailyLimit) {
-          message.warning(i18n.t('limit.dailyReached', { ns: 'image' }));
+          const limits = await getDailyImageLimitData();
+          if (!limits) {
+            message.warning(
+              i18n.t('limit.dailyReached', {
+                ns: 'image',
+                used: 10,
+                limit: 10,
+                remaining: 0,
+                resetIn: 'скоро',
+              }),
+            );
+          } else if (!limits.isImageUnlimited) {
+            const used = limits.dailyImageCount;
+            const limit = limits.imageLimit;
+            const remaining = Math.max(0, limit - used);
+            const resetIn = formatTimeUntilReset(limits.nextImageResetAt);
+
+            message.warning(
+              i18n.t('limit.dailyReached', {
+                ns: 'image',
+                used,
+                limit,
+                remaining,
+                resetIn,
+              }),
+            );
+          }
         }
         throw err;
       }
@@ -165,7 +233,33 @@ export class CreateImageActionImpl {
           err instanceof TRPCClientError &&
           (err.data?.code === 'TOO_MANY_REQUESTS' || err.message?.includes('лимит'));
         if (isDailyLimit) {
-          message.warning(i18n.t('limit.dailyReached', { ns: 'image' }));
+          const limits = await getDailyImageLimitData();
+          if (!limits) {
+            message.warning(
+              i18n.t('limit.dailyReached', {
+                ns: 'image',
+                used: 10,
+                limit: 10,
+                remaining: 0,
+                resetIn: 'скоро',
+              }),
+            );
+          } else if (!limits.isImageUnlimited) {
+            const used = limits.dailyImageCount;
+            const limit = limits.imageLimit;
+            const remaining = Math.max(0, limit - used);
+            const resetIn = formatTimeUntilReset(limits.nextImageResetAt);
+
+            message.warning(
+              i18n.t('limit.dailyReached', {
+                ns: 'image',
+                used,
+                limit,
+                remaining,
+                resetIn,
+              }),
+            );
+          }
         }
         throw err;
       }

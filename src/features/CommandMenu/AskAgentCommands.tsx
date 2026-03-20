@@ -54,8 +54,8 @@ const AskAgentCommands = memo(() => {
   // Only show when user types "@"
   if (!isAtMention) return null;
 
-  // Check if app name (ДОиРП AI) matches the query
-  const appName = 'ДОиРП AI';
+  // Check if app name (ДОиРП ИИ) matches the query
+  const appName = 'ДОиРП ИИ';
   const showLobeAI = !mentionQuery || appName.toLowerCase().includes(mentionQuery);
 
   return (

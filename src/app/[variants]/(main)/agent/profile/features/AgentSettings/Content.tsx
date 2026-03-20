@@ -67,7 +67,7 @@ const Content = memo(() => {
     [t, isInbox],
   );
 
-  const displayTitle = isInbox ? 'ДОиРП AI' : meta.title || t('defaultSession', { ns: 'common' });
+  const displayTitle = isInbox ? 'ДОиРП ИИ' : meta.title || t('defaultSession', { ns: 'common' });
 
   return (
     <Flexbox
