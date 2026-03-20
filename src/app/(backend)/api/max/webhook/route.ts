@@ -3,7 +3,7 @@ import path from 'node:path';
 
 import { NextResponse } from 'next/server';
 
-import { MaxAPI } from '../lib/maxClient';
+import { MaxAPI } from '../maxClient';
 
 type WebhookLog = {
   id: string;
