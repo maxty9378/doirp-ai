@@ -146,6 +146,12 @@ export const userCodes = pgTable(
     tokensUsed: integer('tokens_used').notNull().default(0),
     /** Plain password stored for admin view only (create/reset). */
     plainPassword: text('plain_password'),
+    /** Account access mode managed by admin. */
+    accountType: text('account_type').notNull().default('standard'),
+    /** How many training launches are allowed for this user (null = unlimited). */
+    trainingSessionQuota: integer('training_session_quota'),
+    /** How many training launches are already consumed. */
+    trainingSessionsUsed: integer('training_sessions_used').notNull().default(0),
     /** Daily image generations count (lazy reset by last_image_date). */
     dailyImageCount: integer('daily_image_count').notNull().default(0),
     /** Date of last image generation (for lazy reset at day boundary). */

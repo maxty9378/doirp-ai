@@ -5,10 +5,12 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
-import { VOICE_CALL_PRESETS, VOICE_SIMULATOR_LPR_PRESET } from '@/config/initialAgents';
+import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
 import { getLLMConfig } from '@/envs/llm';
 import { getTrainingScenarioByKey } from '@/server/services/training';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
+
+import { proxyFetch } from '../_proxyFetch';
 
 const GEMINI_TTS_MODEL = 'gemini-2.5-pro-preview-tts';
 const LEGEND_VOICE = 'Charon';
@@ -82,7 +84,7 @@ export async function POST(request: Request) {
 
     const body = (await request.json().catch(() => ({}))) as { agentId?: string };
     const agentId = body.agentId || 'training-tp-price-objection';
-    const preset = VOICE_CALL_PRESETS[agentId] || VOICE_SIMULATOR_LPR_PRESET;
+    const preset = VOICE_CALL_PRESETS[agentId];
     const scenario = await getTrainingScenarioByKey(agentId);
 
     const legendText = scenario
@@ -92,7 +94,9 @@ export async function POST(request: Request) {
           title: scenario.title,
           user_role: scenario.userRole || '',
         })
-      : buildLegendText(preset);
+      : preset
+        ? buildLegendText(preset)
+        : '';
     if (!legendText) {
       return NextResponse.json({ error: 'Legend text is empty' }, { status: 400 });
     }
@@ -105,7 +109,7 @@ export async function POST(request: Request) {
 
     const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
     const endpoint = `${baseUrl}/models/${GEMINI_TTS_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const googleResponse = await fetch(endpoint, {
+    const googleResponse = await proxyFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

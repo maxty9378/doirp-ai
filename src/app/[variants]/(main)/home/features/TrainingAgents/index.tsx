@@ -31,19 +31,6 @@ import TrainingScenarioCard, {
 
 const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
 const FIELD_FIGHTER_AGENT_ID = 'training-tp-price-objection';
-const GFD_STRESS_KEY = 'training-gfd-stress';
-
-/** Обложка GFD — статический файл из public */
-const GFD_COVER_IMAGE = '/images/voice-call/gfd-cover.png';
-
-/** Карточка GFD всегда показывается (даже если API не вернул сценарии) */
-const GFD_STRESS_FALLBACK: TrainingScenarioFromApi = {
-  key: GFD_STRESS_KEY,
-  title: 'GFD: Стресс‑интервью на выставке',
-  description:
-    'Публичное интервью на выставке: провокационная журналистка проверяет маркетолога GFD на стрессоустойчивость.',
-  bannerUrl: GFD_COVER_IMAGE,
-};
 
 const TRAINING_CARD_WIDTH = 380;
 const TRAINING_CARD_WITH_BANNER_MIN_HEIGHT = 320;
@@ -293,157 +280,19 @@ const TrainingAgents = memo(() => {
       )}
 
       <ScrollShadowWithButton>
-        {/* GFD — всегда первый и сразу, без ожидания API; остальные сценарии не показываем (не листаются, не активны) */}
-        {(() => {
-          const gfdFromApi = voiceScenarios.find((s) => s.key === GFD_STRESS_KEY);
-          const gfdScenario = gfdFromApi ?? GFD_STRESS_FALLBACK;
-          return (
-            <TrainingScenarioCard
-              key={gfdScenario.key}
-              loading={voiceScenarioStartingKey === gfdScenario.key}
-              scenario={gfdScenario}
-              onClick={() => openVoiceScenario(gfdScenario.key)}
-            />
-          );
-        })()}
-
-        {INITIAL_TRAINING_AGENT_PRESETS.filter(
-          (preset) => preset.marketIdentifier === FIELD_FIGHTER_MARKET_ID,
-        ).map((preset) => (
-          <TrainingAgentItem
-            inDevelopment
-            isAdmin={isAdmin}
-            isUploadingBanner={isBannerUploading}
-            key={preset.key}
-            loading={activePresetKey === preset.key}
-            preset={preset}
-            onUpdateBanner={() => fileInputRef.current?.click()}
-            onClick={() => {
-              void openOrCreateAgent(preset);
-            }}
+        {voiceScenarios.map((scenario) => (
+          <TrainingScenarioCard
+            key={scenario.key}
+            loading={voiceScenarioStartingKey === scenario.key}
+            scenario={scenario}
+            onClick={() => openVoiceScenario(scenario.key)}
           />
         ))}
-
-        <Block
-          clickable={false}
-          flex={'none'}
-          justify={'space-between'}
-          variant={'filled'}
-          width={TRAINING_CARD_WIDTH}
-          style={{
-            backgroundColor: cssVar.colorFillQuaternary,
-            borderRadius: cssVar.borderRadiusLG,
-            cursor: 'not-allowed',
-            minHeight: TRAINING_CARD_WITH_BANNER_MIN_HEIGHT,
-            opacity: 0.45,
-            filter: 'grayscale(0.85)',
-            overflow: 'hidden',
-          }}
-        >
-          <div
-            style={{
-              aspectRatio: '16 / 9',
-              backgroundImage: `url(${hnBannerUrl}), url(${TRAINING_BANNER_FALLBACK_COVER})`,
-              backgroundPosition: 'center, center',
-              backgroundRepeat: 'no-repeat, no-repeat',
-              backgroundSize: 'cover, cover',
-              borderBottom: `1px solid ${cssVar.colorBorderSecondary}`,
-              position: 'relative',
-              width: '100%',
-            }}
-          >
-            <span
-              style={{
-                backdropFilter: 'blur(6px)',
-                background:
-                  'linear-gradient(135deg, rgba(16, 185, 129, 0.96) 0%, rgba(5, 150, 105, 0.96) 100%)',
-                border: '1px solid rgba(167, 243, 208, 0.65)',
-                borderRadius: 999,
-                color: '#ecfdf5',
-                fontSize: 10,
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                padding: '5px 10px',
-                position: 'absolute',
-                left: 10,
-                textTransform: 'uppercase',
-                top: 10,
-                zIndex: 5,
-              }}
-            >
-              В разработке
-            </span>
-            {isAdmin && (
-              <div
-                style={{ position: 'absolute', right: 4, top: 4, zIndex: 10 }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Dropdown
-                  placement="bottomRight"
-                  trigger={['click']}
-                  menu={{
-                    items: [
-                      {
-                        icon: <Upload size={14} />,
-                        key: 'update-banner',
-                        label: 'Обновить баннер',
-                        onClick: (e) => {
-                          e.domEvent.stopPropagation();
-                          hnBannerFileInputRef.current?.click();
-                        },
-                      },
-                    ],
-                  }}
-                >
-                  <ActionIcon
-                    icon={MoreVertical}
-                    loading={isHnBannerUploading}
-                    size={{ blockSize: 24, borderRadius: 8 }}
-                    style={{
-                      backgroundColor: 'rgba(0, 0, 0, 0.25)',
-                      backdropFilter: 'blur(4px)',
-                      color: '#fff',
-                      fontSize: 14,
-                    }}
-                  />
-                </Dropdown>
-              </div>
-            )}
-          </div>
-
-          <Flexbox horizontal align={'flex-start'} gap={10} paddingBlock={10} paddingInline={12}>
-            <Flexbox flex={1} gap={3} style={{ minWidth: 0 }}>
-              <Text fontSize={14} style={{ lineHeight: '20px', minHeight: 20 }} weight={600}>
-                Жесткие переговоры
-              </Text>
-              <Text
-                color={cssVar.colorTextSecondary}
-                fontSize={13}
-                style={{
-                  display: '-webkit-box',
-                  lineHeight: '18px',
-                  minHeight: 36,
-                  overflow: 'hidden',
-                  WebkitBoxOrient: 'vertical',
-                  WebkitLineClamp: 2,
-                }}
-              >
-                Управленческие поединки в чате
-              </Text>
-              <Text fontSize={12} style={{ lineHeight: '16px', minHeight: 16 }} type={'secondary'}>
-                В разработке
-              </Text>
-            </Flexbox>
-            <Avatar
-              emojiScaleWithBackground
-              avatar={'\u2694\uFE0F'}
-              background="#722ED1"
-              shape={'square'}
-              size={32}
-              style={{ alignSelf: 'flex-start', flex: 'none', marginTop: 2 }}
-            />
+        {!voiceScenariosLoading && voiceScenarios.length === 0 && (
+          <Flexbox align="center" justify="center" style={{ padding: 24, color: 'var(--colorTextSecondary)' }}>
+            <Text>Нет доступных тренажёров</Text>
           </Flexbox>
-        </Block>
+        )}
       </ScrollShadowWithButton>
 
       <Modal

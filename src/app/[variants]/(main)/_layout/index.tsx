@@ -4,9 +4,9 @@ import { TITLE_BAR_HEIGHT } from '@lobechat/desktop-bridge';
 import { Flexbox } from '@lobehub/ui';
 import { cx } from 'antd-style';
 import { type FC } from 'react';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { HotkeysProvider } from 'react-hotkeys-hook';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { DndContextWrapper } from '@/app/[variants]/(main)/resource/features/DndContextWrapper';
 import Loading from '@/components/Loading/BrandTextLoading';
@@ -24,6 +24,8 @@ import { MarketAuthProvider } from '@/layout/AuthProvider/MarketAuth';
 import CmdkLazy from '@/layout/GlobalProvider/CmdkLazy';
 import dynamic from '@/libs/next/dynamic';
 import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
+import { useUserStore } from '@/store/user';
+import { authSelectors } from '@/store/user/slices/auth/selectors';
 import { HotkeyScopeEnum } from '@/types/hotkey';
 
 import DesktopHome from '../home';
@@ -40,13 +42,31 @@ const CloudBanner = dynamic(() => import('@/features/AlertBanner/CloudBanner'));
 const Layout: FC = () => {
   const { isPWA } = usePlatform();
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const isVoiceCall = pathname.startsWith('/voice-call');
+  const isTrainingOnly = useUserStore(authSelectors.isTrainingOnly);
+  const isLogin = useUserStore(authSelectors.isLogin);
+  const isLoaded = useUserStore(authSelectors.isLoaded);
   const { showCloudPromotion } = useServerConfigStore(featureFlagsSelectors);
   const {
     initialValues: feedbackInitialValues,
     isOpen: isFeedbackModalOpen,
     close: closeFeedbackModal,
   } = useFeedbackModal();
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    if (!isLogin && pathname !== '/') {
+      navigate('/', { replace: true });
+      return;
+    }
+    if (!isTrainingOnly) return;
+
+    const allowByPrefix = pathname.startsWith('/training') || pathname.startsWith('/voice-call');
+    if (!allowByPrefix) {
+      navigate('/training', { replace: true });
+    }
+  }, [isLoaded, isLogin, isTrainingOnly, navigate, pathname]);
 
   return (
     <HotkeysProvider initiallyActiveScopes={[HotkeyScopeEnum.Global]}>

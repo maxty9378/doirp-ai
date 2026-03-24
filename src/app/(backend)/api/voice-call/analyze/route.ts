@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 import { getTrainingScenarioByKey } from '@/server/services/training';
+import { proxyFetch } from '../_proxyFetch';
 
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
@@ -12,6 +13,26 @@ const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
 export interface TranscriptEntryInput {
   role: 'ai' | 'user';
   text: string;
+}
+
+/** Приводит тело запроса к списку реплик с непустым текстом (устраняет 400 из-за «пустого» транскрипта). */
+function normalizeTranscriptEntries(raw: unknown): TranscriptEntryInput[] {
+  if (!Array.isArray(raw)) return [];
+  const out: TranscriptEntryInput[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const o = item as { role?: unknown; text?: unknown };
+    const text =
+      typeof o.text === 'string' ? o.text.trim() : String(o.text ?? '').trim();
+    if (!text) continue;
+    const r = o.role;
+    const role: 'ai' | 'user' =
+      r === 'ai' || r === 'assistant' || r === 'model' || r === 'bot'
+        ? 'ai'
+        : 'user';
+    out.push({ role, text });
+  }
+  return out;
 }
 
 export interface AnalyzeResponse {
@@ -30,12 +51,12 @@ export interface AnalyzeResponse {
 
 function formatTranscript(entries: TranscriptEntryInput[]): string {
   return entries
-    .map((e) => (e.role === 'ai' ? 'Собеседник: ' : 'Пользователь: ') + e.text)
+    .map((e) => (e.role === 'ai' ? 'Собеседник (AI-провокатор): ' : 'Пользователь (Обучаемый): ') + e.text)
     .join('\n');
 }
 
 const ANALYZE_PROMPT = (transcript: string) =>
-  `Ты — эксперт по коммуникациям и кризис-менеджменту. Оцени транскрипт стресс-интервью маркетолога компании с провокационным собеседником.
+  `Ты — эксперт по коммуникациям и бизнес-тренер. Оцени транскрипт стресс-интервью обучаемого (роль: "Пользователь (Обучаемый)") с провокационным ИИ-собеседником (роль: "Собеседник (AI-провокатор)").
 
 Транскрипт:
 """
@@ -57,14 +78,17 @@ ${transcript}
   "recommendedAction": "Рекомендованное следующее действие для развития навыков коммуникации",
   "phraseFeedback": [
     {
-      "userPhrase": "реплика маркетолога из транскрипта",
+      "userPhrase": "реплика обучаемого из транскрипта",
       "suggestedPhrase": "как лучше было сказать в этой ситуации",
       "advice": "краткое пояснение, почему так лучше"
     }
   ]
 }
 
-Правила для phraseFeedback: разбери по очереди реплики маркетолога. Для каждой реплики дай один объект с предлагаемым улучшением. Если реплика была удачной — suggestedPhrase может совпадать или быть с небольшим улучшением, advice — что сделано хорошо.
+ВАЖНЫЕ ПРАВИЛА:
+1. Анализируй ТОЛЬКО реплики, начинающиеся на "Пользователь (Обучаемый)". Не приписывай обучаемому реплики провокатора!
+2. В phraseFeedback разбирай по очереди фразы обучаемого. Если фраза удачная — suggestedPhrase может совпадать или быть с небольшим улучшением, advice — что сделано хорошо.
+3. Если "Пользователь (Обучаемый)" всё время молчал (нет его реплик в транскрипте), напиши об этом в summary (укажи на ступор/молчание), поставь низкий балл, а в phraseFeedback добавь один объект, где userPhrase — "[Молчание]", а suggestedPhrase — пример уверенного ответа на провокацию, чтобы начать диалог.
 Пиши все тексты по-русски.`;
 
 function buildAnalyzePrompt(transcript: string, scenarioId?: string | null): Promise<string> {
@@ -85,14 +109,30 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json()) as { transcript?: TranscriptEntryInput[]; scenarioId?: string };
-    const entries = Array.isArray(body?.transcript) ? body.transcript : [];
+    const body = (await req.json()) as { transcript?: unknown; scenarioId?: string };
+    const entries = normalizeTranscriptEntries(body?.transcript);
     const transcript = formatTranscript(entries);
     if (!transcript.trim()) {
-      return NextResponse.json({ error: 'transcript is required (array of { role, text })' }, { status: 400 });
+      return NextResponse.json(
+        {
+          error:
+            'Нужен непустой транскрипт: массив объектов { role: "user"|"ai", text: "…" } с непустым text.',
+        },
+        { status: 400 },
+      );
     }
 
-    const promptText = await buildAnalyzePrompt(transcript, body.scenarioId);
+    const promptTextBase = await buildAnalyzePrompt(transcript, body.scenarioId);
+
+    const hasUserLines = entries.some((e) => e.role === 'user');
+    let promptText = promptTextBase;
+    if (!hasUserLines) {
+      promptText +=
+        '\n\nВНИМАНИЕ: В данном транскрипте Пользователь (Обучаемый) не произнес ни одной фразы (молчал весь диалог). Обязательно отрази это в summary (поставь низкий балл за стрессоустойчивость) и в phraseFeedback (добавь один элемент: userPhrase="[Молчание]", suggestedPhrase="[Уверенный ответ для начала диалога]", advice="[Почему нельзя молчать]"). НЕ приписывай фразы Собеседника (ИИ-провокатора) Обучаемому!';
+    } else {
+      promptText +=
+        '\n\nВНИМАНИЕ: Оценивай только реплики "Пользователь (Обучаемый):". Строго запрещено приписывать фразы "Собеседника (AI-провокатора):" Пользователю в phraseFeedback.';
+    }
 
     const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
@@ -105,15 +145,16 @@ export async function POST(req: Request) {
 
     const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
     const endpoint = `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(endpoint, {
+
+    const res = await proxyFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: promptText }] }],
+        // Не задаём responseMimeType: часть моделей/регионов отвечает 400; JSON просим в промпте и парсим ниже.
         generationConfig: {
           maxOutputTokens: 4096,
           temperature: 0.3,
-          responseMimeType: 'application/json',
         },
       }),
     });
@@ -124,10 +165,9 @@ export async function POST(req: Request) {
     };
 
     if (!res.ok) {
-      return NextResponse.json(
-        { error: data?.error?.message || 'LLM request failed' },
-        { status: res.status || 500 },
-      );
+      const msg = data?.error?.message || 'Ошибка запроса к модели анализа';
+      console.warn('[voice-call/analyze] Ответ Gemini:', res.status, msg);
+      return NextResponse.json({ error: msg }, { status: res.status >= 400 && res.status < 600 ? res.status : 502 });
     }
 
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();

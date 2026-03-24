@@ -7,6 +7,8 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 import WideScreenButton from '@/features/WideScreenContainer/WideScreenButton';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { useUserStore } from '@/store/user';
+import { authSelectors } from '@/store/user/slices/auth/selectors';
 
 import VoiceCallOnboarding from '../agent/features/Conversation/AgentWelcome/VoiceCallOnboarding';
 import TrainingScenarioEditor from '../training/features/TrainingScenarioEditor';
@@ -124,7 +126,9 @@ const setCachedConfig = (agentId: string, payload: VoiceCallConfigPayload) => {
 const VoiceCallPage = memo(() => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const agentId = searchParams.get('agentId') || 'voice-simulator-lpr';
+  const isLogin = useUserStore(authSelectors.isLogin);
+  const isLoaded = useUserStore(authSelectors.isLoaded);
+  const agentId = searchParams.get('agentId') || 'training-gfd-stress';
   const isFieldFighter = agentId === 'training-tp-price-objection';
   const isAdmin = useIsAdmin();
   const mode = searchParams.get('mode') || 'call';
@@ -142,33 +146,22 @@ const VoiceCallPage = memo(() => {
   const [reportSessionId, setReportSessionId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
+    if (!isLoaded) return;
+    if (!isLogin) {
+      navigate('/');
+    }
+  }, [isLoaded, isLogin, navigate]);
+
+  useEffect(() => {
+    if (!isLoaded || !isLogin) return;
     setReportView('call');
     setReportData(null);
     setReportError(null);
     setReportSessionId(undefined);
-  }, [agentId]);
-
-  const handleCallEnd = useCallback(
-    (payload: VoiceCallEndPayload) => {
-      if (payload.transcript.length === 0) {
-        navigate('/');
-        return;
-      }
-      if (payload.error) {
-        setReportError(payload.error);
-        setReportData(null);
-        setReportSessionId(undefined);
-      } else {
-        setReportError(null);
-        setReportData(payload.analysisResult ?? null);
-        setReportSessionId(payload.sessionId);
-      }
-      setReportView('report');
-    },
-    [navigate],
-  );
+  }, [agentId, isLoaded, isLogin]);
 
   useEffect(() => {
+    if (!isLoaded || !isLogin) return;
     if (isFieldFighter || isEditMode) {
       setLegendState({ show: false, config: null, loading: false });
       return;
@@ -204,12 +197,35 @@ const VoiceCallPage = memo(() => {
     return () => {
       cancelled = true;
     };
-  }, [agentId, isFieldFighter]);
+  }, [agentId, isFieldFighter, isLoaded, isLogin]);
+
+  const handleCallEnd = useCallback(
+    (payload: VoiceCallEndPayload) => {
+      // Если вообще нет транскрипта и нет ошибки — просто выходим
+      if (payload.transcript.length === 0 && !payload.error) {
+        navigate('/');
+        return;
+      }
+      if (payload.error) {
+        setReportError(payload.error);
+        setReportData(null);
+        setReportSessionId(undefined);
+      } else {
+        setReportError(null);
+        setReportData(payload.analysisResult ?? null);
+        setReportSessionId(payload.sessionId);
+      }
+      setReportView('report');
+    },
+    [navigate],
+  );
 
   const skipToCall = () => setLegendState((s) => ({ ...s, show: false }));
   const openEditor = () =>
     navigate(`/voice-call?agentId=${encodeURIComponent(agentId)}&mode=edit`);
   const openCall = () => navigate(`/voice-call?agentId=${encodeURIComponent(agentId)}`);
+
+  if (!isLogin) return null;
 
   return (
     <div className={styles.root}>
@@ -267,7 +283,10 @@ const VoiceCallPage = memo(() => {
           <div className={styles.reportScroll}>
             <div className={styles.reportContent}>
               {reportError && (
-                <div style={{ color: 'var(--colorError)', marginBottom: 16 }}>{reportError}</div>
+                <div style={{ color: 'var(--colorError)', marginBottom: 16, padding: '16px', background: 'rgba(255, 77, 79, 0.1)', borderRadius: '8px', border: '1px solid rgba(255, 77, 79, 0.2)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: 8 }}>Анализ недоступен</div>
+                  {reportError}
+                </div>
               )}
               {reportData && <PostCallReport data={reportData} />}
             </div>

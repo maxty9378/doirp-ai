@@ -18,6 +18,7 @@ interface ScenarioUpdatePayload {
   analyzePrompt?: string | null;
   assistantLabel?: string | null;
   bannerUrl?: string | null;
+  checkpointIds?: string[] | null;
   debriefPrompt?: string | null;
   contextWindow?: number | null;
   description?: string | null;
@@ -42,6 +43,7 @@ interface ScenarioUpdatePayload {
   scoreDisplayLabel?: string | null;
   scoreLevelLabels?: ScoreLevelLabels | null;
   showLegend?: boolean | null;
+  sessionDurationMs?: number | null;
   silenceHardHangupMs?: number | null;
   silenceNudgeAfterMs?: number | null;
   silenceNudgeCooldownMs?: number | null;
@@ -105,6 +107,7 @@ export async function PUT(req: NextRequest) {
   }
 
   const goals = normalizeStringList(body.goals);
+  const checkpointIds = normalizeStringList(body.checkpointIds);
   const silencePhrases = normalizeStringList(body.silenceNudgePhrases);
 
   const scoreLevelLabels =
@@ -120,6 +123,7 @@ export async function PUT(req: NextRequest) {
     analyzePrompt: body.analyzePrompt?.trim() || null,
     assistantLabel: body.assistantLabel?.trim() || null,
     bannerUrl: body.bannerUrl?.trim() || null,
+    checkpointIds,
     debriefPrompt: body.debriefPrompt?.trim() || null,
     contextWindow: typeof body.contextWindow === 'number' ? body.contextWindow : null,
     description: body.description?.trim() || null,
@@ -143,6 +147,7 @@ export async function PUT(req: NextRequest) {
     scoreDisplayLabel: body.scoreDisplayLabel?.trim() || null,
     scoreLevelLabels,
     showLegend: body.showLegend ?? null,
+    sessionDurationMs: typeof body.sessionDurationMs === 'number' ? body.sessionDurationMs : null,
     silenceHardHangupMs: typeof body.silenceHardHangupMs === 'number' ? body.silenceHardHangupMs : null,
     silenceNudgeAfterMs: typeof body.silenceNudgeAfterMs === 'number' ? body.silenceNudgeAfterMs : null,
     silenceNudgeCooldownMs:

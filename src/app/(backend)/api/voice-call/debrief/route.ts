@@ -6,6 +6,8 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { getTrainingScenarioByKey } from '@/server/services/training';
 
+import { proxyFetch } from '../_proxyFetch';
+
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
 
@@ -59,7 +61,8 @@ export async function POST(req: Request) {
 
     const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
     const endpoint = `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(endpoint, {
+    
+    const res = await proxyFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -3,15 +3,12 @@
 import { Flexbox, Text } from '@lobehub/ui';
 import { FileTextIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useState } from 'react';
+
 import { useNavigate } from 'react-router-dom';
 
 import NavItem from '@/features/NavPanel/components/NavItem';
 import SkeletonList from '@/features/NavPanel/components/SkeletonList';
 
-/** Отображаемые названия сценариев по ключу */
-const SCENARIO_TITLES: Record<string, string> = {
-  'training-gfd-stress': 'GFD: Стресс‑интервью на выставке',
-};
 
 interface SessionListItem {
   id: string;
@@ -38,14 +35,29 @@ function formatDate(iso: string): string {
   }
 }
 
-function getScenarioTitle(scenarioId: string): string {
-  return SCENARIO_TITLES[scenarioId] ?? scenarioId;
-}
-
 const SessionList = memo(() => {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scenarioTitles, setScenarioTitles] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch('/api/training/scenarios', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : { scenarios: [] }))
+      .then((data: { scenarios?: Array<{ key: string; title: string }> }) => {
+        const map: Record<string, string> = {};
+        for (const s of data.scenarios ?? []) {
+          map[s.key] = s.title;
+        }
+        setScenarioTitles(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  const getScenarioTitle = useCallback(
+    (scenarioId: string) => scenarioTitles[scenarioId] ?? scenarioId,
+    [scenarioTitles],
+  );
 
   useEffect(() => {
     let cancelled = false;

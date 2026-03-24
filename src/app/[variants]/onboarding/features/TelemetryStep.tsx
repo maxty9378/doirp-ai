@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { ProductLogo } from '@/components/Branding';
 import NeuralNetworkLoading from '@/components/NeuralNetworkLoading';
 import { useUserStore } from '@/store/user';
+import { authSelectors } from '@/store/user/slices/auth/selectors';
 
 const LOGO_SIZE = 40;
 const AI_ICON_SIZE = 32;
@@ -38,6 +39,7 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
   const [isNavigating, setIsNavigating] = useState(false);
   const isNavigatingRef = useRef(false);
   const updateGeneralConfig = useUserStore((s) => s.updateGeneralConfig);
+  const isTrainingOnly = useUserStore(authSelectors.isTrainingOnly);
 
   const handleChoice = useCallback(
     (enabled: boolean) => {
@@ -117,59 +119,115 @@ const TelemetryStep = memo<TelemetryStepProps>(({ onNext }) => {
             key={locale}
             pauseDuration={16_000}
             typingSpeed={64}
-            sentences={[
-              t('telemetry.title', { name: 'ДОиРП ИИ' }),
-              t('telemetry.title2'),
-              t('telemetry.title3'),
-            ]}
+            sentences={
+              isTrainingOnly
+                ? [
+                    t('telemetry.titleTraining', { defaultValue: 'Я — ваш виртуальный тренажёр ДОиРП.' }),
+                    t('telemetry.title2'),
+                    t('telemetry.title3'),
+                  ]
+                : [
+                    t('telemetry.title', { name: 'ДОиРП ИИ' }),
+                    t('telemetry.title2'),
+                    t('telemetry.title3'),
+                  ]
+            }
           />
         </Text>
-        <Text as={'p'}>{t('telemetry.desc')}</Text>
+        <Text as={'p'}>
+          {isTrainingOnly
+            ? t('telemetry.descTraining', {
+                defaultValue:
+                  'Добро пожаловать в ДОиРП ИИ — интеллектуальную среду для обучения и развития. Я помогаю прокачивать ваши навыки общения, переговоров и отработки возражений в реалистичных бизнес-ситуациях.',
+              })
+            : t('telemetry.desc')}
+        </Text>
       </Flexbox>
       <Steps
         current={null as any}
         direction={'vertical'}
-        items={[
-          {
-            description: (
-              <Text as={'p'} color={cssVar.colorTextSecondary} style={{ marginBottom: 16 }}>
-                {t('telemetry.rows.create.desc')}
-              </Text>
-            ),
-            icon: <IconAvatar icon={PencilRulerIcon} />,
-            title: (
-              <Text as={'h2'} fontSize={16}>
-                {t('telemetry.rows.create.title')}
-              </Text>
-            ),
-          },
-          {
-            description: (
-              <Text as={'p'} color={cssVar.colorTextSecondary} style={{ marginBottom: 16 }}>
-                {t('telemetry.rows.collaborate.desc')}
-              </Text>
-            ),
-            icon: <IconAvatar icon={HeartHandshakeIcon} />,
-            title: (
-              <Text as={'h2'} fontSize={16}>
-                {t('telemetry.rows.collaborate.title')}
-              </Text>
-            ),
-          },
-          {
-            description: (
-              <Text as={'p'} color={cssVar.colorTextSecondary}>
-                {t('telemetry.rows.evolve.desc')}
-              </Text>
-            ),
-            icon: <IconAvatar icon={BrainIcon} />,
-            title: (
-              <Text as={'h2'} fontSize={16}>
-                {t('telemetry.rows.evolve.title')}
-              </Text>
-            ),
-          },
-        ]}
+        items={
+          isTrainingOnly
+            ? [
+                {
+                  description: (
+                    <Text as={'p'} color={cssVar.colorTextSecondary} style={{ marginBottom: 16 }}>
+                      {t('telemetry.rows.collaborate.desc', {
+                        defaultValue:
+                          'Обучение через действие. Я умею генерировать уникальные ролевые кейсы, моделировать сложные переговоры и выступать в роли виртуального оппонента. Это безопасная среда для отработки навыков перед реальными вызовами.',
+                      })}
+                    </Text>
+                  ),
+                  icon: <IconAvatar icon={HeartHandshakeIcon} />,
+                  title: (
+                    <Text as={'h2'} fontSize={16}>
+                      {t('telemetry.rows.collaborate.title', {
+                        defaultValue: 'Практика · Симуляция реального бизнес-опыта',
+                      })}
+                    </Text>
+                  ),
+                },
+                {
+                  description: (
+                    <Text as={'p'} color={cssVar.colorTextSecondary} style={{ marginBottom: 16 }}>
+                      {t('telemetry.rows.evolve.desc', {
+                        defaultValue:
+                          'Опирайтесь на данные, а не только на интуицию. Я помогаю анализировать диалоги из тренажеров, оценивать решения в рамках программ кадрового резерва и формировать точную развивающую обратную связь для каждого участника.',
+                      })}
+                    </Text>
+                  ),
+                  icon: <IconAvatar icon={BrainIcon} />,
+                  title: (
+                    <Text as={'h2'} fontSize={16}>
+                      {t('telemetry.rows.evolve.title', {
+                        defaultValue: 'Аналитика · Объективная оценка и обратная связь',
+                      })}
+                    </Text>
+                  ),
+                },
+              ]
+            : [
+                {
+                  description: (
+                    <Text as={'p'} color={cssVar.colorTextSecondary} style={{ marginBottom: 16 }}>
+                      {t('telemetry.rows.create.desc')}
+                    </Text>
+                  ),
+                  icon: <IconAvatar icon={PencilRulerIcon} />,
+                  title: (
+                    <Text as={'h2'} fontSize={16}>
+                      {t('telemetry.rows.create.title')}
+                    </Text>
+                  ),
+                },
+                {
+                  description: (
+                    <Text as={'p'} color={cssVar.colorTextSecondary} style={{ marginBottom: 16 }}>
+                      {t('telemetry.rows.collaborate.desc')}
+                    </Text>
+                  ),
+                  icon: <IconAvatar icon={HeartHandshakeIcon} />,
+                  title: (
+                    <Text as={'h2'} fontSize={16}>
+                      {t('telemetry.rows.collaborate.title')}
+                    </Text>
+                  ),
+                },
+                {
+                  description: (
+                    <Text as={'p'} color={cssVar.colorTextSecondary}>
+                      {t('telemetry.rows.evolve.desc')}
+                    </Text>
+                  ),
+                  icon: <IconAvatar icon={BrainIcon} />,
+                  title: (
+                    <Text as={'h2'} fontSize={16}>
+                      {t('telemetry.rows.evolve.title')}
+                    </Text>
+                  ),
+                },
+              ]
+        }
       />
       <Button
         disabled={isNavigating}

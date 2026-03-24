@@ -117,8 +117,9 @@ export class CommonActionImpl {
 
             // if there is avatar or userId (from client DB), update it into user
             const user =
-              data.avatar || data.userId
+              data.avatar || data.userId || data.accountType
                 ? merge(this.#get().user, {
+                    accountType: data.accountType,
                     avatar: data.avatar,
                     email: data.email,
                     firstName: data.firstName,
@@ -126,6 +127,9 @@ export class CommonActionImpl {
                     id: data.userId,
                     interests: data.interests,
                     latestName: data.lastName,
+                    role: data.userRole,
+                    trainingSessionQuota: data.trainingSessionQuota,
+                    trainingSessionsUsed: data.trainingSessionsUsed,
                     username: data.username,
                   } as LobeUser)
                 : this.#get().user;

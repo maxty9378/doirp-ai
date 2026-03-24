@@ -7,12 +7,15 @@ import { useTranslation } from 'react-i18next';
 
 import { DESKTOP_HEADER_ICON_SIZE } from '@/const/layoutTokens';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { useUserStore } from '@/store/user';
+import { authSelectors } from '@/store/user/slices/auth/selectors';
 
 import { useCreateMenuItems } from '../../hooks';
 
 const AddButton = memo(() => {
   const { t: tChat } = useTranslation('chat');
   const isAdmin = useIsAdmin();
+  const isTrainingOnly = useUserStore(authSelectors.isTrainingOnly);
 
   const {
     createAgentMenuItem,
@@ -38,6 +41,8 @@ const AddButton = memo(() => {
     }
     return [createPageMenuItem()];
   }, [isAdmin, createAgentMenuItem, createGroupChatMenuItem, createPageMenuItem]);
+
+  if (isTrainingOnly) return null;
 
   return (
     <Flexbox horizontal>

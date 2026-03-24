@@ -26,9 +26,7 @@ const TrainingPage = memo(() => {
       >
         <WideScreenContainer>
           {isLogin ? (
-            <>
-              <TrainingAgents />
-            </>
+            <TrainingAgents />
           ) : (
             <Flexbox
               align="center"

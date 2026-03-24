@@ -15,6 +15,8 @@ import {
   serverConfigSelectors,
   useServerConfigStore,
 } from '@/store/serverConfig';
+import { useUserStore } from '@/store/user';
+import { authSelectors } from '@/store/user/slices/auth/selectors';
 
 import { type NavItemProps } from '../../../../../../../features/NavPanel/components/NavItem';
 import NavItem from '../../../../../../../features/NavPanel/components/NavItem';
@@ -38,9 +40,22 @@ const Nav = memo(() => {
   const toggleCommandMenu = useGlobalStore((s) => s.toggleCommandMenu);
   const { showAiImage } = useServerConfigStore(featureFlagsSelectors);
   const enableBusinessFeatures = useServerConfigStore(serverConfigSelectors.enableBusinessFeatures);
+  const isTrainingOnly = useUserStore(authSelectors.isTrainingOnly);
 
-  const items: Item[] = useMemo(
-    () => [
+  const items: Item[] = useMemo(() => {
+    if (isTrainingOnly) {
+      return [
+        {
+          icon: Bot,
+          isBeta: true,
+          key: 'training',
+          title: 'Тренажеры',
+          url: '/training',
+        },
+      ];
+    }
+
+    return [
       {
         icon: SearchIcon,
         key: 'search',
@@ -90,9 +105,8 @@ const Nav = memo(() => {
         title: t('tab.voiceService'),
         url: '/voice-service',
       },
-    ],
-    [enableBusinessFeatures, showAiImage, t, toggleCommandMenu],
-  );
+    ];
+  }, [enableBusinessFeatures, isTrainingOnly, showAiImage, t, toggleCommandMenu]);
 
   const newBadge = (
     <Tag color="blue" size="small">

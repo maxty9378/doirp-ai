@@ -15,6 +15,7 @@ import { TRPCError } from '@trpc/server';
 import { after } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
 
 import {
   getIsInviteCodeRequired,
@@ -24,6 +25,7 @@ import {
 import { MessageModel } from '@/database/models/message';
 import { SessionModel } from '@/database/models/session';
 import { UserModel } from '@/database/models/user';
+import { userCodes } from '@/database/schemas';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { KeyVaultsGateKeeper } from '@/server/modules/KeyVaultsEncrypt';
@@ -88,6 +90,7 @@ export const userRouter = router({
       referralStatus,
       subscriptionPlan,
       isInviteCodeRequired,
+      trainingAccess,
     ] = await Promise.all([
       ctx.userModel.getUserState(KeyVaultsGateKeeper.getUserKeyVaults),
       safe(ctx.messageModel.countUpTo(5), 0),
@@ -95,6 +98,19 @@ export const userRouter = router({
       safe(getReferralStatus(ctx.userId), undefined),
       safe(getSubscriptionPlan(ctx.userId), undefined),
       safe(getIsInviteCodeRequired(ctx.userId), false),
+      safe(
+        ctx.serverDB
+          .select({
+            accountType: userCodes.accountType,
+            trainingSessionQuota: userCodes.trainingSessionQuota,
+            trainingSessionsUsed: userCodes.trainingSessionsUsed,
+          })
+          .from(userCodes)
+          .where(eq(userCodes.userId, ctx.userId))
+          .limit(1)
+          .then((rows) => rows[0] ?? null),
+        null,
+      ),
     ]);
 
     const hasMoreThan4Messages = messageCount > 4;
@@ -118,7 +134,11 @@ export const userRouter = router({
       lastName: state.lastName,
       onboarding: state.onboarding,
       preference: state.preference as UserPreference,
+      accountType: trainingAccess?.accountType ?? undefined,
       settings: state.settings,
+      trainingSessionQuota: trainingAccess?.trainingSessionQuota ?? undefined,
+      trainingSessionsUsed: trainingAccess?.trainingSessionsUsed ?? undefined,
+      userRole: state.role ?? undefined,
       userId: ctx.userId,
       username: state.username,
 

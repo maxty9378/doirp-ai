@@ -2,19 +2,10 @@
 
 import { createStaticStyles } from 'antd-style';
 import { Button, Spin } from 'antd';
-import { memo, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import PostCallReport from '../../features/GeminiLiveCall/PostCallReport';
-
-/** Отображаемые названия сценариев по ключу (как в сайдбаре) */
-const SCENARIO_TITLES: Record<string, string> = {
-  'training-gfd-stress': 'GFD: Стресс‑интервью на выставке',
-};
-
-function getScenarioTitle(scenarioId: string): string {
-  return SCENARIO_TITLES[scenarioId] ?? scenarioId;
-}
 
 function formatSessionDate(iso: string): string {
   try {
@@ -102,6 +93,69 @@ const VoiceCallSessionDetailPage = memo(() => {
   const [session, setSession] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [scenarioTitles, setScenarioTitles] = useState<Record<string, string>>({});
+  const [retryLoading, setRetryLoading] = useState(false);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/training/scenarios', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : { scenarios: [] }))
+      .then((data: { scenarios?: Array<{ key: string; title: string }> }) => {
+        const map: Record<string, string> = {};
+        for (const s of data.scenarios ?? []) {
+          map[s.key] = s.title;
+        }
+        setScenarioTitles(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  const getScenarioTitle = useCallback(
+    (scenarioId: string) => scenarioTitles[scenarioId] ?? scenarioId,
+    [scenarioTitles],
+  );
+
+  const retryAnalysis = useCallback(async () => {
+    if (!session || !id || retryLoading) return;
+    setRetryLoading(true);
+    setRetryError(null);
+    try {
+      const transcriptForApi = session.transcript.filter(
+        (e) => typeof e?.text === 'string' && e.text.trim().length > 0,
+      );
+      if (transcriptForApi.length === 0) {
+        throw new Error('Нет непустых сообщений в транскрипте');
+      }
+
+      const analyzeRes = await fetch('/api/voice-call/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript: transcriptForApi, scenarioId: session.scenarioId }),
+        credentials: 'include',
+      });
+      if (!analyzeRes.ok) {
+        const errData = await analyzeRes.json().catch(() => ({}));
+        throw new Error((errData as { error?: string }).error || 'Ошибка анализа');
+      }
+      const analysisResult = await analyzeRes.json();
+
+      const patchRes = await fetch(`/api/voice-call/sessions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysisResult }),
+        credentials: 'include',
+      });
+      if (!patchRes.ok) {
+        throw new Error('Не удалось сохранить результат анализа');
+      }
+
+      setSession((prev) => prev ? { ...prev, analysisResult } : prev);
+    } catch (e) {
+      setRetryError(e instanceof Error ? e.message : 'Ошибка');
+    } finally {
+      setRetryLoading(false);
+    }
+  }, [session, id, retryLoading]);
 
   useEffect(() => {
     if (!id) {
@@ -179,8 +233,27 @@ const VoiceCallSessionDetailPage = memo(() => {
           {session.analysisResult ? (
             <PostCallReport data={session.analysisResult} />
           ) : (
-            <div style={{ color: 'var(--colorTextSecondary)' }}>
-              Результат анализа для этой сессии недоступен.
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '40px 0' }}>
+              <div style={{ color: 'var(--colorTextSecondary)', fontSize: 15 }}>
+                {session.transcript.length > 0
+                  ? 'Анализ не был выполнен для этой сессии. Транскрипт сохранён — можно запустить анализ сейчас.'
+                  : 'Транскрипт пуст — анализ невозможен.'}
+              </div>
+              {session.transcript.length > 0 && (
+                <>
+                  <Button
+                    loading={retryLoading}
+                    type="primary"
+                    size="large"
+                    onClick={retryAnalysis}
+                  >
+                    {retryLoading ? 'Анализируем...' : 'Запустить анализ'}
+                  </Button>
+                  {retryError && (
+                    <div style={{ color: 'var(--colorError)', fontSize: 13 }}>{retryError}</div>
+                  )}
+                </>
+              )}
             </div>
           )}
         </div>

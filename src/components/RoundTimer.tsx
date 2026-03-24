@@ -36,25 +36,38 @@ export const RoundTimer: React.FC<RoundTimerProps> = ({
     0,
     Math.round((hardHangupMs - (nowTs - callStartAt)) / 1000),
   );
+  const isLow = remainingSeconds <= 30;
 
   return (
-    <div style={{ textAlign: 'center' }}>
-      <span
-        style={{
-          fontSize: 13,
-          fontWeight: 600,
-          color: 'var(--colorTextSecondary)',
-        }}
-      >
-        Осталось времени
-      </span>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
       <div
         style={{
-          marginTop: 4,
-          fontSize: 22,
-          fontWeight: 700,
-          letterSpacing: '0.18em',
-          color: 'var(--colorText)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: 11,
+          fontWeight: 600,
+          textTransform: 'uppercase' as const,
+          letterSpacing: '0.1em',
+          color: isLow ? '#ef4444' : 'rgba(148, 163, 184, 0.8)',
+        }}
+      >
+        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+          <circle cx={12} cy={12} r={10} />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+        Осталось
+      </div>
+      <div
+        style={{
+          fontSize: 28,
+          fontWeight: 800,
+          letterSpacing: '0.12em',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+          fontVariantNumeric: 'tabular-nums',
+          color: isLow ? '#ef4444' : '#f1f5f9',
+          textShadow: isLow ? '0 0 12px rgba(239,68,68,0.4)' : 'none',
+          transition: 'color 0.3s ease',
         }}
       >
         {formatSeconds(remainingSeconds)}
@@ -62,4 +75,3 @@ export const RoundTimer: React.FC<RoundTimerProps> = ({
     </div>
   );
 };
-

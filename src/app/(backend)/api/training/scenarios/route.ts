@@ -1,21 +1,24 @@
 import { headers } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
-import { listTrainingScenarios } from '@/server/services/training';
+import { listTrainingScenarios, listAllTrainingScenarios } from '@/server/services/training';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
+  const includeInactive = request.nextUrl.searchParams.get('includeInactive') === 'true';
+
   try {
-    const scenarios = await listTrainingScenarios();
+    const scenarios = includeInactive
+      ? await listAllTrainingScenarios()
+      : await listTrainingScenarios();
     return NextResponse.json({ scenarios });
   } catch (error) {
     console.error('[training/scenarios] failed to load:', error);
-    // При ошибке БД (таблицы не созданы и т.п.) возвращаем пустой список — фронт покажет fallback-карточку GFD
     return NextResponse.json({ scenarios: [] });
   }
 }

@@ -6,7 +6,7 @@ import { Activity, Mic, PhoneCall, Zap } from 'lucide-react';
 import { memo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const VOICE_SIMULATOR_AGENT_ID = 'voice-simulator-lpr';
+const VOICE_SIMULATOR_AGENT_ID = 'training-gfd-stress';
 
 const pulse = keyframes`
   0%, 100% { opacity: 0.2; transform: scale(1); }
@@ -119,12 +119,12 @@ const VoiceSimulatorWidget = memo(() => {
           </div>
           <Flexbox gap={4} style={{ minWidth: 0 }}>
             <div className={styles.titleRow}>
-              <Text style={{ fontSize: 20, fontWeight: 700 }}>Голосовой тренажер ЛПР</Text>
+              <Text style={{ fontSize: 20, fontWeight: 700 }}>GFD: Стресс-интервью</Text>
               <span className={styles.badge}>LIVE</span>
             </div>
             <Text color={cssVar.colorTextDescription} style={{ fontSize: 13, maxWidth: 420 }}>
-              Отработка возражений в реальном времени. ИИ-закупщик слушает ваш голос и отвечает
-              моментально.
+              Голосовая тренировка стресс-интервью на выставке. ИИ-ведущий слушает ваш голос и
+              отвечает моментально.
             </Text>
             <div className={styles.meta}>
               <span className={styles.metaItem}>

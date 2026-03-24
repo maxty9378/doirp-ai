@@ -1,9 +1,26 @@
 'use client';
 
 import { Flexbox, Form, type FormGroupItemType, Icon } from '@lobehub/ui';
-import { Button, Input, InputNumber, Select, Switch, Table, message } from 'antd';
+import { Button, Input, InputNumber, Modal as AntModal, Select, Switch, Table, Tag, message } from 'antd';
 import { createStyles } from 'antd-style';
-import { Loader2, Pencil, Plus, Trash2, Save, Upload } from 'lucide-react';
+import {
+  BookOpen,
+  Brain,
+  CheckCircle,
+  Loader2,
+  MessageSquare,
+  Mic,
+  Pencil,
+  Plus,
+  Save,
+  Settings,
+  Target,
+  Timer,
+  Trash2,
+  Upload,
+  UserCircle,
+  XCircle,
+} from 'lucide-react';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { FORM_STYLE } from '@/const/layoutTokens';
@@ -21,21 +38,30 @@ const useStyles = createStyles(({ css }) => ({
   wrap: css`
     padding-top: 12px;
   `,
+  statusBadge: css`
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+  `,
+  headerRow: css`
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  `,
 }));
-
-const SCENARIO_OPTIONS = [
-  { label: 'GFD: Стресс-интервью на выставке', value: 'training-gfd-stress' },
-];
 
 const toTrainingBannerUrl = (path: string) => {
   const normalizedPath = path.replace(/^\/+/, '').trim();
   const keyPrefix = 'voice-call/trainer-banner/';
-
   if (normalizedPath.startsWith(keyPrefix)) {
     const keyTail = normalizedPath.slice(keyPrefix.length);
     return `/webapi/voice-call/trainer-banner/${keyTail}`;
   }
-
   return `/webapi/${normalizedPath}`;
 };
 
@@ -60,6 +86,7 @@ interface ScenarioPayload {
   legend: string | null;
   userRole: string | null;
   goals: string[];
+  checkpointIds: string[];
   systemPrompt: string | null;
   analyzePrompt: string | null;
   debriefPrompt: string | null;
@@ -68,6 +95,7 @@ interface ScenarioPayload {
   voiceName: string | null;
   bannerUrl: string | null;
   contextWindow: number | null;
+  sessionDurationMs: number | null;
   silenceNudgeAfterMs: number | null;
   silenceNudgeCooldownMs: number | null;
   silenceHardHangupMs: number | null;
@@ -102,6 +130,9 @@ export interface TrainingScenarioEditorProps {
   hideSelector?: boolean;
 }
 
+const groupIcon = (IconComp: typeof Settings, color?: string) => (
+  <Icon icon={IconComp} size={18} style={{ color: color || 'var(--colorPrimary)' }} />
+);
 
 const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScenarioEditorProps) => {
   const { styles } = useStyles();
@@ -113,6 +144,26 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
   const [knowledgeLoading, setKnowledgeLoading] = useState(false);
   const [bannerUploading, setBannerUploading] = useState(false);
   const bannerFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [scenarioOptions, setScenarioOptions] = useState<Array<{ label: string; value: string }>>([]);
+
+  const [knowledgeModalOpen, setKnowledgeModalOpen] = useState(false);
+  const [knowledgeModalMode, setKnowledgeModalMode] = useState<'add' | 'edit'>('add');
+  const [knowledgeEditId, setKnowledgeEditId] = useState<string | null>(null);
+  const [knowledgeForm] = Form.useForm();
+
+  useEffect(() => {
+    fetch('/api/training/scenarios?includeInactive=true', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : { scenarios: [] }))
+      .then((data: { scenarios?: Array<{ key: string; title: string; isActive?: boolean }> }) => {
+        setScenarioOptions(
+          (data.scenarios ?? []).map((s) => ({
+            label: s.isActive === false ? `${s.title} (неактивен)` : s.title,
+            value: s.key,
+          })),
+        );
+      })
+      .catch(() => {});
+  }, []);
 
   const handleBannerFileSelected = useCallback(
     async (file?: File | null) => {
@@ -125,7 +176,6 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
         message.error('Сценарий ещё не загружен');
         return;
       }
-
       setBannerUploading(true);
       try {
         const { data } = await uploadService.uploadFileToS3(file, {
@@ -164,6 +214,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
         legend: data.scenario.legend ?? '',
         userRole: data.scenario.userRole ?? '',
         goals: (data.scenario.goals ?? []).join('\n'),
+        checkpointIds: (data.scenario.checkpointIds ?? []).join('\n'),
         systemPrompt: data.scenario.systemPrompt ?? '',
         analyzePrompt: data.scenario.analyzePrompt ?? '',
         debriefPrompt: data.scenario.debriefPrompt ?? '',
@@ -172,12 +223,14 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
         voiceName: data.scenario.voiceName ?? '',
         bannerUrl: data.scenario.bannerUrl ?? '',
         contextWindow: data.scenario.contextWindow ?? 5,
+        sessionDurationSec: Math.round(
+          (data.scenario.sessionDurationMs ?? data.scenario.silenceHardHangupMs ?? 300_000) / 1000,
+        ),
         silenceNudgeAfterMs: data.scenario.silenceNudgeAfterMs ?? 5000,
         silenceNudgeCooldownMs: data.scenario.silenceNudgeCooldownMs ?? 15000,
-      // В форме редактируем в секундах, в БД храним миллисекунды
-      silenceHardHangupMs: Math.round(
-        (data.scenario.silenceHardHangupMs ?? 300_000) / 1000,
-      ),
+        silenceHardHangupMs: Math.round(
+          (data.scenario.silenceHardHangupMs ?? 300_000) / 1000,
+        ),
         silenceNudgePhrases: (data.scenario.silenceNudgePhrases ?? []).join('\n'),
         showLegend: data.scenario.showLegend ?? true,
         enableCheckpoints: data.scenario.enableCheckpoints ?? false,
@@ -227,6 +280,10 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
       .split('\n')
       .map((s: string) => s.trim())
       .filter(Boolean);
+    const checkpointIds = String(values.checkpointIds ?? '')
+      .split('\n')
+      .map((s: string) => s.trim())
+      .filter(Boolean);
     const silenceNudgePhrases = String(values.silenceNudgePhrases ?? '')
       .split('\n')
       .map((s: string) => s.trim())
@@ -244,6 +301,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
           legend: values.legend || null,
           userRole: values.userRole || null,
           goals,
+          checkpointIds,
           systemPrompt: values.systemPrompt || null,
           analyzePrompt: values.analyzePrompt || null,
           debriefPrompt: values.debriefPrompt || null,
@@ -252,9 +310,12 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
           voiceName: values.voiceName || null,
           bannerUrl: values.bannerUrl || null,
           contextWindow: values.contextWindow ?? null,
+          sessionDurationMs:
+            typeof values.sessionDurationSec === 'number'
+              ? values.sessionDurationSec * 1000
+              : null,
           silenceNudgeAfterMs: values.silenceNudgeAfterMs ?? null,
           silenceNudgeCooldownMs: values.silenceNudgeCooldownMs ?? null,
-          // Пользователь вводит секунды, сервер ожидает миллисекунды
           silenceHardHangupMs:
             typeof values.silenceHardHangupMs === 'number'
               ? values.silenceHardHangupMs * 1000
@@ -300,67 +361,50 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
     }
   }, [form, message, payload, loadScenario]);
 
-  const handleAddKnowledge = useCallback(async () => {
-    if (!payload?.scenario?.id) return;
+  const openKnowledgeModal = useCallback((mode: 'add' | 'edit', entry?: KnowledgeEntry) => {
+    setKnowledgeModalMode(mode);
+    setKnowledgeEditId(entry?.id ?? null);
+    knowledgeForm.setFieldsValue({
+      productIngredient: entry?.productIngredient ?? '',
+      officialUsp: entry?.officialUsp ?? '',
+      attackMyth: entry?.attackMyth ?? '',
+    });
+    setKnowledgeModalOpen(true);
+  }, [knowledgeForm]);
+
+  const handleKnowledgeModalOk = useCallback(async () => {
+    if (!payload?.scenario) return;
+    const values = await knowledgeForm.validateFields().catch(() => null);
+    if (!values) return;
     setKnowledgeLoading(true);
     try {
-      const productIngredient = prompt('Продукт/Ингредиент:');
-      if (productIngredient == null || !productIngredient.trim()) {
-        setKnowledgeLoading(false);
-        return;
-      }
-      const officialUsp = prompt('Официальное УТП:');
-      if (officialUsp == null || !officialUsp.trim()) {
-        setKnowledgeLoading(false);
-        return;
-      }
-      const attackMyth = prompt('Миф для атаки:');
-      if (attackMyth == null || !attackMyth.trim()) {
-        setKnowledgeLoading(false);
-        return;
-      }
-      const res = await fetch('/api/admin/training/knowledge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          scenarioId: payload.scenario.id,
-          productIngredient: productIngredient.trim(),
-          officialUsp: officialUsp.trim(),
-          attackMyth: attackMyth.trim(),
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || res.statusText);
-      }
-      message.success('Запись добавлена');
-      void loadScenario(payload.scenario.key);
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Не удалось добавить');
-    } finally {
-      setKnowledgeLoading(false);
-    }
-  }, [message, payload, loadScenario]);
-
-  const handleEditKnowledge = useCallback(
-    async (entry: KnowledgeEntry) => {
-      if (!payload?.scenario?.key) return;
-      const productIngredient = prompt('Продукт/Ингредиент:', entry.productIngredient) ?? '';
-      const officialUsp = prompt('Официальное УТП:', entry.officialUsp) ?? '';
-      const attackMyth = prompt('Миф для атаки:', entry.attackMyth) ?? '';
-      if (!productIngredient.trim() || !officialUsp.trim() || !attackMyth.trim()) return;
-      setKnowledgeLoading(true);
-      try {
+      if (knowledgeModalMode === 'add') {
+        const res = await fetch('/api/admin/training/knowledge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            scenarioId: payload.scenario.id,
+            productIngredient: values.productIngredient.trim(),
+            officialUsp: values.officialUsp.trim(),
+            attackMyth: values.attackMyth.trim(),
+          }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || res.statusText);
+        }
+        message.success('Запись добавлена');
+      } else {
         const res = await fetch('/api/admin/training/knowledge', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({
-            id: entry.id,
-            productIngredient: productIngredient.trim(),
-            officialUsp: officialUsp.trim(),
-            attackMyth: attackMyth.trim(),
+            id: knowledgeEditId,
+            productIngredient: values.productIngredient.trim(),
+            officialUsp: values.officialUsp.trim(),
+            attackMyth: values.attackMyth.trim(),
           }),
         });
         if (!res.ok) {
@@ -368,15 +412,15 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
           throw new Error(data.error || res.statusText);
         }
         message.success('Запись обновлена');
-        void loadScenario(payload.scenario.key);
-      } catch (e) {
-        message.error(e instanceof Error ? e.message : 'Не удалось обновить');
-      } finally {
-        setKnowledgeLoading(false);
       }
-    },
-    [message, payload, loadScenario],
-  );
+      setKnowledgeModalOpen(false);
+      void loadScenario(payload.scenario.key);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'Не удалось сохранить');
+    } finally {
+      setKnowledgeLoading(false);
+    }
+  }, [knowledgeForm, knowledgeModalMode, knowledgeEditId, payload, message, loadScenario]);
 
   const handleDeleteKnowledge = useCallback(
     async (id: string) => {
@@ -400,29 +444,27 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
 
   const basicGroup: FormGroupItemType = useMemo(
     () => ({
+      icon: groupIcon(Settings),
       title: 'Основные настройки',
       children: [
         {
           label: 'Название',
-          desc: 'Название тренажёра',
+          desc: 'Название тренажёра, видимое пользователям',
           children: <Input placeholder="Название тренажёра" />,
           name: 'title',
           minWidth: undefined,
         },
         {
           label: 'Описание',
-          desc: 'Краткое описание',
+          desc: 'Краткое описание сценария',
           children: (
-            <Input.TextArea
-              autoSize={{ minRows: 2, maxRows: 4 }}
-              placeholder="Краткое описание"
-            />
+            <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="Краткое описание" />
           ),
           name: 'description',
         },
         {
-          label: 'Голос',
-          desc: 'Выберите голос для озвучки',
+          label: 'Голос ИИ',
+          desc: 'Голос для синтеза речи ИИ-агента',
           children: (
             <Select
               placeholder="Выберите голос"
@@ -441,7 +483,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
         },
         {
           label: 'Баннер',
-          desc: 'Загрузите картинку баннера, URL заполнится автоматически',
+          desc: 'Загрузите картинку баннера',
           children: (
             <Flexbox gap={8} horizontal align="center">
               <Input placeholder="https://..." style={{ flex: 1 }} />
@@ -459,7 +501,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
         },
         {
           label: 'Активен',
-          desc: 'Включен ли тренажёр для пользователей',
+          desc: 'Виден ли тренажёр пользователям',
           children: <Switch />,
           name: 'isActive',
           valuePropName: 'checked',
@@ -471,25 +513,20 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
   );
 
   const roleGroup: FormGroupItemType = useMemo(() => ({
-    title: 'Легенда и Роль',
+    icon: groupIcon(UserCircle, '#f59e0b'),
+    title: 'Роль и легенда',
     children: [
       {
         label: 'Легенда',
-        desc: 'Что видит пользователь перед стартом',
+        desc: 'Контекст, который видит пользователь перед стартом',
         children: <Input.TextArea autoSize={{ minRows: 3, maxRows: 8 }} placeholder="Текст легенды" />,
         name: 'legend',
       },
       {
         label: 'Роль пользователя',
-        desc: 'Кто вы в сценарии',
+        desc: 'Кем является пользователь в сценарии',
         children: <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="Кто вы в сценарии" />,
         name: 'userRole',
-      },
-      {
-        label: 'Цели',
-        desc: 'Каждая цель с новой строки',
-        children: <Input.TextArea autoSize={{ minRows: 3, maxRows: 6 }} placeholder="Цель 1\nЦель 2" />,
-        name: 'goals',
       },
       {
         label: 'Показывать легенду',
@@ -502,31 +539,32 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
   }), []);
 
   const aiGroup: FormGroupItemType = useMemo(() => ({
-    title: 'Настройки ИИ',
+    icon: groupIcon(Brain, '#8b5cf6'),
+    title: 'ИИ-агент',
     children: [
       {
         label: 'Системный промпт',
-        desc: 'Инструкции для ИИ-агента',
+        desc: 'Главные инструкции для ИИ-агента (роль, поведение, правила)',
         children: <Input.TextArea autoSize={{ minRows: 8, maxRows: 20 }} placeholder="Инструкции для ИИ-агента" />,
         name: 'systemPrompt',
       },
       {
         label: 'Метка ассистента',
-        desc: 'Например: Журналистка-расследователь',
-        children: <Input placeholder="Например: Журналистка-расследователь" />,
+        desc: 'Имя ИИ в интерфейсе (напр. «Журналистка-расследователь»)',
+        children: <Input placeholder="Журналистка-расследователь" />,
         name: 'assistantLabel',
         minWidth: undefined,
       },
       {
         label: 'Метка пользователя',
-        desc: 'Например: Вы (Маркетолог GFD)',
-        children: <Input placeholder="Например: Вы (Маркетолог GFD)" />,
+        desc: 'Имя пользователя в интерфейсе (напр. «Вы (Маркетолог GFD)»)',
+        children: <Input placeholder="Вы (Маркетолог GFD)" />,
         name: 'userLabel',
         minWidth: undefined,
       },
       {
         label: 'Окно контекста (реплик)',
-        desc: 'Количество сохраняемых реплик',
+        desc: 'Сколько последних реплик хранить в контексте',
         children: <InputNumber min={1} max={20} style={{ width: 120 }} />,
         name: 'contextWindow',
         minWidth: undefined,
@@ -534,55 +572,45 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
     ],
   }), []);
 
-  const promptsAfterCallGroup: FormGroupItemType = useMemo(() => ({
-    title: 'Промпты после звонка',
+  const timeGroup: FormGroupItemType = useMemo(() => ({
+    icon: groupIcon(Timer, '#06b6d4'),
+    title: 'Время и тишина',
     children: [
       {
-        label: 'Промпт анализа сессии',
-        desc: 'Инструкция для LLM при разборе транскрипта после звонка. Подставка транскрипта: {{transcript}}',
-        children: <Input.TextArea autoSize={{ minRows: 6, maxRows: 16 }} placeholder="Оставьте пустым для стандартного промпта" />,
-        name: 'analyzePrompt',
+        label: 'Длительность сессии (сек)',
+        desc: 'Максимальное время одной тренировочной сессии. Таймер обратного отсчёта показывается пользователю.',
+        children: <InputNumber min={30} step={30} style={{ width: 140 }} addonAfter="сек" />,
+        name: 'sessionDurationSec',
+        minWidth: undefined,
       },
       {
-        label: 'Промпт дебрифа',
-        desc: 'Инструкция для краткого разбора (2 ошибки, 1 сильная сторона). Подставка: {{transcript}}',
-        children: <Input.TextArea autoSize={{ minRows: 4, maxRows: 10 }} placeholder="Оставьте пустым для стандартного промпта" />,
-        name: 'debriefPrompt',
+        label: 'Таймаут тишины (сек)',
+        desc: 'Через сколько секунд полной тишины звонок завершится автоматически',
+        children: <InputNumber min={30} step={30} style={{ width: 140 }} addonAfter="сек" />,
+        name: 'silenceHardHangupMs',
+        minWidth: undefined,
       },
-    ],
-  }), []);
-
-  const silenceGroup: FormGroupItemType = useMemo(() => ({
-    title: 'Обработка тишины',
-    children: [
       {
         label: 'Подсказка при паузе через (мс)',
-        desc: 'Через сколько миллисекунд после тишины прозвучит первая подсказка',
-        children: <InputNumber min={1000} step={1000} style={{ width: 120 }} />,
+        desc: 'Через сколько мс после тишины прозвучит первая подсказка',
+        children: <InputNumber min={1000} step={1000} style={{ width: 140 }} />,
         name: 'silenceNudgeAfterMs',
         minWidth: undefined,
       },
       {
         label: 'Кулдаун подсказки (мс)',
         desc: 'Минимальная задержка между подсказками при тишине',
-        children: <InputNumber min={1000} step={1000} style={{ width: 120 }} />,
+        children: <InputNumber min={1000} step={1000} style={{ width: 140 }} />,
         name: 'silenceNudgeCooldownMs',
         minWidth: undefined,
       },
       {
-        label: 'Время раунда (сек)',
-        desc: 'Через сколько минут максимум звонок завершится автоматически',
-        children: <InputNumber min={30} step={30} style={{ width: 120 }} />,
-        name: 'silenceHardHangupMs',
-        minWidth: undefined,
-      },
-      {
         label: 'Фразы при тишине',
-        desc: 'Каждая с новой строки. В эфире используют молчание против собеседника.',
+        desc: 'Каждая с новой строки',
         children: (
           <Input.TextArea
             autoSize={{ minRows: 3, maxRows: 6 }}
-            placeholder="Что, аргументы закончились? Камера всё еще пишет, вы в курсе?\nЗрители ждут ответа, не молчите."
+            placeholder="Что, аргументы закончились?\nЗрители ждут ответа."
           />
         ),
         name: 'silenceNudgePhrases',
@@ -590,90 +618,80 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
     ],
   }), []);
 
-  const extraGroup: FormGroupItemType = useMemo(() => ({
-    title: 'Дополнительно',
+  const scoringGroup: FormGroupItemType = useMemo(() => ({
+    icon: groupIcon(Target, '#ef4444'),
+    title: 'Оценка и чекпоинты',
     children: [
       {
         label: 'Чекпоинты',
-        desc: 'Включить сохранение прогресса',
+        desc: 'Отслеживать выполнение целей',
         children: <Switch />,
         name: 'enableCheckpoints',
         valuePropName: 'checked',
         minWidth: undefined,
       },
       {
-        label: 'Оценка',
-        desc: 'Включить скоринг результатов',
+        label: 'Скоринг',
+        desc: 'Включить подсчёт очков в реальном времени',
         children: <Switch />,
         name: 'enableScoring',
         valuePropName: 'checked',
         minWidth: undefined,
       },
-    ],
-  }), []);
-
-  const scoreDisplayGroup: FormGroupItemType = useMemo(() => ({
-    title: 'Индикатор оценки (уровень стресса)',
-    children: [
+      {
+        label: 'Цели разговора',
+        desc: 'Каждая цель с новой строки. Отображаются пользователю.',
+        children: <Input.TextArea autoSize={{ minRows: 3, maxRows: 6 }} placeholder="Цель 1\nЦель 2" />,
+        name: 'goals',
+      },
+      {
+        label: 'ID чекпоинтов',
+        desc: 'Каждый ID с новой строки. Порядок соответствует целям. LLM использует эти ID в тегах [CHECKPOINT: ID].',
+        children: <Input.TextArea autoSize={{ minRows: 3, maxRows: 6 }} placeholder="STRESS_CONTROL\nFACT_CHECK" />,
+        name: 'checkpointIds',
+      },
       {
         label: 'Подпись индикатора',
-        desc: 'Например: Градус провокации, Уровень стресса, Оценка клиента',
-        children: <Input placeholder="Градус провокации" />,
+        desc: 'Текст над шкалой оценки (напр. «Эфирный прессинг»)',
+        children: <Input placeholder="Эфирный прессинг" />,
         name: 'scoreDisplayLabel',
         minWidth: undefined,
       },
       {
-        label: 'Подпись при низком счёте (score < -10)',
-        desc: 'Например: Нужно улучшить',
-        children: <Input placeholder="Нужно улучшить" />,
+        label: 'Подпись: низкий счёт (< -10)',
+        children: <Input placeholder="Провал интервью" />,
         name: 'scoreLevelLow',
         minWidth: undefined,
       },
       {
-        label: 'Подпись при среднем счёте (-10..10)',
-        desc: 'Например: Неплохо',
-        children: <Input placeholder="Неплохо" />,
+        label: 'Подпись: средний счёт (-10..10)',
+        children: <Input placeholder="Напряженная пауза" />,
         name: 'scoreLevelMid',
         minWidth: undefined,
       },
       {
-        label: 'Подпись при высоком счёте (> 10)',
-        desc: 'Например: Отлично',
-        children: <Input placeholder="Отлично" />,
+        label: 'Подпись: высокий счёт (> 10)',
+        children: <Input placeholder="Уверенная позиция" />,
         name: 'scoreLevelHigh',
         minWidth: undefined,
       },
     ],
   }), []);
 
-  const openingInstructionGroup: FormGroupItemType = useMemo(() => ({
-    title: 'Первая реплика ИИ',
-    children: [
-      {
-        label: 'Инструкция на старт диалога',
-        desc: 'Плейсхолдеры: {{assistantLabel}}, {{nameLine}} (или {{speakerInstruction}}). Пусто — стандартный текст.',
-        children: (
-          <Input.TextArea
-            autoSize={{ minRows: 3, maxRows: 8 }}
-            placeholder="Начинай интервью. Представься коротко как {{assistantLabel}} и произнеси первую реплику..."
-          />
-        ),
-        name: 'openingInstruction',
-      },
-    ],
-  }), []);
-
   const introDialogGroup: FormGroupItemType = useMemo(() => ({
-    title: 'Диалог представления (имя/позывной)',
+    icon: groupIcon(Mic, '#10b981'),
+    title: 'Диалог представления',
     children: [
       {
-        label: 'Показывать диалог представления',
+        label: 'Показывать диалог',
+        desc: 'Запрашивать имя/позывной перед стартом',
         children: <Switch />,
         name: 'showIntroDialog',
+        valuePropName: 'checked',
         minWidth: undefined,
       },
       {
-        label: 'Заголовок диалога',
+        label: 'Заголовок',
         children: <Input placeholder="Идентификация агента" />,
         name: 'introDialogTitle',
         minWidth: undefined,
@@ -681,26 +699,20 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
       {
         label: 'Описание',
         children: (
-          <Input.TextArea
-            autoSize={{ minRows: 2, maxRows: 4 }}
-            placeholder="Введите позывной или реальное имя для старта симуляции..."
-          />
+          <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="Введите позывной или реальное имя..." />
         ),
         name: 'introDialogDescription',
       },
       {
-        label: 'Плейсхолдер поля имени',
-        children: <Input placeholder="Например: Иван Петров или «Маркетолог GFD»" />,
+        label: 'Плейсхолдер',
+        children: <Input placeholder="Иван Петров или «Маркетолог GFD»" />,
         name: 'introDialogPlaceholder',
         minWidth: undefined,
       },
       {
-        label: 'Подсказка под полем',
+        label: 'Подсказка',
         children: (
-          <Input.TextArea
-            autoSize={{ minRows: 2, maxRows: 3 }}
-            placeholder="Можно указать реальное имя или рабочий позывной агента..."
-          />
+          <Input.TextArea autoSize={{ minRows: 2, maxRows: 3 }} placeholder="Можно указать реальное имя..." />
         ),
         name: 'introDialogHint',
       },
@@ -714,61 +726,79 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
   }), []);
 
   const inCallPromptsGroup: FormGroupItemType = useMemo(() => ({
+    icon: groupIcon(MessageSquare, '#f97316'),
     title: 'Промпты во время звонка',
     children: [
       {
-        label: 'Предупреждение перед концом раунда',
+        label: 'Инструкция на старт',
+        desc: 'Плейсхолдеры: {{assistantLabel}}, {{nameLine}}',
         children: (
           <Input.TextArea
-            autoSize={{ minRows: 2, maxRows: 6 }}
-            placeholder="Через 15 секунд наш эфир на конференции подходит к концу..."
+            autoSize={{ minRows: 3, maxRows: 8 }}
+            placeholder="Начинай интервью. Представься коротко как {{assistantLabel}}..."
           />
+        ),
+        name: 'openingInstruction',
+      },
+      {
+        label: 'Предупреждение перед концом',
+        children: (
+          <Input.TextArea autoSize={{ minRows: 2, maxRows: 6 }} placeholder="Через 15 секунд наш эфир подходит к концу..." />
         ),
         name: 'roundEndingPrompt',
       },
       {
         label: 'Шаблон подсказки при тишине',
+        desc: 'Плейсхолдер {{phrase}} — фраза из списка',
         children: (
-          <Input.TextArea
-            autoSize={{ minRows: 2, maxRows: 4 }}
-            placeholder='Собеседник молчит. Скажи коротко: "{{phrase}}".'
-          />
+          <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder='Собеседник молчит. Скажи: "{{phrase}}".' />
         ),
         name: 'silenceNudgeTemplate',
-        extra: 'Используйте плейсхолдер {{phrase}} — подставится фраза из списка «Фразы при тишине».',
       },
       {
-        label: 'Подсказка «отвечай короче»',
+        label: '«Отвечай короче»',
         children: (
-          <Input.TextArea
-            autoSize={{ minRows: 1, maxRows: 3 }}
-            placeholder="Отвечай короче: 1-2 предложения и по сути..."
-          />
+          <Input.TextArea autoSize={{ minRows: 1, maxRows: 3 }} placeholder="Отвечай короче: 1-2 предложения..." />
         ),
         name: 'shortAnswerNudge',
       },
       {
-        label: 'Подсказка «собеседник говорит тихо»',
+        label: '«Собеседник говорит тихо»',
         children: (
-          <Input.TextArea
-            autoSize={{ minRows: 1, maxRows: 3 }}
-            placeholder="Собеседник говорит очень тихо и неуверенно..."
-          />
+          <Input.TextArea autoSize={{ minRows: 1, maxRows: 3 }} placeholder="Собеседник говорит очень тихо..." />
         ),
         name: 'quietSpeakerNudge',
       },
       {
         label: 'Промпт при авто-успехе',
         children: (
-          <Input.TextArea
-            autoSize={{ minRows: 2, maxRows: 4 }}
-            placeholder="Маркетолог справился с напором. Признай поражение иронично и заверши эфир..."
-          />
+          <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="Маркетолог справился. Признай поражение..." />
         ),
         name: 'autoSuccessPrompt',
       },
     ],
   }), []);
+
+  const promptsAfterCallGroup: FormGroupItemType = useMemo(() => ({
+    icon: groupIcon(BookOpen, '#6366f1'),
+    title: 'Промпты после звонка',
+    children: [
+      {
+        label: 'Промпт анализа',
+        desc: 'Инструкция для LLM при разборе транскрипта. Подставка: {{transcript}}',
+        children: <Input.TextArea autoSize={{ minRows: 6, maxRows: 16 }} placeholder="Оставьте пустым для стандартного" />,
+        name: 'analyzePrompt',
+      },
+      {
+        label: 'Промпт дебрифа',
+        desc: 'Краткий разбор (2 ошибки, 1 сильная сторона). Подставка: {{transcript}}',
+        children: <Input.TextArea autoSize={{ minRows: 4, maxRows: 10 }} placeholder="Оставьте пустым для стандартного" />,
+        name: 'debriefPrompt',
+      },
+    ],
+  }), []);
+
+  const isActive = payload?.scenario?.isActive ?? true;
 
   return (
     <div className={styles.wrap}>
@@ -782,14 +812,28 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
           void handleBannerFileSelected(file);
         }}
       />
+
       <div className={styles.section} style={{ marginBottom: 12, maxWidth: FORM_STYLE.style?.maxWidth }}>
         <Flexbox align="center" gap={16} horizontal justify="space-between">
-          <div className={styles.sectionTitle} style={{ marginBottom: 0, fontSize: 24 }}>Настройки сценария</div>
+          <div className={styles.headerRow}>
+            <div className={styles.sectionTitle} style={{ marginBottom: 0, fontSize: 24 }}>
+              Настройки сценария
+            </div>
+            {payload && (
+              <Tag
+                color={isActive ? 'success' : 'default'}
+                icon={isActive ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+              >
+                {isActive ? 'Активен' : 'Неактивен'}
+              </Tag>
+            )}
+          </div>
           {!hideSelector && (
             <Select
               allowClear
-              options={SCENARIO_OPTIONS}
-              placeholder="Выберите тренажёр для редактирования"
+              options={scenarioOptions}
+              placeholder="Выберите тренажёр"
               style={{ width: 320 }}
               value={selectedKey}
               onChange={(v) => setSelectedKey(v ?? null)}
@@ -813,13 +857,11 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
               basicGroup,
               roleGroup,
               aiGroup,
-              promptsAfterCallGroup,
-              silenceGroup,
-              extraGroup,
-              scoreDisplayGroup,
-              openingInstructionGroup,
+              timeGroup,
+              scoringGroup,
               introDialogGroup,
               inCallPromptsGroup,
+              promptsAfterCallGroup,
             ]}
             itemsType="group"
             variant="filled"
@@ -839,14 +881,17 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
 
           <div className={styles.section} style={{ marginTop: 24, maxWidth: FORM_STYLE.style?.maxWidth }}>
             <Flexbox align="center" gap={16} horizontal justify="space-between" style={{ marginBottom: 16 }}>
-              <div className={styles.sectionTitle} style={{ marginBottom: 0, fontSize: 18 }}>
-                База знаний (RAG для провокаций)
-              </div>
+              <Flexbox align="center" gap={8} horizontal>
+                {groupIcon(BookOpen, '#f59e0b')}
+                <div className={styles.sectionTitle} style={{ marginBottom: 0, fontSize: 18 }}>
+                  База знаний (RAG для провокаций)
+                </div>
+              </Flexbox>
               <Button
                 icon={<Plus size={14} />}
                 loading={knowledgeLoading}
                 type="primary"
-                onClick={() => void handleAddKnowledge()}
+                onClick={() => openKnowledgeModal('add')}
               >
                 Добавить
               </Button>
@@ -863,7 +908,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
                       <Button
                         icon={<Pencil size={14} />}
                         size="small"
-                        onClick={() => void handleEditKnowledge(record)}
+                        onClick={() => openKnowledgeModal('edit', record)}
                       >
                         Изменить
                       </Button>
@@ -872,7 +917,14 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
                         icon={<Trash2 size={14} />}
                         size="small"
                         onClick={() => {
-                          if (confirm('Удалить запись?')) void handleDeleteKnowledge(record.id);
+                          AntModal.confirm({
+                            title: 'Удалить запись?',
+                            content: `Запись «${record.productIngredient}» будет удалена.`,
+                            okText: 'Удалить',
+                            cancelText: 'Отмена',
+                            okButtonProps: { danger: true },
+                            onOk: () => handleDeleteKnowledge(record.id),
+                          });
                         }}
                       >
                         Удалить
@@ -891,6 +943,41 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
           </div>
         </Flexbox>
       )}
+
+      <AntModal
+        title={knowledgeModalMode === 'add' ? 'Добавить запись' : 'Редактировать запись'}
+        open={knowledgeModalOpen}
+        onCancel={() => setKnowledgeModalOpen(false)}
+        onOk={() => void handleKnowledgeModalOk()}
+        confirmLoading={knowledgeLoading}
+        okText={knowledgeModalMode === 'add' ? 'Добавить' : 'Сохранить'}
+        cancelText="Отмена"
+        destroyOnClose
+      >
+        <Form form={knowledgeForm} layout="vertical" style={{ marginTop: 16 }}>
+          <Form.Item
+            label="Продукт/Ингредиент"
+            name="productIngredient"
+            rules={[{ required: true, message: 'Обязательное поле' }]}
+          >
+            <Input placeholder="Tornado Energy / кофеин" />
+          </Form.Item>
+          <Form.Item
+            label="Официальное УТП"
+            name="officialUsp"
+            rules={[{ required: true, message: 'Обязательное поле' }]}
+          >
+            <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="Бодрящий эффект, контролируемая рецептура..." />
+          </Form.Item>
+          <Form.Item
+            label="Миф для атаки"
+            name="attackMyth"
+            rules={[{ required: true, message: 'Обязательное поле' }]}
+          >
+            <Input.TextArea autoSize={{ minRows: 2, maxRows: 4 }} placeholder="Ударные дозы кофеина перегружают сердце..." />
+          </Form.Item>
+        </Form>
+      </AntModal>
     </div>
   );
 });
@@ -898,4 +985,3 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
 TrainingScenarioEditor.displayName = 'TrainingScenarioEditor';
 
 export default TrainingScenarioEditor;
-

@@ -5,6 +5,8 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 
+import { proxyFetch } from '../_proxyFetch';
+
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
 
@@ -40,7 +42,7 @@ export async function POST(request: Request) {
 Транскрипт диалога:
 ${transcript.map((t) => `${t.role.toUpperCase()}: ${t.text}`).join('\n')}`;
 
-    const response = await fetch(
+    const response = await proxyFetch(
       `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: 'POST',

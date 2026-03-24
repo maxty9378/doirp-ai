@@ -38,6 +38,21 @@ export const ensureUserCodesSchema = async () => {
 
   await serverDB.execute(sql`
     ALTER TABLE "user_codes"
+      ADD COLUMN IF NOT EXISTS "account_type" text NOT NULL DEFAULT 'standard';
+  `);
+
+  await serverDB.execute(sql`
+    ALTER TABLE "user_codes"
+      ADD COLUMN IF NOT EXISTS "training_session_quota" integer;
+  `);
+
+  await serverDB.execute(sql`
+    ALTER TABLE "user_codes"
+      ADD COLUMN IF NOT EXISTS "training_sessions_used" integer NOT NULL DEFAULT 0;
+  `);
+
+  await serverDB.execute(sql`
+    ALTER TABLE "user_codes"
       ADD COLUMN IF NOT EXISTS "daily_image_count" integer NOT NULL DEFAULT 0;
   `);
 

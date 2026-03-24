@@ -3,9 +3,10 @@
  * Run: bunx vitest run --silent='passed-only' 'src/app/(backend)/api/voice-call/config/__tests__/route.test.ts'
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
-const SCORE_LABEL_GFD = 'Градус провокации';
+const SCORE_LABEL_GFD = 'ЭФИРНЫЙ ПРЕССИНГ';
 
 const mockGetSession = vi.fn();
 vi.mock('@/auth', () => ({
@@ -40,7 +41,17 @@ vi.mock('@/server/modules/ModelRuntime/apiKeyManager', () => ({
 
 vi.mock('@/config/initialAgents', () => ({
   VOICE_CALL_PRESETS: {},
-  VOICE_SIMULATOR_LPR_PRESET: { systemRole: 'Test system role' },
+}));
+
+const mockSelectLimit = vi.fn().mockResolvedValue([{ role: null, accountType: null }]);
+const mockSelectWhere = vi.fn().mockReturnValue({ limit: mockSelectLimit });
+const mockSelectLeftJoin = vi.fn().mockReturnValue({ where: mockSelectWhere });
+const mockSelectFrom = vi.fn().mockReturnValue({ leftJoin: mockSelectLeftJoin });
+const mockDbSelect = vi.fn().mockReturnValue({ from: mockSelectFrom });
+vi.mock('@/database/server', () => ({
+  serverDB: {
+    select: (...args: unknown[]) => mockDbSelect(...args),
+  },
 }));
 
 describe('GET /api/voice-call/config', () => {
@@ -50,6 +61,7 @@ describe('GET /api/voice-call/config', () => {
     });
     mockGetLLMConfig.mockReturnValue({ GOOGLE_API_KEY: 'test-key' });
     mockApiKeyManagerPick.mockReturnValue('test-key');
+    mockSelectLimit.mockResolvedValue([{ role: null, accountType: null }]);
   });
 
   afterEach(() => {
@@ -59,12 +71,11 @@ describe('GET /api/voice-call/config', () => {
   it('returns 401 when session has no user', async () => {
     mockGetSession.mockResolvedValueOnce(null);
 
-    const { GET } = await import('../route');
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
     const res = await GET(req);
 
     expect(res.status).toBe(401);
-  });
+  }, 10000);
 
   it('returns 503 when GOOGLE_API_KEY is not configured', async () => {
     mockGetLLMConfig.mockReturnValueOnce({});
@@ -80,14 +91,13 @@ describe('GET /api/voice-call/config', () => {
       knowledgeEntries: [],
     });
 
-    const { GET } = await import('../route');
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
     const res = await GET(req);
 
     expect(res.status).toBe(503);
   });
 
-  it('returns scoreDisplayLabel "Градус провокации" when scenario from DB has it', async () => {
+  it('returns scoreDisplayLabel "ЭФИРНЫЙ ПРЕССИНГ" when scenario from DB has it', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       scenario: {
         systemPrompt: 'System prompt from DB',
@@ -105,7 +115,6 @@ describe('GET /api/voice-call/config', () => {
       knowledgeEntries: [],
     });
 
-    const { GET } = await import('../route');
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
     const res = await GET(req);
 
@@ -114,10 +123,9 @@ describe('GET /api/voice-call/config', () => {
     expect(body.scoreDisplayLabel).toBe(SCORE_LABEL_GFD);
   });
 
-  it('returns scoreDisplayLabel "Градус провокации" from GFD fallback when DB returns null', async () => {
+  it('returns scoreDisplayLabel "ЭФИРНЫЙ ПРЕССИНГ" from GFD fallback when DB returns null', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce(null);
 
-    const { GET } = await import('../route');
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
     const res = await GET(req);
 

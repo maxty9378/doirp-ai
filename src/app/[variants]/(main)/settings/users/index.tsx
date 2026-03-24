@@ -17,6 +17,7 @@ import {
   Popconfirm,
   Popover,
   Progress,
+  Select,
   Space,
   Table,
   Tag,
@@ -45,6 +46,7 @@ function generatePassword(length = 10): string {
 }
 
 interface UserCodeRow {
+  accountType?: 'standard' | 'training-only';
   code: string;
   createdAt: string;
   dailyImageCount?: number;
@@ -53,6 +55,8 @@ interface UserCodeRow {
   lastImageDate?: string | null;
   password?: string;
   tokenQuota?: number;
+  trainingSessionQuota?: number | null;
+  trainingSessionsUsed?: number;
   tokensUsed?: number;
   userId: string;
 }
@@ -80,6 +84,10 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
   const [passwordRevealed, setPasswordRevealed] = useState<Record<string, boolean>>({});
   const [addTokensUserId, setAddTokensUserId] = useState<string | null>(null);
   const [addTokensAmount, setAddTokensAmount] = useState(1000);
+  const [addTrainingTokensUserId, setAddTrainingTokensUserId] = useState<string | null>(null);
+  const [addTrainingTokensAmount, setAddTrainingTokensAmount] = useState(10);
+  const [accountType, setAccountType] = useState<'standard' | 'training-only'>('standard');
+  const [trainingSessionQuota, setTrainingSessionQuota] = useState(20);
 
   useEffect(() => {
     if (!data?.users) return;
@@ -117,6 +125,27 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
       mutate();
     } catch {
       message.error('Не удалось увеличить лимит');
+    }
+  };
+
+  const handleIncreaseTrainingQuota = async (userId: string, currentQuota: number, addAmount: number) => {
+    try {
+      const newQuota = currentQuota + addAmount;
+      const res = await fetch('/api/admin/users/set-training-quota', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, trainingSessionQuota: newQuota }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        message.error(json.error || 'Не удалось добавить сессии');
+        return;
+      }
+      message.success(`Добавлено сессий: ${addAmount}`);
+      setAddTrainingTokensUserId(null);
+      mutate();
+    } catch {
+      message.error('Не удалось добавить сессии');
     }
   };
 
@@ -191,7 +220,13 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
         : DEFAULT_TOKEN_QUOTA;
     try {
       const res = await fetch(ADMIN_USERS_API, {
-        body: JSON.stringify({ email, password, tokenQuota }),
+        body: JSON.stringify({
+          email,
+          password,
+          tokenQuota,
+          accountType,
+          trainingSessionQuota: accountType === 'training-only' ? trainingSessionQuota : null,
+        }),
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -213,6 +248,8 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
       }
       setAddEmail('');
       setGeneratedPassword('');
+      setAccountType('standard');
+      setTrainingSessionQuota(20);
       if (quotaInput) quotaInput.value = String(DEFAULT_TOKEN_QUOTA);
       mutate();
     } catch {
@@ -326,6 +363,24 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
               style={{ width: 140 }}
               type="number"
             />
+            <Select
+              style={{ width: 190 }}
+              value={accountType}
+              onChange={(value) => setAccountType(value)}
+              options={[
+                { label: 'Обычная учётка', value: 'standard' },
+                { label: 'Только тренажёры', value: 'training-only' },
+              ]}
+            />
+            {accountType === 'training-only' && (
+              <InputNumber
+                min={1}
+                style={{ width: 180 }}
+                value={trainingSessionQuota}
+                placeholder="Лимит запусков"
+                onChange={(v) => setTrainingSessionQuota(v ?? 1)}
+              />
+            )}
             <Button htmlType="submit" type="primary">
               {t('users.addButton')}
             </Button>
@@ -356,6 +411,17 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                   title: t('users.emailColumn'),
                   width: 220,
                   ellipsis: true,
+                },
+                {
+                  key: 'accountType',
+                  title: 'Тип доступа',
+                  width: 160,
+                  render: (_: unknown, record: UserCodeRow) =>
+                    record.accountType === 'training-only' ? (
+                      <Tag color="purple">Только тренажёры</Tag>
+                    ) : (
+                      <Tag>Стандарт</Tag>
+                    ),
                 },
                 {
                   key: 'password',
@@ -415,6 +481,103 @@ const Page = ({ mobile }: { mobile?: boolean }) => {
                             <Button icon={<ReloadOutlined />} size="small" type="text" />
                           </Tooltip>
                         </Popconfirm>
+                      </Space>
+                    );
+                  },
+                },
+                {
+                  key: 'trainingSessions',
+                  title: 'Сессии тренажёра',
+                  width: 180,
+                  render: (_: unknown, record: UserCodeRow) => {
+                    if (record.accountType !== 'training-only') return '—';
+                    const used = record.trainingSessionsUsed ?? 0;
+                    const quota = record.trainingSessionQuota ?? 0;
+                    const percent = quota > 0 ? Math.round((used / quota) * 100) : 0;
+                    const status = percent >= 90 ? 'exception' : percent >= 70 ? 'normal' : 'success';
+                    return (
+                      <Space orientation="vertical" size={4} style={{ width: '100%' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            fontSize: 12,
+                          }}
+                        >
+                          <Text type={quota > 0 && used >= quota ? 'danger' : 'secondary'}>
+                            {used.toLocaleString()} / {quota.toLocaleString()}
+                          </Text>
+                          <Space size={4}>
+                            <Text type={percent >= 90 ? 'danger' : 'secondary'}>{percent}%</Text>
+                            <Popover
+                              open={addTrainingTokensUserId === record.userId}
+                              trigger="click"
+                              content={
+                                <Space direction="vertical" size="small" style={{ width: 200 }}>
+                                  <div>
+                                    <div style={{ fontSize: 12, marginBottom: 4 }}>
+                                      Добавить сессии
+                                    </div>
+                                    <InputNumber
+                                      addonAfter="шт."
+                                      min={1}
+                                      style={{ width: '100%' }}
+                                      value={addTrainingTokensUserId === record.userId ? addTrainingTokensAmount : 10}
+                                      onChange={(v) => setAddTrainingTokensAmount(v ?? 10)}
+                                    />
+                                  </div>
+                                  <Space wrap size="small" style={{ width: '100%' }}>
+                                    <Button
+                                      size="small"
+                                      onClick={() => {
+                                        setAddTrainingTokensAmount(10);
+                                        handleIncreaseTrainingQuota(record.userId, quota, 10);
+                                      }}
+                                    >
+                                      +10
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      onClick={() => {
+                                        setAddTrainingTokensAmount(50);
+                                        handleIncreaseTrainingQuota(record.userId, quota, 50);
+                                      }}
+                                    >
+                                      +50
+                                    </Button>
+                                  </Space>
+                                  <Button
+                                    block
+                                    size="small"
+                                    type="primary"
+                                    onClick={() => {
+                                      handleIncreaseTrainingQuota(record.userId, quota, addTrainingTokensAmount);
+                                    }}
+                                  >
+                                    Начислить
+                                  </Button>
+                                </Space>
+                              }
+                              onOpenChange={(open) => {
+                                if (!open) setAddTrainingTokensUserId(null);
+                              }}
+                            >
+                              <Tooltip title="Добавить сессии тренажёра">
+                                <Button
+                                  icon={<PlusOutlined />}
+                                  size="small"
+                                  type="text"
+                                  onClick={() => {
+                                    setAddTrainingTokensUserId(record.userId);
+                                    setAddTrainingTokensAmount(10);
+                                  }}
+                                />
+                              </Tooltip>
+                            </Popover>
+                          </Space>
+                        </div>
+                        <Progress percent={percent} showInfo={false} size="small" status={status} />
                       </Space>
                     );
                   },

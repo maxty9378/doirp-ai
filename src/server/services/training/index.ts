@@ -24,6 +24,7 @@ const insertScenarioSeed = async (): Promise<TrainingScenarioItem> => {
     .insert(trainingScenarios)
     .values({
       assistantLabel: GFD_STRESS_TRAINING_SCENARIO.assistantLabel,
+      checkpointIds: GFD_STRESS_TRAINING_SCENARIO.checkpointIds,
       contextWindow: GFD_STRESS_TRAINING_SCENARIO.contextWindow,
       description: GFD_STRESS_TRAINING_SCENARIO.description,
       enableCheckpoints: GFD_STRESS_TRAINING_SCENARIO.enableCheckpoints,
@@ -34,6 +35,7 @@ const insertScenarioSeed = async (): Promise<TrainingScenarioItem> => {
       legend: GFD_STRESS_TRAINING_SCENARIO.legend,
       showLegend: GFD_STRESS_TRAINING_SCENARIO.showLegend,
       showIntroDialog: GFD_STRESS_TRAINING_SCENARIO.showIntroDialog ?? true,
+      sessionDurationMs: GFD_STRESS_TRAINING_SCENARIO.sessionDurationMs ?? GFD_STRESS_TRAINING_SCENARIO.silenceHardHangupMs,
       silenceHardHangupMs: GFD_STRESS_TRAINING_SCENARIO.silenceHardHangupMs,
       silenceNudgeAfterMs: GFD_STRESS_TRAINING_SCENARIO.silenceNudgeAfterMs,
       silenceNudgeCooldownMs: GFD_STRESS_TRAINING_SCENARIO.silenceNudgeCooldownMs,
@@ -96,6 +98,15 @@ export const listTrainingScenarios = async (): Promise<TrainingScenarioItem[]> =
     .select()
     .from(trainingScenarios)
     .where(eq(trainingScenarios.isActive, true))
+    .orderBy(trainingScenarios.createdAt);
+};
+
+export const listAllTrainingScenarios = async (): Promise<TrainingScenarioItem[]> => {
+  await ensureTrainingScenarioSeed(GFD_STRESS_TRAINING_KEY);
+
+  return serverDB
+    .select()
+    .from(trainingScenarios)
     .orderBy(trainingScenarios.createdAt);
 };
 

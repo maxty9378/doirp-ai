@@ -7,6 +7,7 @@ import type { UserOnboarding } from './onboarding';
 import type { UserSettings } from './settings';
 
 export interface LobeUser {
+  accountType?: string | null;
   avatar?: string;
   email?: string | null;
   firstName?: string | null;
@@ -14,6 +15,9 @@ export interface LobeUser {
   id: string;
   interests?: string[];
   latestName?: string | null;
+  role?: string | null;
+  trainingSessionQuota?: number | null;
+  trainingSessionsUsed?: number;
   username?: string | null;
 }
 
@@ -75,6 +79,7 @@ export interface UserPreference {
 export type ReferralStatusString = 'registered' | 'suspected' | 'rewarded' | 'revoked';
 
 export interface UserInitializationState {
+  accountType?: string;
   avatar?: string;
   canEnablePWAGuide?: boolean;
   canEnableTrace?: boolean;
@@ -96,6 +101,9 @@ export interface UserInitializationState {
   referralStatus?: ReferralStatusString;
   settings: PartialDeep<UserSettings>;
   subscriptionPlan?: Plans;
+  trainingSessionQuota?: number | null;
+  trainingSessionsUsed?: number;
+  userRole?: string | null;
   userId?: string;
   username?: string;
 }

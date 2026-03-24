@@ -1,7 +1,8 @@
 'use client';
 
 import { useAnalytics } from '@lobehub/analytics/react';
-import { Flexbox } from '@lobehub/ui';
+import { Flexbox, Text } from '@lobehub/ui';
+import { Tag } from 'antd';
 import { createStaticStyles, keyframes } from 'antd-style';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -67,6 +68,10 @@ const Footer = memo(() => {
   const { t } = useTranslation('common');
   const { analytics } = useAnalytics();
   const isLogin = useUserStore(authSelectors.isLogin);
+  const isTrainingOnly = useUserStore(authSelectors.isTrainingOnly);
+  const trainingSessionQuota = useUserStore((s) => s.user?.trainingSessionQuota ?? 0);
+  const trainingSessionsUsed = useUserStore((s) => s.user?.trainingSessionsUsed ?? 0);
+  const remaining = Math.max(0, trainingSessionQuota - trainingSessionsUsed);
   const [isProductHuntCardOpen, setIsProductHuntCardOpen] = useState(false);
 
   const [isNotificationRead, updateSystemStatus] = useGlobalStore((s) => [
@@ -123,9 +128,20 @@ const Footer = memo(() => {
     <>
       {isLogin && (
         <Flexbox gap={8} style={{ padding: '0 8px 8px' }}>
-          <div className={styles.tokenContainer}>
-            <ResourceWidget />
-          </div>
+          {!isTrainingOnly ? (
+            <div className={styles.tokenContainer}>
+              <ResourceWidget />
+            </div>
+          ) : (
+            <div className={styles.tokenContainer}>
+              <Flexbox align="center" justify="space-between" horizontal>
+                <Text style={{ fontWeight: 500, fontSize: 12 }}>Учебные кредиты</Text>
+                <Tag color={remaining > 0 ? 'processing' : 'error'} style={{ margin: 0, fontSize: 12, padding: '2px 6px' }}>
+                  {remaining} сессий
+                </Tag>
+              </Flexbox>
+            </div>
+          )}
           <Flexbox horizontal justify="flex-end" style={{ width: '100%' }}>
             <ThemeButton placement="topRight" size={18} />
           </Flexbox>

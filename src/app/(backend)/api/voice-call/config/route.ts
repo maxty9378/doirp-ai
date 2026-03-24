@@ -1,3 +1,5 @@
+import { userCodes, users } from '@lobechat/database/schemas';
+import { eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -7,7 +9,7 @@ import {
   GFD_STRESS_TRAINING_KNOWLEDGE,
   GFD_STRESS_TRAINING_SCENARIO,
 } from '@/config/training/gfdStressScenario';
-import { VOICE_CALL_PRESETS, VOICE_SIMULATOR_LPR_PRESET } from '@/config/initialAgents';
+import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
 import { getLLMConfig } from '@/envs/llm';
 import {
   buildTrainingKnowledgeContext,
@@ -15,6 +17,7 @@ import {
   type TrainingScenarioWithKnowledge,
 } from '@/server/services/training';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
+import { serverDB } from '@/database/server';
 
 const TP_PRICE_AGENT_ID = 'training-tp-price-objection';
 const DEFAULT_CONTEXT_WINDOW = 5;
@@ -101,10 +104,35 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const [accessRow] = await serverDB
+      .select({
+        accountType: userCodes.accountType,
+        role: users.role,
+        trainingSessionQuota: userCodes.trainingSessionQuota,
+        trainingSessionsUsed: userCodes.trainingSessionsUsed,
+      })
+      .from(users)
+      .leftJoin(userCodes, eq(userCodes.userId, users.id))
+      .where(eq(users.id, session.user.id))
+      .limit(1);
+
+    const isTrainingOnly =
+      accessRow?.role === 'training_only' || accessRow?.accountType === 'training-only';
+    if (isTrainingOnly) {
+      const quota = accessRow?.trainingSessionQuota ?? 0;
+      const used = accessRow?.trainingSessionsUsed ?? 0;
+      if (quota <= 0 || used >= quota) {
+        return NextResponse.json(
+          { error: 'Лимит запусков тренажёра исчерпан. Обратитесь к администратору.' },
+          { status: 403 },
+        );
+      }
+    }
+
     const { searchParams } = new URL(request.url);
-    const agentId = searchParams.get('agentId') || 'voice-simulator-lpr';
+    const agentId = searchParams.get('agentId') || 'training-gfd-stress';
     const speakerName = searchParams.get('speakerName')?.trim() || null;
-    const preset = VOICE_CALL_PRESETS[agentId] || VOICE_SIMULATOR_LPR_PRESET;
+    const preset = VOICE_CALL_PRESETS[agentId];
 
     let trainingScenario: Awaited<ReturnType<typeof getTrainingScenarioWithKnowledge>> = null;
     try {
@@ -141,7 +169,7 @@ export async function GET(request: Request) {
       sessionUser.email;
     const userFullName = (rawFullName && String(rawFullName).trim()) || 'Менеджер';
     const userFirstName = userFullName.split(' ')[0] || userFullName;
-    const baseSystemInstruction = isTpPrice ? buildTpPriceVoiceSystem(preset) : preset.systemRole;
+    const baseSystemInstruction = isTpPrice && preset ? buildTpPriceVoiceSystem(preset) : preset?.systemRole ?? '';
     const knowledgeContext = trainingScenario
       ? buildTrainingKnowledgeContext(trainingScenario.knowledgeEntries)
       : null;
@@ -164,7 +192,7 @@ export async function GET(request: Request) {
 
     const assistantLabel =
       trainingScenario?.scenario.assistantLabel ||
-      (isTpPrice ? 'ЛПР (Марина Ивановна)' : 'ИИ-агент');
+      (isTpPrice ? 'Директор магазина (Марина Ивановна)' : 'ИИ-агент');
     const userLabel =
       trainingScenario?.scenario.userLabel ||
       (isTpPrice ? 'Вы (Торговый представитель)' : 'Вы');
@@ -194,6 +222,10 @@ export async function GET(request: Request) {
         trainingScenario?.scenario.silenceNudgeAfterMs ?? DEFAULT_SILENCE_NUDGE_AFTER_MS,
       silenceNudgeCooldownMs:
         trainingScenario?.scenario.silenceNudgeCooldownMs ?? DEFAULT_SILENCE_NUDGE_COOLDOWN_MS,
+      sessionDurationMs:
+        trainingScenario?.scenario.sessionDurationMs ??
+        trainingScenario?.scenario.silenceHardHangupMs ??
+        DEFAULT_SILENCE_HARD_HANGUP_MS,
       silenceHardHangupMs:
         trainingScenario?.scenario.silenceHardHangupMs ?? DEFAULT_SILENCE_HARD_HANGUP_MS,
       silenceNudgePhrases:
@@ -210,6 +242,7 @@ export async function GET(request: Request) {
       payload.legend = trainingScenario.scenario.legend ?? null;
       payload.showLegend = trainingScenario.scenario.showLegend ?? true;
       payload.goals = trainingScenario.scenario.goals ?? [];
+      payload.checkpointIds = trainingScenario.scenario.checkpointIds ?? [];
       payload.scoreDisplayLabel = trainingScenario.scenario.scoreDisplayLabel ?? null;
       payload.scoreLevelLabels = trainingScenario.scenario.scoreLevelLabels ?? null;
       payload.openingInstruction = trainingScenario.scenario.openingInstruction ?? null;

@@ -44,6 +44,7 @@ export async function GET() {
 
     const rows = await serverDB
       .select({
+        accountType: userCodes.accountType,
         code: userCodes.code,
         createdAt: userCodes.createdAt,
         dailyImageCount: users.dailyImageCount,
@@ -52,6 +53,8 @@ export async function GET() {
         lastImageDate: users.lastImageDate,
         plainPassword: userCodes.plainPassword,
         tokenQuota: userCodes.tokenQuota,
+        trainingSessionQuota: userCodes.trainingSessionQuota,
+        trainingSessionsUsed: userCodes.trainingSessionsUsed,
         tokensUsed: userCodes.tokensUsed,
         userId: userCodes.userId,
       })
@@ -77,11 +80,13 @@ export async function GET() {
 }
 
 const MIN_PASSWORD_LENGTH = 6;
+const USER_ACCOUNT_TYPES = ['standard', 'training-only'] as const;
+type UserAccountType = (typeof USER_ACCOUNT_TYPES)[number];
 
 /**
  * POST /api/admin/users — create a user with email + password (admin only).
- * Body: { email: string, password: string, tokenQuota?: number }
- * Returns: { email: string, tokenQuota: number }
+ * Body: { email: string, password: string, tokenQuota?: number, accountType?: 'standard' | 'training-only', trainingSessionQuota?: number }
+ * Returns: { email: string, tokenQuota: number, accountType: string }
  */
 export async function POST(req: NextRequest) {
   const session = await ensureAdmin();
@@ -108,6 +113,19 @@ export async function POST(req: NextRequest) {
       typeof rawQuota === 'number' && Number.isInteger(rawQuota) && rawQuota >= 0
         ? rawQuota
         : DEFAULT_USER_TOKEN_QUOTA;
+    const rawAccountType = typeof body?.accountType === 'string' ? body.accountType : 'standard';
+    const accountType: UserAccountType = USER_ACCOUNT_TYPES.includes(rawAccountType as UserAccountType)
+      ? (rawAccountType as UserAccountType)
+      : 'standard';
+    const rawTrainingSessionQuota = body?.trainingSessionQuota;
+    const trainingSessionQuota =
+      accountType === 'training-only'
+        ? typeof rawTrainingSessionQuota === 'number' &&
+          Number.isInteger(rawTrainingSessionQuota) &&
+          rawTrainingSessionQuota > 0
+          ? rawTrainingSessionQuota
+          : null
+        : null;
 
     // Check if user with this email already exists
     const existingUser = await serverDB.query.users.findFirst({
@@ -129,6 +147,7 @@ export async function POST(req: NextRequest) {
       email,
       normalizedEmail: email.toLowerCase(),
       fullName: email,
+      role: accountType === 'training-only' ? 'training_only' : 'user',
       emailVerified: true,
       createdAt: now,
       updatedAt: now,
@@ -163,15 +182,18 @@ export async function POST(req: NextRequest) {
     const userCodeId = createNanoId(12)();
     const internalCode = generateCode(); // unique placeholder, not used for login
     await serverDB.insert(userCodes).values({
+      accountType,
       code: internalCode,
       email,
       id: userCodeId,
       plainPassword: password,
       tokenQuota,
+      trainingSessionQuota,
+      trainingSessionsUsed: 0,
       userId,
     });
 
-    return NextResponse.json({ email, tokenQuota, userId });
+    return NextResponse.json({ accountType, email, tokenQuota, trainingSessionQuota, userId });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     const cause = error instanceof Error ? error.cause : undefined;

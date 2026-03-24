@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Block, Button, Flexbox, Icon, Text } from '@lobehub/ui';
 import { createStaticStyles, cssVar, keyframes } from 'antd-style';
@@ -152,7 +152,7 @@ const VoiceCallFieldFighterWidget = memo(() => {
 
             <Text color={cssVar.colorTextDescription} style={{ fontSize: 13, maxWidth: 460 }}>
               Голосовой тренажер по отработке возражения «Дорого / у конкурентов дешевле».
-              Переговоры в реальном времени с ИИ-аватаром ЛПР.
+              Переговоры в реальном времени с ИИ-аватаром директора магазина.
             </Text>
 
             <Flexbox gap={16} style={{ marginTop: 6 }}>

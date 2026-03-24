@@ -5,6 +5,8 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 
+import { proxyFetch } from '../_proxyFetch';
+
 const GEMINI_MODELS_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /**
@@ -32,9 +34,8 @@ export async function GET() {
       });
     }
 
-    const res = await fetch(`${GEMINI_MODELS_URL}?key=${encodeURIComponent(apiKey)}`, {
+    const res = await proxyFetch(`${GEMINI_MODELS_URL}?key=${encodeURIComponent(apiKey)}`, {
       method: 'GET',
-      cache: 'no-store',
     });
 
     if (res.ok) {

@@ -25,14 +25,16 @@ const UserUpdater = memo(() => {
   // Sync user data from Better-Auth session to Zustand store
   useEffect(() => {
     if (betterAuthUser) {
-      const userAvatar = useUserStore.getState().user?.avatar;
+      const storeUser = useUserStore.getState().user;
 
       const lobeUser = {
+        ...storeUser,
         // Preserve avatar from settings, don't override with auth provider value
-        avatar: userAvatar || '',
+        avatar: storeUser?.avatar || '',
         email: betterAuthUser.email,
         fullName: betterAuthUser.name,
         id: betterAuthUser.id,
+        role: (betterAuthUser as { role?: string | null }).role,
         username: betterAuthUser.username,
       } as LobeUser;
 

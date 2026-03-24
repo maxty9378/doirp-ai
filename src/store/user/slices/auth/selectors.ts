@@ -41,4 +41,5 @@ export const authSelectors = {
   isLoadedAuthProviders: (s: UserStore) => s.isLoadedAuthProviders ?? false,
   isLogin: (s: UserStore) => s.isSignedIn,
   isLoginWithAuth: (s: UserStore) => s.isSignedIn,
+  isTrainingOnly: (s: UserStore) => s.user?.role === 'training_only',
 };
