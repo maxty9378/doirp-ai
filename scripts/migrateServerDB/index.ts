@@ -23,16 +23,28 @@ dotenvExpand.expand(dotenv.config({ override: true, path: `.env.${env}.local` })
 const migrationsFolder = join(__dirname, '../../packages/database/migrations');
 
 const isDesktop = process.env.NEXT_PUBLIC_IS_DESKTOP_APP === '1';
+const shouldSkipMigrate = process.env.SKIP_DB_MIGRATE === '1';
+const MIGRATION_TIMEOUT_MS = Number(process.env.DB_MIGRATE_TIMEOUT_MS || '180000');
 
 const runMigrations = async () => {
   const { serverDB } = await import('../../packages/database/src/server');
 
   const time = Date.now();
-  if (process.env.DATABASE_DRIVER === 'node') {
-    await nodeMigrate(serverDB, { migrationsFolder });
-  } else {
-    await neonMigrate(serverDB, { migrationsFolder });
-  }
+  const migratePromise =
+    process.env.DATABASE_DRIVER === 'node'
+      ? nodeMigrate(serverDB, { migrationsFolder })
+      : neonMigrate(serverDB, { migrationsFolder });
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => {
+      reject(
+        new Error(
+          `DB migration timeout after ${MIGRATION_TIMEOUT_MS}ms. Set DB_MIGRATE_TIMEOUT_MS or SKIP_DB_MIGRATE=1 for preview builds.`,
+        ),
+      );
+    }, MIGRATION_TIMEOUT_MS);
+  });
+
+  await Promise.race([migratePromise, timeoutPromise]);
 
   console.log('✅ database migration pass. use: %s ms', Date.now() - time);
 
@@ -42,7 +54,10 @@ const runMigrations = async () => {
 const connectionString = process.env.DATABASE_URL;
 
 // only migrate database if the connection string is available
-if (!isDesktop && connectionString) {
+if (shouldSkipMigrate) {
+  console.log('🟢 SKIP_DB_MIGRATE=1, migration skipped');
+  process.exit(0);
+} else if (!isDesktop && connectionString) {
   runMigrations().catch((err) => {
     console.error('❌ Database migrate failed:', err);
 
