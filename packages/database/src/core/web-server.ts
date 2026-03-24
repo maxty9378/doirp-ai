@@ -69,15 +69,16 @@ If you don't have it, please run \`openssl rand -base64 32\` to create one.
     // which can cause random ECONNRESET/timeout errors in tRPC queries.
     const poolMaxFromEnv = Number.parseInt(process.env.DATABASE_POOL_MAX || '', 10);
     const isDev = process.env.NODE_ENV !== 'production';
+    const isVercel = process.env.VERCEL === '1';
     const poolMaxDefault = isTimeweb ? (isDev ? 1 : 2) : 10;
     const poolMax =
       Number.isFinite(poolMaxFromEnv) && poolMaxFromEnv > 0 ? poolMaxFromEnv : poolMaxDefault;
 
     const client = new NodePool({
-      allowExitOnIdle: process.env.NODE_ENV !== 'production',
+      allowExitOnIdle: isDev || isVercel,
       connectionString,
-      connectionTimeoutMillis: 10_000,
-      idleTimeoutMillis: 15_000,
+      connectionTimeoutMillis: 30_000, // Increased from 10s to 30s
+      idleTimeoutMillis: 30_000, // Increased from 15s to 30s
       keepAlive: true,
       keepAliveInitialDelayMillis: 0,
       max: poolMax,
