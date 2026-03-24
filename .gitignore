@@ -94,6 +94,10 @@ robots.txt
 
 # Documents and media
 *.pdf
+*.mp3
+*.cyberduckprofile
+*.docx
+*.doc*
 
 # Cloud service keys
 vertex-ai-key.json
