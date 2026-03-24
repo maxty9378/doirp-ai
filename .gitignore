@@ -118,6 +118,7 @@ scripts/clerk-to-betterauth/prod/*.csv
 scripts/clerk-to-betterauth/prod/*.json
 
 # Misc
+frontend/
 ./packages/lobe-ui
 *.ppt*
 *.doc*
