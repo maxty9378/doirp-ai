@@ -23,7 +23,9 @@ dotenvExpand.expand(dotenv.config({ override: true, path: `.env.${env}.local` })
 const migrationsFolder = join(__dirname, '../../packages/database/migrations');
 
 const isDesktop = process.env.NEXT_PUBLIC_IS_DESKTOP_APP === '1';
-const shouldSkipMigrate = process.env.SKIP_DB_MIGRATE === '1';
+const isVercel = process.env.VERCEL === '1';
+const shouldSkipMigrate =
+  process.env.SKIP_DB_MIGRATE === '1' || (isVercel && process.env.SKIP_DB_MIGRATE !== '0');
 const MIGRATION_TIMEOUT_MS = Number(process.env.DB_MIGRATE_TIMEOUT_MS || '180000');
 
 const runMigrations = async () => {
@@ -55,7 +57,7 @@ const connectionString = process.env.DATABASE_URL;
 
 // only migrate database if the connection string is available
 if (shouldSkipMigrate) {
-  console.log('🟢 SKIP_DB_MIGRATE=1, migration skipped');
+  console.log('🟢 SKIP_DB_MIGRATE=1 or VERCEL=1 detected, migration skipped');
   process.exit(0);
 } else if (!isDesktop && connectionString) {
   runMigrations().catch((err) => {
