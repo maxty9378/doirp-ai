@@ -354,6 +354,9 @@ export function defineConfig(config: CustomNextConfig) {
     serverExternalPackages: config.serverExternalPackages ?? [
       'pdfkit',
       '@napi-rs/canvas',
+      // Native module, can significantly inflate serverless function bundles.
+      // Treat it as an external dependency so Next doesn't inline it into every route.
+      'sharp',
       'pdfjs-dist',
     ],
 
