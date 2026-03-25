@@ -735,20 +735,6 @@
       "when": 1774700000000,
       "tag": "0104_voice_call_proxies_accessed_at",
       "breakpoints": true
-    },
-    {
-      "idx": 105,
-      "version": "7",
-      "when": 1774800000000,
-      "tag": "0105_training_checkpoint_ids",
-      "breakpoints": true
-    },
-    {
-      "idx": 106,
-      "version": "7",
-      "when": 1774900000000,
-      "tag": "0106_training_session_duration",
-      "breakpoints": true
     }
   ],
   "version": "6"
