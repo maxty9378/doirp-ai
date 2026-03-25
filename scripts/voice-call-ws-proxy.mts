@@ -189,7 +189,7 @@ wss.on('connection', (clientWs, req) => {
     });
   }
 
-  tryUpstream(1);
+  tryUpstream(0);
 });
 
 server.listen(PORT, '0.0.0.0', () => {
