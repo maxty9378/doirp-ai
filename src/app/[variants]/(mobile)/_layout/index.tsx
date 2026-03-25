@@ -22,6 +22,7 @@ const MOBILE_NAV_ROUTES = new Set([
   '/community/model',
   '/community/provider',
   '/me',
+  '/training',
 ]);
 
 const MobileMainLayout: FC = () => {

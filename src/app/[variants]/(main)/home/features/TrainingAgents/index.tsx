@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { SESSION_CHAT_URL } from '@lobechat/const';
 import { ActionIcon, Avatar, Block, Flexbox, Text } from '@lobehub/ui';
@@ -17,6 +17,7 @@ import {
 } from '@/config/initialAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { emitTrainingBannerUpdated, useTrainingBannerUrl } from '@/hooks/useTrainingBannerUrl';
 import { agentService } from '@/services/agent';
 import { uploadService } from '@/services/upload';
@@ -28,6 +29,10 @@ import TrainingAgentItem from './Item';
 import TrainingScenarioCard, {
   type TrainingScenarioFromApi,
 } from './TrainingScenarioCard';
+
+interface TrainingAgentsProps {
+  compact?: boolean;
+}
 
 const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
 const FIELD_FIGHTER_AGENT_ID = 'training-tp-price-objection';
@@ -48,9 +53,11 @@ const toTrainingBannerUrl = (path: string) => {
   return `/webapi/${normalizedPath}`;
 };
 
-const TrainingAgents = memo(() => {
+const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
   const navigate = useNavigate();
   const isAdmin = useIsAdmin();
+  const isMobile = useIsMobile();
+  const isCompact = compact ?? isMobile;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [activePresetKey, setActivePresetKey] = useState<string | null>(null);
   const [isBannerUploading, setIsBannerUploading] = useState(false);
@@ -121,7 +128,7 @@ const TrainingAgents = memo(() => {
           },
         });
 
-        // Сразу подставляем конфиг в store, чтобы чат не показывал пустое состояние до ответа API.
+        // РЎСЂР°Р·Сѓ РїРѕРґСЃС‚Р°РІР»СЏРµРј РєРѕРЅС„РёРі РІ store, С‡С‚РѕР±С‹ С‡Р°С‚ РЅРµ РїРѕРєР°Р·С‹РІР°Р» РїСѓСЃС‚РѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РґРѕ РѕС‚РІРµС‚Р° API.
         getAgentStoreState().internal_dispatchAgentMap(sessionId, {
           id: sessionId,
           systemRole: preset.systemRole,
@@ -138,7 +145,7 @@ const TrainingAgents = memo(() => {
         navigate(SESSION_CHAT_URL(sessionId, false));
       } catch (error) {
         console.error('Failed to start hard negotiations agent:', error);
-        message.error('Не удалось запустить тренажёр');
+        message.error('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ С‚СЂРµРЅР°Р¶С‘СЂ');
       } finally {
         setHardNegotiationsLoadingKey(null);
       }
@@ -164,7 +171,7 @@ const TrainingAgents = memo(() => {
         navigate(`/voice-call?agentId=${FIELD_FIGHTER_AGENT_ID}`);
       } catch (error) {
         console.error('Failed to start training agent:', error);
-        message.error('Не удалось запустить тренажёр');
+        message.error('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ С‚СЂРµРЅР°Р¶С‘СЂ');
       } finally {
         setActivePresetKey(null);
       }
@@ -176,7 +183,7 @@ const TrainingAgents = memo(() => {
     async (file?: File | null) => {
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        message.error('Нужно выбрать файл изображения');
+        message.error('РќСѓР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ С„Р°Р№Р» РёР·РѕР±СЂР°Р¶РµРЅРёСЏ');
         return;
       }
 
@@ -196,13 +203,13 @@ const TrainingAgents = memo(() => {
 
         if (!res.ok) {
           const payload = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error || 'Не удалось сохранить баннер');
+          throw new Error(payload.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р±Р°РЅРЅРµСЂ');
         }
 
         emitTrainingBannerUpdated(uploadedUrl);
-        message.success('Баннер успешно обновлён');
+        message.success('Р‘Р°РЅРЅРµСЂ СѓСЃРїРµС€РЅРѕ РѕР±РЅРѕРІР»С‘РЅ');
       } catch (error) {
-        const errorText = error instanceof Error ? error.message : 'Ошибка загрузки баннера';
+        const errorText = error instanceof Error ? error.message : 'РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё Р±Р°РЅРЅРµСЂР°';
         message.error(errorText);
       } finally {
         setIsBannerUploading(false);
@@ -216,7 +223,7 @@ const TrainingAgents = memo(() => {
     async (file?: File | null) => {
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        message.error('Нужно выбрать файл изображения');
+        message.error('РќСѓР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ С„Р°Р№Р» РёР·РѕР±СЂР°Р¶РµРЅРёСЏ');
         return;
       }
 
@@ -236,13 +243,13 @@ const TrainingAgents = memo(() => {
 
         if (!res.ok) {
           const payload = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error || 'Не удалось сохранить баннер');
+          throw new Error(payload.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р±Р°РЅРЅРµСЂ');
         }
 
         emitTrainingBannerUpdated(uploadedUrl, 'hn');
-        message.success('Баннер успешно обновлён');
+        message.success('Р‘Р°РЅРЅРµСЂ СѓСЃРїРµС€РЅРѕ РѕР±РЅРѕРІР»С‘РЅ');
       } catch (error) {
-        const errorText = error instanceof Error ? error.message : 'Ошибка загрузки баннера';
+        const errorText = error instanceof Error ? error.message : 'РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё Р±Р°РЅРЅРµСЂР°';
         message.error(errorText);
       } finally {
         setIsHnBannerUploading(false);
@@ -252,8 +259,32 @@ const TrainingAgents = memo(() => {
     [message],
   );
 
-  return (
-    <GroupBlock icon={BotIcon} title="Тренажеры">
+  const scenarioCards = voiceScenarios.map((scenario) => (
+    <TrainingScenarioCard
+      fullWidth={isCompact}
+      key={scenario.key}
+      loading={voiceScenarioStartingKey === scenario.key}
+      scenario={scenario}
+      onClick={() => openVoiceScenario(scenario.key)}
+    />
+  ));
+
+  const emptyState = !voiceScenariosLoading && voiceScenarios.length === 0 && (
+    <Flexbox
+      align="center"
+      justify="center"
+      style={{
+        padding: 24,
+        color: 'var(--colorTextSecondary)',
+        width: isCompact ? '100%' : undefined,
+      }}
+    >
+    <Text>РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… С‚СЂРµРЅР°Р¶С‘СЂРѕРІ</Text>
+    </Flexbox>
+  );
+
+  const content = (
+    <>
       {isAdmin && (
         <>
           <input
@@ -279,26 +310,22 @@ const TrainingAgents = memo(() => {
         </>
       )}
 
-      <ScrollShadowWithButton>
-        {voiceScenarios.map((scenario) => (
-          <TrainingScenarioCard
-            key={scenario.key}
-            loading={voiceScenarioStartingKey === scenario.key}
-            scenario={scenario}
-            onClick={() => openVoiceScenario(scenario.key)}
-          />
-        ))}
-        {!voiceScenariosLoading && voiceScenarios.length === 0 && (
-          <Flexbox align="center" justify="center" style={{ padding: 24, color: 'var(--colorTextSecondary)' }}>
-            <Text>Нет доступных тренажёров</Text>
-          </Flexbox>
-        )}
-      </ScrollShadowWithButton>
+      {isCompact ? (
+        <Flexbox gap={12} width="100%">
+          {scenarioCards}
+          {emptyState}
+        </Flexbox>
+      ) : (
+        <ScrollShadowWithButton>
+          {scenarioCards}
+          {emptyState}
+        </ScrollShadowWithButton>
+      )}
 
       <Modal
         footer={null}
         open={hardNegotiationsModalOpen}
-        title="Выберите режим"
+        title="Р’С‹Р±РµСЂРёС‚Рµ СЂРµР¶РёРј"
         width={440}
         onCancel={() => setHardNegotiationsModalOpen(false)}
       >
@@ -340,8 +367,22 @@ const TrainingAgents = memo(() => {
           ))}
         </Flexbox>
       </Modal>
+    </>
+  );
+
+  if (isCompact) {
+    return (
+      <Flexbox gap={16} width="100%">
+        {content}
+      </Flexbox>
+    );
+  }
+
+  return (
+    <GroupBlock icon={BotIcon} title="РўСЂРµРЅР°Р¶РµСЂС‹">
+      {content}
     </GroupBlock>
   );
 });
-
 export default TrainingAgents;
+

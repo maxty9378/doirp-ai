@@ -15,6 +15,7 @@ const FIELD_FIGHTER_ICON = '/images/voice-call/trainer-ai-mic.svg';
 const TRAINING_BANNER_FALLBACK_ICON = '/images/voice-call/trainer-ai-mic.svg';
 
 interface TrainingAgentItemProps {
+  fullWidth?: boolean;
   inDevelopment?: boolean;
   isAdmin?: boolean;
   isUploadingBanner?: boolean;
@@ -25,7 +26,16 @@ interface TrainingAgentItemProps {
 }
 
 const TrainingAgentItem = memo<TrainingAgentItemProps>(
-  ({ preset, onClick, loading, isAdmin, isUploadingBanner, onUpdateBanner, inDevelopment }) => {
+  ({
+    preset,
+    onClick,
+    loading,
+    isAdmin,
+    isUploadingBanner,
+    onUpdateBanner,
+    inDevelopment,
+    fullWidth,
+  }) => {
     const isFieldFighter = preset.marketIdentifier === FIELD_FIGHTER_MARKET_ID;
     const trainerBannerUrl = useTrainingBannerUrl();
 
@@ -54,12 +64,12 @@ const TrainingAgentItem = memo<TrainingAgentItemProps>(
         flex={'none'}
         justify={'space-between'}
         variant={'filled'}
-        width={TRAINING_CARD_WIDTH}
+        width={fullWidth ? '100%' : TRAINING_CARD_WIDTH}
         style={{
           backgroundColor: cssVar.colorFillQuaternary,
           borderRadius: cssVar.borderRadiusLG,
           cursor: disabled ? 'not-allowed' : loading ? 'wait' : 'pointer',
-          minHeight: TRAINING_CARD_MIN_HEIGHT,
+          minHeight: fullWidth ? 260 : TRAINING_CARD_MIN_HEIGHT,
           opacity: disabled ? 0.45 : loading ? 0.7 : 1,
           filter: disabled ? 'grayscale(0.85)' : undefined,
           overflow: 'hidden',

@@ -208,6 +208,11 @@ export const mobileRoutes: RouteConfig[] = [
         path: 'settings',
       },
 
+      {
+        element: dynamicElement(() => import('../training'), 'Mobile > Training'),
+        path: 'training',
+      },
+
       ...BusinessMobileRoutesWithMainLayout,
 
       // Me routes (mobile personal center)

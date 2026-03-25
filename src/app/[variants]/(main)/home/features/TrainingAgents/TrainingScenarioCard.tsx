@@ -17,13 +17,14 @@ export interface TrainingScenarioFromApi {
 }
 
 interface TrainingScenarioCardProps {
+  fullWidth?: boolean;
   loading?: boolean;
   onClick?: () => void;
   scenario: TrainingScenarioFromApi;
 }
 
 const TrainingScenarioCard = memo<TrainingScenarioCardProps>(
-  ({ scenario, onClick, loading }) => {
+  ({ scenario, onClick, loading, fullWidth }) => {
     const bannerUrl = scenario.bannerUrl?.trim() || null;
     const title = scenario.title || 'Тренажёр';
     const description = scenario.description || 'Голосовой тренажёр. Нажмите, чтобы начать.';
@@ -34,12 +35,12 @@ const TrainingScenarioCard = memo<TrainingScenarioCardProps>(
         flex={'none'}
         justify={'space-between'}
         variant={'filled'}
-        width={TRAINING_CARD_WIDTH}
+        width={fullWidth ? '100%' : TRAINING_CARD_WIDTH}
         style={{
           backgroundColor: cssVar.colorFillQuaternary,
           borderRadius: cssVar.borderRadiusLG,
           cursor: loading ? 'wait' : 'pointer',
-          minHeight: TRAINING_CARD_MIN_HEIGHT,
+          minHeight: fullWidth ? 260 : TRAINING_CARD_MIN_HEIGHT,
           opacity: loading ? 0.7 : 1,
           overflow: 'hidden',
         }}
