@@ -21,6 +21,10 @@ const USER_VOLUME_SCALE = 500;
 const AI_VOLUME_SCALE = 0.15;
 const VOLUME_SMOOTH = 0.25;
 const VOLUME_DECAY = 0.85;
+const USER_NOISE_MARGIN = 6;
+const USER_AUDIO_GATE_HOLD_MS = 650;
+const NOISE_FLOOR_RISE_ALPHA = 0.02;
+const NOISE_FLOOR_FALL_ALPHA = 0.15;
 
 export interface GeminiLiveConfig {
   apiKey: string;
@@ -323,6 +327,8 @@ export function useGeminiLive({
   const userVolumeTargetRef = useRef(0);
   const userVolumeCurrentRef = useRef(0);
   const aiVolumeCurrentRef = useRef(0);
+  const noiseFloorRef = useRef(0);
+  const userGateActiveUntilRef = useRef(0);
   const freqDataRef = useRef<Uint8Array | null>(null);
   const lastBargeInAtRef = useRef(0);
   const bargeInLoudSinceRef = useRef(0);
@@ -444,6 +450,8 @@ export function useGeminiLive({
     userVolumeTargetRef.current = 0;
     userVolumeCurrentRef.current = 0;
     aiVolumeCurrentRef.current = 0;
+    noiseFloorRef.current = 0;
+    userGateActiveUntilRef.current = 0;
     connectionLockRef.current = false;
     hangupScheduledRef.current = false;
     autoFinishTriggeredRef.current = false;
@@ -756,6 +764,10 @@ export function useGeminiLive({
         const userVol = userVolumeCurrentRef.current;
         const hasRecentUserAudio =
           now - lastUserAudioActiveAtRef.current <= USER_AUDIO_ACTIVITY_WINDOW_MS;
+        const dynamicThreshold = Math.max(
+          USER_AUDIO_ACTIVITY_THRESHOLD,
+          noiseFloorRef.current + USER_NOISE_MARGIN,
+        );
 
         // Фильтр «галлюцинаций» ASR при тишине и защиты от подслушанного голоса ИИ.
         // Если ИИ говорит, но пользователь не пытается перебить (громкость ниже порога) — игнорируем inputTranscription.
@@ -763,7 +775,7 @@ export function useGeminiLive({
         if (isPlayingRef.current) {
           if (userVol < BARGE_IN_VOLUME_THRESHOLD && !hasRecentUserAudio) return;
         } else {
-          if (userVol < 3 && !hasRecentUserAudio) return;
+          if (userVol < dynamicThreshold && !hasRecentUserAudio) return;
         }
 
         const lastAiText =
@@ -1025,6 +1037,22 @@ export function useGeminiLive({
         const scaledVolume = Math.min(100, volume * USER_VOLUME_SCALE);
         userVolumeTargetRef.current = scaledVolume;
 
+        if (!isPlayingRef.current) {
+          const floor = noiseFloorRef.current;
+          if (floor === 0) {
+            noiseFloorRef.current = scaledVolume;
+          } else if (scaledVolume < floor) {
+            noiseFloorRef.current = floor + (scaledVolume - floor) * NOISE_FLOOR_FALL_ALPHA;
+          } else {
+            noiseFloorRef.current = floor + (scaledVolume - floor) * NOISE_FLOOR_RISE_ALPHA;
+          }
+        }
+
+        const dynamicThreshold = Math.max(
+          USER_AUDIO_ACTIVITY_THRESHOLD,
+          noiseFloorRef.current + USER_NOISE_MARGIN,
+        );
+
         const isAiSpeakingNow = isPlayingRef.current;
         if (isAiSpeakingNow) {
           if (scaledVolume >= BARGE_IN_VOLUME_THRESHOLD) {
@@ -1052,8 +1080,9 @@ export function useGeminiLive({
         } else {
           bargeInLoudSinceRef.current = 0;
           // Маркер «пользователь реально говорит»: используем как фильтр от ASR-галлюцинаций при тишине.
-          if (firstAiTurnCompleteRef.current && scaledVolume >= USER_AUDIO_ACTIVITY_THRESHOLD) {
+          if (scaledVolume >= dynamicThreshold) {
             lastUserAudioActiveAtRef.current = now;
+            userGateActiveUntilRef.current = now + USER_AUDIO_GATE_HOLD_MS;
           }
         }
 
@@ -1067,6 +1096,13 @@ export function useGeminiLive({
         // Во время речи ИИ отправляем звук только если пользователь действительно пытается перебить (громкость выше порога).
         // Это даёт barge-in (ИИ прекращает речь и начинает слушать), но не шлёт постоянный шум/эхо при монологе.
         if (isPlayingRef.current && scaledVolume < BARGE_IN_VOLUME_THRESHOLD) return;
+
+        if (
+          !isPlayingRef.current &&
+          scaledVolume < dynamicThreshold &&
+          now > userGateActiveUntilRef.current
+        )
+          return;
 
         const bytes = new Uint8Array(buffer);
         const dataB64 = bytesToBase64(bytes);
