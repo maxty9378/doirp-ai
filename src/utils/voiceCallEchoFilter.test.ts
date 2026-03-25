@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { dropLikelyEchoUserEntries, isLikelyEcho, normalizeEchoText } from './voiceCallEchoFilter';
+import {
+  dropLikelyEchoUserEntries,
+  dropLikelyEchoUserEntriesAgainstAiCorpus,
+  isLikelyEcho,
+  normalizeEchoText,
+  sanitizeVoiceCallTranscript,
+} from './voiceCallEchoFilter';
 
 describe('voiceCallEchoFilter', () => {
   it('normalizeEchoText lowercases, replaces ё, and strips punctuation', () => {
@@ -52,5 +58,35 @@ describe('voiceCallEchoFilter', () => {
       { role: 'ai', text: 'Ну же, не молчите, мы в прямом эфире. Зрители ждут оправданий.' },
     ]);
   });
-});
 
+  it('dropLikelyEchoUserEntriesAgainstAiCorpus removes non-adjacent echo', () => {
+    const cleaned = dropLikelyEchoUserEntriesAgainstAiCorpus([
+      { role: 'ai', text: 'Реплика ИИ один.' },
+      { role: 'user', text: 'Нормальный ответ пользователя.' },
+      { role: 'ai', text: 'Реплика ИИ два.' },
+      { role: 'user', text: 'реплика ии один' }, // echo but not adjacent
+    ]);
+
+    expect(cleaned).toEqual([
+      { role: 'ai', text: 'Реплика ИИ один.' },
+      { role: 'user', text: 'Нормальный ответ пользователя.' },
+      { role: 'ai', text: 'Реплика ИИ два.' },
+    ]);
+  });
+
+  it('sanitizeVoiceCallTranscript trims and removes echo', () => {
+    const cleaned = sanitizeVoiceCallTranscript([
+      { role: 'ai', text: '  Добрый день. Представьтесь, пожалуйста.  ' },
+      { role: 'user', text: 'добрый день представьтесь пожалуйста' }, // echo
+      { role: 'user', text: '  Меня зовут Алексей. ' },
+      { role: 'ai', text: 'Почему вы молчите?' },
+      { role: 'user', text: '   ' }, // empty
+    ]);
+
+    expect(cleaned).toEqual([
+      { role: 'ai', text: 'Добрый день. Представьтесь, пожалуйста.' },
+      { role: 'user', text: 'Меня зовут Алексей.' },
+      { role: 'ai', text: 'Почему вы молчите?' },
+    ]);
+  });
+});

@@ -1,11 +1,12 @@
-import { getLLMConfig } from '@/envs/llm';
-import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
+import { getLLMConfig } from '@/envs/llm';
+import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { getTrainingScenarioByKey } from '@/server/services/training';
-import { dropLikelyEchoUserEntries } from '@/utils/voiceCallEchoFilter';
+import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
+
 import { proxyFetch } from '../_proxyFetch';
 
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -23,36 +24,36 @@ function normalizeTranscriptEntries(raw: unknown): TranscriptEntryInput[] {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const o = item as { role?: unknown; text?: unknown };
-    const text =
-      typeof o.text === 'string' ? o.text.trim() : String(o.text ?? '').trim();
+    const text = typeof o.text === 'string' ? o.text.trim() : String(o.text ?? '').trim();
     if (!text) continue;
     const r = o.role;
     const role: 'ai' | 'user' =
-      r === 'ai' || r === 'assistant' || r === 'model' || r === 'bot'
-        ? 'ai'
-        : 'user';
+      r === 'ai' || r === 'assistant' || r === 'model' || r === 'bot' ? 'ai' : 'user';
     out.push({ role, text });
   }
-  return dropLikelyEchoUserEntries(out);
+  return sanitizeVoiceCallTranscript(out);
 }
 
 export interface AnalyzeResponse {
-  overallScore: number;
   competencies: Array<{ name: string; score: number }>;
-  summary: string;
-  strengths: string[];
   improvements: string[];
-  recommendedAction?: string;
+  overallScore: number;
   phraseFeedback: Array<{
     userPhrase: string;
     suggestedPhrase: string;
     advice: string;
   }>;
+  recommendedAction?: string;
+  strengths: string[];
+  summary: string;
 }
 
 function formatTranscript(entries: TranscriptEntryInput[]): string {
   return entries
-    .map((e) => (e.role === 'ai' ? 'Собеседник (AI-провокатор): ' : 'Пользователь (Обучаемый): ') + e.text)
+    .map(
+      (e) =>
+        (e.role === 'ai' ? 'Собеседник (AI-провокатор): ' : 'Пользователь (Обучаемый): ') + e.text,
+    )
     .join('\n');
 }
 
@@ -96,7 +97,7 @@ function buildAnalyzePrompt(transcript: string, scenarioId?: string | null): Pro
   if (!scenarioId?.trim()) return Promise.resolve(ANALYZE_PROMPT(transcript));
   return getTrainingScenarioByKey(scenarioId.trim()).then((scenario) => {
     const custom = scenario?.analyzePrompt?.trim();
-    if (custom) return custom.replace(/\{\{transcript\}\}/g, transcript);
+    if (custom) return custom.replaceAll('{{transcript}}', transcript);
     return ANALYZE_PROMPT(transcript);
   });
 }
@@ -138,10 +139,7 @@ export async function POST(req: Request) {
     const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
     if (!apiKey) {
-      return NextResponse.json(
-        { error: 'GOOGLE_API_KEY is not configured' },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: 'GOOGLE_API_KEY is not configured' }, { status: 503 });
     }
 
     const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
@@ -168,7 +166,10 @@ export async function POST(req: Request) {
     if (!res.ok) {
       const msg = data?.error?.message || 'Ошибка запроса к модели анализа';
       console.warn('[voice-call/analyze] Ответ Gemini:', res.status, msg);
-      return NextResponse.json({ error: msg }, { status: res.status >= 400 && res.status < 600 ? res.status : 502 });
+      return NextResponse.json(
+        { error: msg },
+        { status: res.status >= 400 && res.status < 600 ? res.status : 502 },
+      );
     }
 
     const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
@@ -178,7 +179,7 @@ export async function POST(req: Request) {
 
     let parsed: AnalyzeResponse;
     try {
-      const cleaned = raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+      const cleaned = raw.replaceAll(/^```(?:json)?\s*|\s*```$/g, '').trim();
       parsed = JSON.parse(cleaned) as AnalyzeResponse;
     } catch {
       return NextResponse.json({ error: 'Invalid JSON from model' }, { status: 502 });

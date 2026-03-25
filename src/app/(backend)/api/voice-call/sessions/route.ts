@@ -1,13 +1,11 @@
-import {
-  type VoiceCallSessionAnalysisResult,
-  voiceCallSessions,
-} from '@lobechat/database/schemas';
+import { type VoiceCallSessionAnalysisResult, voiceCallSessions } from '@lobechat/database/schemas';
 import { desc, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 import { serverDB } from '@/database/server';
+import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -24,7 +22,10 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const limit = Math.min(
       MAX_LIMIT,
-      Math.max(1, parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT),
+      Math.max(
+        1,
+        parseInt(searchParams.get('limit') || String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT,
+      ),
     );
     const offset = Math.max(0, parseInt(searchParams.get('offset') || '0', 10) || 0);
 
@@ -49,7 +50,9 @@ export async function GET(req: Request) {
       id: r.id,
       scenarioId: r.scenarioId,
       overallScore:
-        (r.analysisResult as VoiceCallSessionAnalysisResult | null)?.overallScore ?? r.score ?? null,
+        (r.analysisResult as VoiceCallSessionAnalysisResult | null)?.overallScore ??
+        r.score ??
+        null,
       score: r.score,
       hangUpReason: r.hangUpReason ?? undefined,
       durationSeconds: r.durationSeconds ?? undefined,
@@ -83,14 +86,26 @@ export async function POST(req: Request) {
       score?: number;
     };
 
-    const scenarioId = typeof body.scenarioId === 'string' ? body.scenarioId.trim() : body.agentId?.trim();
+    const scenarioId =
+      typeof body.scenarioId === 'string' ? body.scenarioId.trim() : body.agentId?.trim();
     if (!scenarioId) {
       return NextResponse.json({ error: 'scenarioId or agentId is required' }, { status: 400 });
     }
 
     const transcript = Array.isArray(body.transcript) ? body.transcript : [];
     if (transcript.length === 0) {
-      return NextResponse.json({ error: 'transcript is required (non-empty array)' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'transcript is required (non-empty array)' },
+        { status: 400 },
+      );
+    }
+
+    const cleanedTranscript = sanitizeVoiceCallTranscript(transcript);
+    if (cleanedTranscript.length === 0) {
+      return NextResponse.json(
+        { error: 'transcript is required (non-empty array after cleanup)' },
+        { status: 400 },
+      );
     }
 
     const [created] = await serverDB
@@ -98,12 +113,11 @@ export async function POST(req: Request) {
       .values({
         userId: session.user.id,
         scenarioId,
-        transcript,
+        transcript: cleanedTranscript,
         analysisResult: body.analysisResult ?? null,
         score: typeof body.score === 'number' ? body.score : null,
         hangUpReason: typeof body.hangUpReason === 'string' ? body.hangUpReason : null,
-        durationSeconds:
-          typeof body.durationSeconds === 'number' ? body.durationSeconds : null,
+        durationSeconds: typeof body.durationSeconds === 'number' ? body.durationSeconds : null,
       })
       .returning();
 
