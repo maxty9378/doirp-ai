@@ -100,6 +100,7 @@ const MUMBLE_VOLUME_THRESHOLD = 5;
 const MUMBLE_DURATION_MS = 10_000;
 const MUMBLE_COOLDOWN_MS = 30_000;
 const BARGE_IN_VOLUME_THRESHOLD = 6;
+const BARGE_IN_SUSTAIN_MS = 120;
 const BARGE_IN_COOLDOWN_MS = 150;
 const DEFAULT_CONTEXT_WINDOW = 5;
 const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
@@ -291,6 +292,8 @@ export function useGeminiLive({
   const aiVolumeCurrentRef = useRef(0);
   const freqDataRef = useRef<Uint8Array | null>(null);
   const lastBargeInAtRef = useRef(0);
+  const bargeInLoudSinceRef = useRef(0);
+  const skipEchoCooldownOnceRef = useRef(false);
 
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const currentAiTurnTextRef = useRef('');
@@ -592,6 +595,9 @@ export function useGeminiLive({
       lastUserAudioActiveAtRef.current = 0;
       blockUserTranscriptionUntilRef.current = 0;
       lastAiTextForEchoRef.current = '';
+      lastBargeInAtRef.current = 0;
+      bargeInLoudSinceRef.current = 0;
+      skipEchoCooldownOnceRef.current = false;
       firstAiTurnCompleteRef.current = false;
       deductedSessionRef.current = false;
 
@@ -627,7 +633,11 @@ export function useGeminiLive({
         streamer.onPlayStateChange = (playing) => {
           isPlayingRef.current = playing;
           if (!playing) {
-            blockUserTranscriptionUntilRef.current = Date.now() + USER_ECHO_COOLDOWN_MS;
+            if (skipEchoCooldownOnceRef.current) {
+              skipEchoCooldownOnceRef.current = false;
+            } else {
+              blockUserTranscriptionUntilRef.current = Date.now() + USER_ECHO_COOLDOWN_MS;
+            }
           }
         };
         streamerRef.current = streamer;
@@ -667,6 +677,15 @@ export function useGeminiLive({
       console.log('[GeminiLive] Creating WebSocket...', url.slice(0, 100) + '...');
       const ws = new WebSocket(url);
       wsRef.current = ws;
+
+      const flushInterruptedAiTurn = () => {
+        const interruptedText = cleanAiText(currentAiTurnTextRef.current.trim());
+        if (interruptedText) {
+          transcriptRef.current.push({ role: 'ai', text: interruptedText });
+          lastAiTextForEchoRef.current = interruptedText;
+        }
+        currentAiTurnTextRef.current = '';
+      };
 
       const sendStartTrigger = () => {
         const assistantLabel = uiConfigRef.current.assistantLabel || 'собеседника';
@@ -769,12 +788,7 @@ export function useGeminiLive({
           if (!serverContent) return;
 
           if (serverContent.interrupted) {
-            // Barge-in отключен. Мы не останавливаем streamerRef, чтобы ИИ мог договорить то, что успело загрузиться в буфер.
-            const interruptedText = currentAiTurnTextRef.current.trim();
-            if (interruptedText) {
-              transcriptRef.current.push({ role: 'ai', text: interruptedText });
-            }
-            currentAiTurnTextRef.current = '';
+            flushInterruptedAiTurn();
             return;
           }
 
@@ -805,7 +819,8 @@ export function useGeminiLive({
             const likelyEcho = !!lastAiText && isLikelyEcho(inputText, lastAiText);
             const hasRecentUserAudio =
               now - lastUserAudioActiveAtRef.current <= USER_AUDIO_ACTIVITY_WINDOW_MS ||
-              userVolumeCurrentRef.current >= USER_AUDIO_ACTIVITY_THRESHOLD;
+              (!isPlayingRef.current &&
+                userVolumeCurrentRef.current >= USER_AUDIO_ACTIVITY_THRESHOLD);
 
             // Защита от «подслушанного» голоса ИИ (эхо из динамиков в микрофон).
             // Во время речи ИИ и короткое время после неё не считаем совпадающий текст речью пользователя.
@@ -932,16 +947,32 @@ export function useGeminiLive({
         const scaledVolume = Math.min(100, volume * USER_VOLUME_SCALE);
         userVolumeTargetRef.current = scaledVolume;
 
-        // Маркер «пользователь реально говорит»: используем как фильтр от ASR-галлюцинаций при тишине.
-        if (
-          firstAiTurnCompleteRef.current &&
-          !isPlayingRef.current &&
-          scaledVolume >= USER_AUDIO_ACTIVITY_THRESHOLD
-        ) {
-          lastUserAudioActiveAtRef.current = now;
-        }
+        const isAiSpeakingNow = isPlayingRef.current;
+        if (isAiSpeakingNow) {
+          if (scaledVolume >= BARGE_IN_VOLUME_THRESHOLD) {
+            if (bargeInLoudSinceRef.current === 0) bargeInLoudSinceRef.current = now;
 
-        // Barge-in (прерывание ИИ) отключено: мы больше не вызываем streamerRef.current?.stop()
+            const loudFor = now - bargeInLoudSinceRef.current;
+            const canBargeIn = now - lastBargeInAtRef.current >= BARGE_IN_COOLDOWN_MS;
+            if (loudFor >= BARGE_IN_SUSTAIN_MS && canBargeIn) {
+              lastBargeInAtRef.current = now;
+              bargeInLoudSinceRef.current = 0;
+              lastUserAudioActiveAtRef.current = now;
+              blockUserTranscriptionUntilRef.current = 0;
+              skipEchoCooldownOnceRef.current = true;
+              flushInterruptedAiTurn();
+              streamerRef.current?.stop();
+            }
+          } else {
+            bargeInLoudSinceRef.current = 0;
+          }
+        } else {
+          bargeInLoudSinceRef.current = 0;
+          // Маркер «пользователь реально говорит»: используем как фильтр от ASR-галлюцинаций при тишине.
+          if (firstAiTurnCompleteRef.current && scaledVolume >= USER_AUDIO_ACTIVITY_THRESHOLD) {
+            lastUserAudioActiveAtRef.current = now;
+          }
+        }
 
         const wsState = wsRef.current;
         if (!wsState || wsState.readyState !== WebSocket.OPEN || !isSetupCompleteRef.current)
@@ -950,9 +981,9 @@ export function useGeminiLive({
         // чтобы избежать реакции на фон/шум в начале разговора.
         if (!firstAiTurnCompleteRef.current) return;
 
-        // Отключаем отправку звука микрофона на сервер, пока ИИ говорит.
-        // Это гарантирует, что ИИ всегда договорит фразу до конца и не прервётся от шума.
-        if (isPlayingRef.current) return;
+        // Во время речи ИИ отправляем звук только если пользователь действительно пытается перебить (громкость выше порога).
+        // Это даёт barge-in (ИИ прекращает речь и начинает слушать), но не шлёт постоянный шум/эхо при монологе.
+        if (isPlayingRef.current && scaledVolume < BARGE_IN_VOLUME_THRESHOLD) return;
 
         const bytes = new Uint8Array(buffer);
         let binary = '';
@@ -1002,6 +1033,9 @@ export function useGeminiLive({
     lastUserAudioActiveAtRef.current = 0;
     blockUserTranscriptionUntilRef.current = 0;
     lastAiTextForEchoRef.current = '';
+    lastBargeInAtRef.current = 0;
+    bargeInLoudSinceRef.current = 0;
+    skipEchoCooldownOnceRef.current = false;
 
     try {
       recognitionRef.current?.stop();
@@ -1270,12 +1304,32 @@ export function useGeminiLive({
       const isAiSpeakingNow = isPlayingRef.current;
       const now = Date.now();
 
-      // Игнорируем распознавание речи пользователя, пока ИИ говорит (запрет перебивания)
-      if (isAiSpeakingNow) return;
-      if (now < blockUserTranscriptionUntilRef.current) return;
+      // Если пользователь пытается говорить во время речи ИИ — считаем это barge-in: останавливаем озвучку и сохраняем текст.
+      if (isAiSpeakingNow) {
+        const loudEnough = userVolumeCurrentRef.current >= BARGE_IN_VOLUME_THRESHOLD;
+        const canBargeIn = now - lastBargeInAtRef.current >= BARGE_IN_COOLDOWN_MS;
+        if (loudEnough && canBargeIn) {
+          lastBargeInAtRef.current = now;
+          lastUserAudioActiveAtRef.current = now;
+          blockUserTranscriptionUntilRef.current = 0;
+          skipEchoCooldownOnceRef.current = true;
+
+          const interruptedText = cleanAiText(currentAiTurnTextRef.current.trim());
+          if (interruptedText) {
+            transcriptRef.current.push({ role: 'ai', text: interruptedText });
+            lastAiTextForEchoRef.current = interruptedText;
+          }
+          currentAiTurnTextRef.current = '';
+          streamerRef.current?.stop();
+        }
+      } else if (now < blockUserTranscriptionUntilRef.current) {
+        return;
+      }
+
       const hasRecentUserAudio =
         now - lastUserAudioActiveAtRef.current <= USER_AUDIO_ACTIVITY_WINDOW_MS ||
-        userVolumeCurrentRef.current >= USER_AUDIO_ACTIVITY_THRESHOLD;
+        userVolumeCurrentRef.current >=
+          (isAiSpeakingNow ? BARGE_IN_VOLUME_THRESHOLD : USER_AUDIO_ACTIVITY_THRESHOLD);
       if (!hasRecentUserAudio) return;
 
       const lastAiText =
