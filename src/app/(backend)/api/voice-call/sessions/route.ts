@@ -100,7 +100,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const cleanedTranscript = sanitizeVoiceCallTranscript(transcript);
+    const cleanedTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
     if (cleanedTranscript.length === 0) {
       return NextResponse.json(
         { error: 'transcript is required (non-empty array after cleanup)' },

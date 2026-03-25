@@ -89,4 +89,23 @@ describe('voiceCallEchoFilter', () => {
       { role: 'ai', text: 'Почему вы молчите?' },
     ]);
   });
+
+  it('sanitizeVoiceCallTranscript in analysis mode drops noisy short user fragments', () => {
+    const cleaned = sanitizeVoiceCallTranscript(
+      [
+        { role: 'ai', text: 'Вы верите, что это безопасно?' },
+        { role: 'user', text: 'дель' }, // fragment
+        { role: 'user', text: 'Да' }, // keep
+        { role: 'user', text: 'хотите' }, // fragment-like
+        { role: 'user', text: 'Мы строго соблюдаем маркировку 18+.' }, // keep
+      ],
+      { mode: 'analysis' },
+    );
+
+    expect(cleaned).toEqual([
+      { role: 'ai', text: 'Вы верите, что это безопасно?' },
+      { role: 'user', text: 'Да' },
+      { role: 'user', text: 'Мы строго соблюдаем маркировку 18+.' },
+    ]);
+  });
 });

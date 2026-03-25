@@ -13,6 +13,22 @@ export const normalizeEchoText = (text: string) =>
 
 const tokenize = (text: string) => normalizeEchoText(text).split(' ').filter(Boolean);
 
+const SHORT_USER_UTTERANCES_KEEP = new Set(['да', 'нет', 'угу', 'ага', 'ок', 'окей', 'готово']);
+
+const looksLikeNoisyUserFragment = (text: string) => {
+  const normalized = normalizeEchoText(text);
+  if (!normalized) return true;
+  if (SHORT_USER_UTTERANCES_KEEP.has(normalized)) return false;
+
+  // Слишком короткие «обрывки»
+  if (normalized.length <= 4) return true;
+
+  const tokens = normalized.split(' ').filter(Boolean);
+  if (tokens.length === 1 && tokens[0].length <= 6) return true;
+
+  return false;
+};
+
 const jaccard = (a: string[], b: string[]) => {
   if (a.length === 0 || b.length === 0) return 0;
   const setA = new Set(a);
@@ -96,6 +112,7 @@ export const dropLikelyEchoUserEntriesAgainstAiCorpus = <T extends VoiceCallTran
 /** Нормализует транскрипт для сохранения/анализа: trim + удаление вероятного «эха». */
 export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
   entries: T[],
+  options?: { mode?: 'store' | 'analysis' },
 ): T[] => {
   const trimmed = entries
     .map((e) => ({
@@ -106,5 +123,13 @@ export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
 
   if (trimmed.length === 0) return trimmed;
   const noAdjacentEcho = dropLikelyEchoUserEntries(trimmed);
-  return dropLikelyEchoUserEntriesAgainstAiCorpus(noAdjacentEcho);
+  const noEcho = dropLikelyEchoUserEntriesAgainstAiCorpus(noAdjacentEcho);
+
+  if (options?.mode !== 'analysis') return noEcho;
+
+  // Для анализа дополнительно выкидываем «шумовые» короткие обрывки речи пользователя,
+  // чтобы LLM не превращал их в phraseFeedback.
+  return noEcho.filter((e) =>
+    e.role === 'user' ? !looksLikeNoisyUserFragment(e.text) : true,
+  ) as T[];
 };

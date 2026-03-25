@@ -31,7 +31,7 @@ function normalizeTranscriptEntries(raw: unknown): TranscriptEntryInput[] {
       r === 'ai' || r === 'assistant' || r === 'model' || r === 'bot' ? 'ai' : 'user';
     out.push({ role, text });
   }
-  return sanitizeVoiceCallTranscript(out);
+  return sanitizeVoiceCallTranscript(out, { mode: 'analysis' });
 }
 
 export interface AnalyzeResponse {

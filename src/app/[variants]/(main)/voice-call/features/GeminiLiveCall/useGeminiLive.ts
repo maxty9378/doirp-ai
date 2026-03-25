@@ -6,6 +6,7 @@ import { useUserStore } from '@/store/user';
 import { isLikelyEcho } from '@/utils/voiceCallEchoFilter';
 
 import { AudioStreamer } from './AudioStreamer';
+import { stripEnglishReasoning } from './stripEnglishReasoning';
 
 const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
@@ -125,6 +126,7 @@ function cleanAiText(text: string): string {
   cleaned = cleaned.replaceAll(/(?:\[\s*SCORE\s*:|SCORE\s*:)\s*(?:[-+]\s*)?\d+\s*\]?/gi, '');
   cleaned = cleaned.replaceAll(/(?:\[\s*CHECKPOINT\s*:|CHECKPOINT\s*:)\s*[A-Z_]+\s*\]?/gi, '');
   cleaned = cleaned.replaceAll(/\s+/g, ' ');
+  cleaned = stripEnglishReasoning(cleaned);
   return cleaned.trim();
 }
 

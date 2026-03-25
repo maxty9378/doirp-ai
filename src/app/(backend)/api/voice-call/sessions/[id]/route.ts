@@ -33,7 +33,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     return NextResponse.json({
       ...row,
-      transcript: sanitizeVoiceCallTranscript(row.transcript),
+      transcript: sanitizeVoiceCallTranscript(row.transcript, { mode: 'store' }),
     });
   } catch (e) {
     console.error('[voice-call/sessions/[id] GET]', e);
