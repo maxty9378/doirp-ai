@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 import { getTrainingScenarioByKey } from '@/server/services/training';
+import { dropLikelyEchoUserEntries } from '@/utils/voiceCallEchoFilter';
 import { proxyFetch } from '../_proxyFetch';
 
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -32,7 +33,7 @@ function normalizeTranscriptEntries(raw: unknown): TranscriptEntryInput[] {
         : 'user';
     out.push({ role, text });
   }
-  return out;
+  return dropLikelyEchoUserEntries(out);
 }
 
 export interface AnalyzeResponse {

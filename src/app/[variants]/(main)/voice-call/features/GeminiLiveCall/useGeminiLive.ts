@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useUserStore } from '@/store/user';
+import { isLikelyEcho } from '@/utils/voiceCallEchoFilter';
 import { AudioStreamer } from './AudioStreamer';
 
 const GEMINI_LIVE_WS =
@@ -139,6 +140,15 @@ export interface VoiceCallCheckpoint {
   label: string;
 }
 
+const USER_ECHO_COOLDOWN_MS = 900;
+
+const getLastAiText = (items: TranscriptEntry[], fallback = '') => {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i]?.role === 'ai') return items[i]?.text || fallback;
+  }
+  return fallback;
+};
+
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
@@ -206,6 +216,8 @@ export function useGeminiLive({
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const currentAiTurnTextRef = useRef('');
   const lastUserSpeechRef = useRef<number>(0);
+  const blockUserTranscriptionUntilRef = useRef<number>(0);
+  const lastAiTextForEchoRef = useRef<string>('');
 
   const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(null);
   const recognitionActiveRef = useRef(false);
@@ -492,6 +504,8 @@ export function useGeminiLive({
       aiSpeakingSinceRef.current = 0;
       silenceNudgeCountRef.current = 0;
       lastUserSpeechRef.current = 0;
+      blockUserTranscriptionUntilRef.current = 0;
+      lastAiTextForEchoRef.current = '';
       firstAiTurnCompleteRef.current = false;
       deductedSessionRef.current = false;
 
@@ -503,7 +517,13 @@ export function useGeminiLive({
 
       // eslint-disable-next-line no-console
       console.log('[GeminiLive] Requesting microphone...');
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       streamRef.current = stream;
       // eslint-disable-next-line no-console
       console.log('[GeminiLive] Microphone acquired');
@@ -519,6 +539,9 @@ export function useGeminiLive({
         const streamer = new AudioStreamer(playContext);
         streamer.onPlayStateChange = (playing) => {
           isPlayingRef.current = playing;
+          if (!playing) {
+            blockUserTranscriptionUntilRef.current = Date.now() + USER_ECHO_COOLDOWN_MS;
+          }
         };
         streamerRef.current = streamer;
         analyserRef.current = streamer.analyser;
@@ -685,14 +708,31 @@ export function useGeminiLive({
           // Input transcription from Gemini (user speech → text)
           const inputText = serverContent.inputTranscription?.text?.trim();
           if (inputText && inputText.length > 2) {
-            const lastEntry = transcriptRef.current.at(-1);
-            if (lastEntry?.role === 'user') {
-              lastEntry.text = inputText;
+            const now = Date.now();
+            const lastAiText =
+              lastAiTextForEchoRef.current ||
+              getLastAiText(transcriptRef.current, currentAiTurnTextRef.current);
+            const likelyEcho = !!lastAiText && isLikelyEcho(inputText, lastAiText);
+
+            // Защита от «подслушанного» голоса ИИ (эхо из динамиков в микрофон).
+            // Во время речи ИИ и короткое время после неё не считаем совпадающий текст речью пользователя.
+            if (
+              likelyEcho &&
+              (isPlayingRef.current ||
+                now < blockUserTranscriptionUntilRef.current ||
+                userVolumeCurrentRef.current < 8)
+            ) {
+              // ignore
             } else {
-              transcriptRef.current.push({ role: 'user', text: inputText });
+              const lastEntry = transcriptRef.current.at(-1);
+              if (lastEntry?.role === 'user') {
+                lastEntry.text = inputText;
+              } else {
+                transcriptRef.current.push({ role: 'user', text: inputText });
+              }
+              lastUserSpeechRef.current = now;
+              lastBotEndRef.current = 0;
             }
-            lastUserSpeechRef.current = Date.now();
-            lastBotEndRef.current = 0;
           }
 
           if (serverContent.turnComplete) {
@@ -739,6 +779,7 @@ export function useGeminiLive({
 
             if (turnText) {
               transcriptRef.current.push({ role: 'ai', text: turnText });
+              lastAiTextForEchoRef.current = turnText;
             }
             currentAiTurnTextRef.current = '';
             if (!firstAiTurnCompleteRef.current) {
@@ -855,6 +896,8 @@ export function useGeminiLive({
 
     transcriptRef.current = [];
     recognitionActiveRef.current = false;
+    blockUserTranscriptionUntilRef.current = 0;
+    lastAiTextForEchoRef.current = '';
 
     try {
       recognitionRef.current?.stop();
@@ -964,6 +1007,13 @@ export function useGeminiLive({
           );
           return;
         }
+      }
+
+      // Короткий «буфер» после завершения речи ИИ: не считаем шум/эхо голосом пользователя.
+      if (!isPlayingRef.current && now < blockUserTranscriptionUntilRef.current) {
+        lowVolumeSinceRef.current = 0;
+        if (silenceSinceRef.current === 0) silenceSinceRef.current = now;
+        return;
       }
 
       if (isPlayingRef.current) {
@@ -1109,15 +1159,21 @@ export function useGeminiLive({
       if (!result?.isFinal) return;
       const text = result[0]?.transcript?.trim();
       const isAiSpeakingNow = isPlayingRef.current;
+      const now = Date.now();
 
       // Игнорируем распознавание речи пользователя, пока ИИ говорит (запрет перебивания)
       if (isAiSpeakingNow) return;
+      if (now < blockUserTranscriptionUntilRef.current) return;
+
+      const lastAiText =
+        lastAiTextForEchoRef.current || getLastAiText(transcriptRef.current, currentAiTurnTextRef.current);
+      if (text && lastAiText && isLikelyEcho(text, lastAiText)) return;
 
       const lastEntry = transcriptRef.current.at(-1);
       if (text && text.length > 2 && lastEntry?.text !== text) {
         const newEntry: TranscriptEntry = { role: 'user', text };
         transcriptRef.current.push(newEntry);
-        lastUserSpeechRef.current = Date.now();
+        lastUserSpeechRef.current = now;
         lastBotEndRef.current = 0;
       }
     };
