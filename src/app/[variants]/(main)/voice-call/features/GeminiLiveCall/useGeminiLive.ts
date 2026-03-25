@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useUserStore } from '@/store/user';
+import { stripEnglishReasoning } from '@/utils/stripEnglishReasoning';
 import { isLikelyEcho } from '@/utils/voiceCallEchoFilter';
 
 import { AudioStreamer } from './AudioStreamer';
-import { stripEnglishReasoning } from './stripEnglishReasoning';
 
 const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
@@ -99,8 +99,10 @@ const PATIENCE_INITIAL = 100;
 const MUMBLE_VOLUME_THRESHOLD = 5;
 const MUMBLE_DURATION_MS = 10_000;
 const MUMBLE_COOLDOWN_MS = 30_000;
-const BARGE_IN_VOLUME_THRESHOLD = 6;
-const BARGE_IN_SUSTAIN_MS = 120;
+// Чем ниже порог — тем легче «перебить» ИИ и тем меньше риск, что ИИ "не слышит" пользователя.
+// Слишком низкий порог увеличит шанс, что в микрофон попадёт эхо из динамиков.
+const BARGE_IN_VOLUME_THRESHOLD = 4;
+const BARGE_IN_SUSTAIN_MS = 90;
 const BARGE_IN_COOLDOWN_MS = 150;
 const DEFAULT_CONTEXT_WINDOW = 5;
 const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
@@ -122,12 +124,12 @@ const MONOLOGUE_VOLUME_THRESHOLD = 10;
 const AMBIENT_AUDIO_URL = '/audio/ambient-store.mp3?v=20260302';
 
 /** Очищает служебные теги в тексте от модели */
-function cleanAiText(text: string): string {
+function cleanAiText(text: string, options?: { stripEnglishReasoning?: boolean }): string {
   let cleaned = text.replaceAll(/<think>[\s\S]*?<\/think>/gi, '');
   cleaned = cleaned.replaceAll(/(?:\[\s*SCORE\s*:|SCORE\s*:)\s*(?:[-+]\s*)?\d+\s*\]?/gi, '');
   cleaned = cleaned.replaceAll(/(?:\[\s*CHECKPOINT\s*:|CHECKPOINT\s*:)\s*[A-Z_]+\s*\]?/gi, '');
   cleaned = cleaned.replaceAll(/\s+/g, ' ');
-  cleaned = stripEnglishReasoning(cleaned);
+  if (options?.stripEnglishReasoning !== false) cleaned = stripEnglishReasoning(cleaned);
   return cleaned.trim();
 }
 
@@ -147,12 +149,33 @@ export interface VoiceCallCheckpoint {
 const USER_ECHO_COOLDOWN_MS = 900;
 const USER_AUDIO_ACTIVITY_THRESHOLD = 8;
 const USER_AUDIO_ACTIVITY_WINDOW_MS = 2500;
+const USER_UTTERANCE_BREAK_MS = 2500;
 
 const getLastAiText = (items: TranscriptEntry[], fallback = '') => {
   for (let i = items.length - 1; i >= 0; i--) {
     if (items[i]?.role === 'ai') return items[i]?.text || fallback;
   }
   return fallback;
+};
+
+const mergeLiveTranscriptionText = (prev: string, next: string) => {
+  const a = prev.trim();
+  const b = next.trim();
+  if (!b) return a;
+  if (!a) return b;
+  if (b.startsWith(a)) return b;
+  if (a.startsWith(b)) return a;
+  return `${a} ${b}`.trim();
+};
+
+const bytesToBase64 = (bytes: Uint8Array) => {
+  // Быстрая конвертация без O(n²) конкатенации в цикле.
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
 };
 
 const isWs = (c: string) => /\s/u.test(c);
@@ -274,6 +297,16 @@ export function useGeminiLive({
     userLabel: 'Вы',
   });
 
+  const statusRef = useRef(status);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+
+  const checkpointsRef = useRef<VoiceCallCheckpoint[]>([]);
+  useEffect(() => {
+    checkpointsRef.current = checkpoints;
+  }, [checkpoints]);
+
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -297,13 +330,11 @@ export function useGeminiLive({
 
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const currentAiTurnTextRef = useRef('');
+  const currentAiTurnMetaTextRef = useRef('');
   const lastUserSpeechRef = useRef<number>(0);
   const lastUserAudioActiveAtRef = useRef<number>(0);
   const blockUserTranscriptionUntilRef = useRef<number>(0);
   const lastAiTextForEchoRef = useRef<string>('');
-
-  const recognitionRef = useRef<{ stop: () => void; start: () => void } | null>(null);
-  const recognitionActiveRef = useRef(false);
   const ambientRef = useRef<HTMLAudioElement | null>(null);
 
   const connectionLockRef = useRef(false);
@@ -349,11 +380,20 @@ export function useGeminiLive({
       streamerRef.current?.stop();
     } catch {}
     streamerRef.current = null;
+    analyserRef.current = null;
+    freqDataRef.current = null;
 
-    if (workletNodeRef.current && sourceRef.current) {
+    if (workletNodeRef.current) {
+      try {
+        try {
+          workletNodeRef.current.port.onmessage = null;
+        } catch {}
+        workletNodeRef.current.disconnect();
+      } catch {}
+    }
+    if (sourceRef.current) {
       try {
         sourceRef.current.disconnect();
-        workletNodeRef.current.disconnect();
       } catch {}
     }
     workletNodeRef.current = null;
@@ -478,11 +518,15 @@ export function useGeminiLive({
 
   const maybeAutoFinish = useCallback(
     (latestScore: number) => {
-      if (status !== 'ready' || autoFinishTriggeredRef.current || hangupScheduledRef.current)
+      if (
+        statusRef.current !== 'ready' ||
+        autoFinishTriggeredRef.current ||
+        hangupScheduledRef.current
+      )
         return;
       if (!uiConfigRef.current.enableCheckpoints || !uiConfigRef.current.enableScoring) return;
 
-      const allDone = checkpoints.every((item) => item.done);
+      const allDone = checkpointsRef.current.every((item) => item.done);
       const enoughDialogue = transcriptRef.current.length >= 6;
       if (!allDone || !enoughDialogue || latestScore < 12) return;
 
@@ -490,11 +534,11 @@ export function useGeminiLive({
       sendClientText(uiConfigRef.current.autoSuccessPrompt ?? DEFAULT_AUTO_SUCCESS_PROMPT);
 
       setTimeout(() => {
-        if (hangupScheduledRef.current || status !== 'ready') return;
+        if (hangupScheduledRef.current || statusRef.current !== 'ready') return;
         finalizeCall('success', 'Интервью завершено: все цели достигнуты.', 1200, false);
       }, 9000);
     },
-    [finalizeCall, sendClientText, status, checkpoints],
+    [finalizeCall, sendClientText],
   );
 
   const connect = useCallback(async () => {
@@ -583,10 +627,12 @@ export function useGeminiLive({
           }))
         : [];
       setCheckpoints(initialCheckpoints);
+      checkpointsRef.current = initialCheckpoints;
 
       transcriptRef.current = [];
 
       currentAiTurnTextRef.current = '';
+      currentAiTurnMetaTextRef.current = '';
       hangupScheduledRef.current = false;
       autoFinishTriggeredRef.current = false;
       aiSpeakingSinceRef.current = 0;
@@ -679,12 +725,68 @@ export function useGeminiLive({
       wsRef.current = ws;
 
       const flushInterruptedAiTurn = () => {
-        const interruptedText = cleanAiText(currentAiTurnTextRef.current.trim());
-        if (interruptedText) {
-          transcriptRef.current.push({ role: 'ai', text: interruptedText });
-          lastAiTextForEchoRef.current = interruptedText;
+        const rawTurnText =
+          `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
+        const spokenText = cleanAiText(currentAiTurnTextRef.current.trim(), {
+          stripEnglishReasoning: false,
+        });
+        const storeText = spokenText || (rawTurnText ? cleanAiText(rawTurnText) : '');
+        if (storeText) {
+          transcriptRef.current.push({ role: 'ai', text: storeText });
+          lastAiTextForEchoRef.current = storeText;
         }
         currentAiTurnTextRef.current = '';
+        currentAiTurnMetaTextRef.current = '';
+      };
+
+      const appendAiSpokenTranscription = (text: unknown) => {
+        const next = typeof text === 'string' ? text.trim() : '';
+        if (!next) return;
+        currentAiTurnTextRef.current = mergeLiveTranscriptionText(
+          currentAiTurnTextRef.current,
+          next,
+        );
+      };
+
+      const upsertUserTranscriptFromGemini = (text: unknown) => {
+        const inputText = typeof text === 'string' ? text.trim() : '';
+        if (!inputText) return;
+
+        const now = Date.now();
+        const userVol = userVolumeCurrentRef.current;
+        const hasRecentUserAudio =
+          now - lastUserAudioActiveAtRef.current <= USER_AUDIO_ACTIVITY_WINDOW_MS;
+
+        // Фильтр «галлюцинаций» ASR при тишине и защиты от подслушанного голоса ИИ.
+        // Если ИИ говорит, но пользователь не пытается перебить (громкость ниже порога) — игнорируем inputTranscription.
+        // Если ИИ молчит, но микрофон по уровню "в тишине" — тоже игнорируем.
+        if (isPlayingRef.current) {
+          if (userVol < BARGE_IN_VOLUME_THRESHOLD && !hasRecentUserAudio) return;
+        } else {
+          if (userVol < 3 && !hasRecentUserAudio) return;
+        }
+
+        const lastAiText =
+          lastAiTextForEchoRef.current ||
+          getLastAiText(transcriptRef.current, currentAiTurnTextRef.current);
+        const likelyEcho = !!lastAiText && isLikelyEcho(inputText, lastAiText);
+
+        if (likelyEcho && (isPlayingRef.current || now < blockUserTranscriptionUntilRef.current))
+          return;
+
+        const lastEntry = transcriptRef.current.at(-1);
+        const startNewUtterance =
+          lastEntry?.role !== 'user' || now - lastUserSpeechRef.current > USER_UTTERANCE_BREAK_MS;
+
+        if (!startNewUtterance && lastEntry && lastEntry.role === 'user') {
+          lastEntry.text = mergeLiveTranscriptionText(lastEntry.text, inputText);
+        } else {
+          transcriptRef.current.push({ role: 'user', text: inputText });
+        }
+
+        lastUserSpeechRef.current = now;
+        lastUserAudioActiveAtRef.current = now;
+        lastBotEndRef.current = 0;
       };
 
       const sendStartTrigger = () => {
@@ -725,10 +827,9 @@ export function useGeminiLive({
       ws.onopen = () => {
         // eslint-disable-next-line no-console
         console.log('[GeminiLive] WebSocket OPENED! Sending setupMsg...');
-        const extraSpeakerLine =
-          speakerName && speakerName.trim()
-            ? `\n- На вопросы сейчас отвечает сотрудник: ${speakerName.trim()}. Обращайся к нему по имени.`
-            : '';
+        const extraSpeakerLine = speakerNameRef.current
+          ? `\n- На вопросы сейчас отвечает сотрудник: ${speakerNameRef.current}. Обращайся к нему по имени.`
+          : '';
         const sysInst =
           (config.systemInstruction || systemInstruction || '') +
           (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '');
@@ -784,6 +885,12 @@ export function useGeminiLive({
             return;
           }
 
+          // Транскрипции могут приходить отдельными server-сообщениями и не всегда внутри serverContent
+          const topLevelOutputText = data.outputTranscription?.text;
+          if (topLevelOutputText) appendAiSpokenTranscription(topLevelOutputText);
+          const topLevelInputText = data.inputTranscription?.text;
+          if (topLevelInputText) upsertUserTranscriptFromGemini(topLevelInputText);
+
           const serverContent = data.serverContent;
           if (!serverContent) return;
 
@@ -799,52 +906,23 @@ export function useGeminiLive({
               if (audioB64) streamerRef.current?.addPCM16(audioB64);
 
               if (part.text) {
-                currentAiTurnTextRef.current += part.text + ' ';
+                currentAiTurnMetaTextRef.current += part.text + ' ';
               }
             }
           }
 
-          const transcriptionText = serverContent.outputTranscription?.text ?? '';
-          if (transcriptionText) {
-            currentAiTurnTextRef.current += transcriptionText + ' ';
+          if (!topLevelOutputText) {
+            appendAiSpokenTranscription(serverContent.outputTranscription?.text);
           }
 
-          // Input transcription from Gemini (user speech → text)
-          const inputText = serverContent.inputTranscription?.text?.trim();
-          if (inputText && inputText.length > 2) {
-            const now = Date.now();
-            const lastAiText =
-              lastAiTextForEchoRef.current ||
-              getLastAiText(transcriptRef.current, currentAiTurnTextRef.current);
-            const likelyEcho = !!lastAiText && isLikelyEcho(inputText, lastAiText);
-            const hasRecentUserAudio =
-              now - lastUserAudioActiveAtRef.current <= USER_AUDIO_ACTIVITY_WINDOW_MS ||
-              (!isPlayingRef.current &&
-                userVolumeCurrentRef.current >= USER_AUDIO_ACTIVITY_THRESHOLD);
-
-            // Защита от «подслушанного» голоса ИИ (эхо из динамиков в микрофон).
-            // Во время речи ИИ и короткое время после неё не считаем совпадающий текст речью пользователя.
-            if (
-              likelyEcho &&
-              (isPlayingRef.current ||
-                now < blockUserTranscriptionUntilRef.current ||
-                userVolumeCurrentRef.current < 8)
-            ) {
-              // ignore
-            } else if (hasRecentUserAudio) {
-              const lastEntry = transcriptRef.current.at(-1);
-              if (lastEntry?.role === 'user') {
-                lastEntry.text = inputText;
-              } else {
-                transcriptRef.current.push({ role: 'user', text: inputText });
-              }
-              lastUserSpeechRef.current = now;
-              lastBotEndRef.current = 0;
-            }
+          if (!topLevelInputText) {
+            upsertUserTranscriptFromGemini(serverContent.inputTranscription?.text);
           }
 
           if (serverContent.turnComplete) {
-            let turnText = currentAiTurnTextRef.current.trim();
+            const rawTurnText =
+              `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
+            const turnText = rawTurnText;
             // eslint-disable-next-line no-console
             console.log('[GeminiLive] turnComplete text:', turnText.slice(0, 200));
 
@@ -863,26 +941,26 @@ export function useGeminiLive({
             // Парсинг тегов чекпоинтов от LLM после завершения реплики
             const checkpointIds = parseCheckpointIds(turnText);
             if (checkpointIds.length > 0) {
-              setCheckpoints((prev) => {
-                const next = [...prev];
-                checkpointIds.forEach((rawId) => {
-                  const id = rawId.toLowerCase();
-                  const index = next.findIndex((cp) => cp.id.toLowerCase() === id);
-                  if (index !== -1) {
-                    next[index] = { ...next[index], done: true };
-                  }
-                });
-                return next;
-              });
+              const ids = new Set(checkpointIds.map((id) => id.toLowerCase()));
+              const next = checkpointsRef.current.map((cp) =>
+                ids.has(cp.id.toLowerCase()) ? { ...cp, done: true } : cp,
+              );
+              checkpointsRef.current = next;
+              setCheckpoints(next);
             }
 
-            turnText = cleanAiText(turnText);
+            const spokenText = cleanAiText(currentAiTurnTextRef.current.trim(), {
+              stripEnglishReasoning: false,
+            });
+            const fallbackText = spokenText ? '' : cleanAiText(rawTurnText);
+            const storeText = spokenText || fallbackText;
 
-            if (turnText) {
-              transcriptRef.current.push({ role: 'ai', text: turnText });
-              lastAiTextForEchoRef.current = turnText;
+            if (storeText) {
+              transcriptRef.current.push({ role: 'ai', text: storeText });
+              lastAiTextForEchoRef.current = storeText;
             }
             currentAiTurnTextRef.current = '';
+            currentAiTurnMetaTextRef.current = '';
             if (!firstAiTurnCompleteRef.current) {
               firstAiTurnCompleteRef.current = true;
             }
@@ -950,6 +1028,11 @@ export function useGeminiLive({
         const isAiSpeakingNow = isPlayingRef.current;
         if (isAiSpeakingNow) {
           if (scaledVolume >= BARGE_IN_VOLUME_THRESHOLD) {
+            // Пользователь пытается говорить поверх ИИ — фиксируем «аудио-активность»,
+            // чтобы входящие inputTranscription не считались галлюцинацией при речи ИИ.
+            if (firstAiTurnCompleteRef.current) {
+              lastUserAudioActiveAtRef.current = now;
+            }
             if (bargeInLoudSinceRef.current === 0) bargeInLoudSinceRef.current = now;
 
             const loudFor = now - bargeInLoudSinceRef.current;
@@ -986,12 +1069,11 @@ export function useGeminiLive({
         if (isPlayingRef.current && scaledVolume < BARGE_IN_VOLUME_THRESHOLD) return;
 
         const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+        const dataB64 = bytesToBase64(bytes);
         wsState.send(
           JSON.stringify({
             realtimeInput: {
-              mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: btoa(binary) }],
+              mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: dataB64 }],
             },
           }),
         );
@@ -1016,31 +1098,27 @@ export function useGeminiLive({
 
   const disconnect = useCallback(() => {
     // Захватываем незаконченную реплику ИИ, если она есть
-    const pendingAiText = currentAiTurnTextRef.current.trim();
-    if (pendingAiText) {
-      const cleaned = cleanAiText(pendingAiText);
-      if (cleaned) {
-        transcriptRef.current.push({ role: 'ai', text: cleaned });
-      }
-      currentAiTurnTextRef.current = '';
-    }
+    const rawPendingAiText =
+      `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
+    const pendingSpokenText = cleanAiText(currentAiTurnTextRef.current.trim(), {
+      stripEnglishReasoning: false,
+    });
+    const pendingAiText =
+      pendingSpokenText || (rawPendingAiText ? cleanAiText(rawPendingAiText) : '');
+    if (pendingAiText) transcriptRef.current.push({ role: 'ai', text: pendingAiText });
+    currentAiTurnTextRef.current = '';
+    currentAiTurnMetaTextRef.current = '';
 
     const transcript = [...transcriptRef.current];
     onCallEnd?.(transcript);
 
     transcriptRef.current = [];
-    recognitionActiveRef.current = false;
     lastUserAudioActiveAtRef.current = 0;
     blockUserTranscriptionUntilRef.current = 0;
     lastAiTextForEchoRef.current = '';
     lastBargeInAtRef.current = 0;
     bargeInLoudSinceRef.current = 0;
     skipEchoCooldownOnceRef.current = false;
-
-    try {
-      recognitionRef.current?.stop();
-    } catch (_) {}
-    recognitionRef.current = null;
 
     try {
       const ambient = ambientRef.current;
@@ -1069,7 +1147,9 @@ export function useGeminiLive({
       label,
       done: false,
     }));
-    setCheckpoints(uiConfigRef.current.enableCheckpoints ? resetCheckpoints : []);
+    const nextCheckpoints = uiConfigRef.current.enableCheckpoints ? resetCheckpoints : [];
+    setCheckpoints(nextCheckpoints);
+    checkpointsRef.current = nextCheckpoints;
     setHangUpReason(null);
   }, [playDisconnectTone, onCallEnd]);
 
@@ -1276,99 +1356,8 @@ export function useGeminiLive({
     return () => cancelAnimationFrame(rafId);
   }, [status]);
 
-  useEffect(() => {
-    if (status !== 'ready') return;
-    const win =
-      typeof window !== 'undefined'
-        ? (window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown })
-        : null;
-    const SR = win?.SpeechRecognition ?? win?.webkitSpeechRecognition;
-    if (!SR) return;
-
-    const recognition = new (SR as any)();
-    recognition.continuous = true;
-    recognition.interimResults = false;
-    recognition.lang = 'ru-RU';
-
-    recognition.onresult = (e: unknown) => {
-      const ev = e as
-        | {
-            results?: Array<{ isFinal?: boolean; 0?: { transcript?: string } }>;
-            resultIndex?: number;
-          }
-        | undefined;
-      const idx = ev?.resultIndex ?? 0;
-      const result = ev?.results?.[idx];
-      if (!result?.isFinal) return;
-      const text = result[0]?.transcript?.trim();
-      const isAiSpeakingNow = isPlayingRef.current;
-      const now = Date.now();
-
-      // Если пользователь пытается говорить во время речи ИИ — считаем это barge-in: останавливаем озвучку и сохраняем текст.
-      if (isAiSpeakingNow) {
-        const loudEnough = userVolumeCurrentRef.current >= BARGE_IN_VOLUME_THRESHOLD;
-        const canBargeIn = now - lastBargeInAtRef.current >= BARGE_IN_COOLDOWN_MS;
-        if (loudEnough && canBargeIn) {
-          lastBargeInAtRef.current = now;
-          lastUserAudioActiveAtRef.current = now;
-          blockUserTranscriptionUntilRef.current = 0;
-          skipEchoCooldownOnceRef.current = true;
-
-          const interruptedText = cleanAiText(currentAiTurnTextRef.current.trim());
-          if (interruptedText) {
-            transcriptRef.current.push({ role: 'ai', text: interruptedText });
-            lastAiTextForEchoRef.current = interruptedText;
-          }
-          currentAiTurnTextRef.current = '';
-          streamerRef.current?.stop();
-        }
-      } else if (now < blockUserTranscriptionUntilRef.current) {
-        return;
-      }
-
-      const hasRecentUserAudio =
-        now - lastUserAudioActiveAtRef.current <= USER_AUDIO_ACTIVITY_WINDOW_MS ||
-        userVolumeCurrentRef.current >=
-          (isAiSpeakingNow ? BARGE_IN_VOLUME_THRESHOLD : USER_AUDIO_ACTIVITY_THRESHOLD);
-      if (!hasRecentUserAudio) return;
-
-      const lastAiText =
-        lastAiTextForEchoRef.current ||
-        getLastAiText(transcriptRef.current, currentAiTurnTextRef.current);
-      if (text && lastAiText && isLikelyEcho(text, lastAiText)) return;
-
-      const lastEntry = transcriptRef.current.at(-1);
-      if (text && text.length > 2 && lastEntry?.text !== text) {
-        const newEntry: TranscriptEntry = { role: 'user', text };
-        transcriptRef.current.push(newEntry);
-        lastUserSpeechRef.current = now;
-        lastBotEndRef.current = 0;
-      }
-    };
-
-    recognition.onerror = () => {};
-    recognition.onend = () => {
-      if (recognitionActiveRef.current && recognitionRef.current) {
-        setTimeout(() => {
-          try {
-            if (recognitionActiveRef.current) recognition.start();
-          } catch (_) {}
-        }, 50);
-      }
-    };
-
-    recognitionActiveRef.current = true;
-    recognition.start();
-    recognitionRef.current = recognition;
-
-    return () => {
-      recognitionActiveRef.current = false;
-      try {
-        recognition.stop();
-      } catch (_) {}
-      recognitionRef.current = null;
-    };
-  }, [status]);
+  // Browser SpeechRecognition отключён: текст пользователя берём только из Gemini Live (inputAudioTranscription),
+  // чтобы избежать дублей/обрывков и «кривых» записей.
 
   const getTranscript = useCallback((limit?: number) => {
     const items = [...transcriptRef.current];

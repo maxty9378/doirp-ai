@@ -1,3 +1,5 @@
+import { stripEnglishReasoning } from './stripEnglishReasoning';
+
 export interface VoiceCallTranscriptEntry {
   role: 'ai' | 'user';
   text: string;
@@ -13,36 +15,13 @@ export const normalizeEchoText = (text: string) =>
 
 const tokenize = (text: string) => normalizeEchoText(text).split(' ').filter(Boolean);
 
-/**
- * Убирает длинные строки без кириллицы (часто это «служебные» рассуждения/мета-текст модели).
- * Оставляет: строки с кириллицей; без кириллицы — только очень короткие фрагменты (цифры, %, аббревиатуры до 8 символов).
- */
-const stripEnglishReasoning = (text: string) => {
-  const trimmed = text.trim();
-  if (!trimmed) return '';
-
-  const lines = trimmed
-    .split(/\n+/)
-    .flatMap((l) => l.split(/(?<=[.?!])\s+/))
-    .map((l) => l.trim())
-    .filter(Boolean);
-
-  const kept = lines.filter((line) => {
-    if (/\p{Script=Cyrl}/u.test(line)) return true;
-    if (line.length <= 8) return true;
-    return false;
-  });
-
-  return kept.join(' ').trim();
-};
-
-const cleanAiTextForStore = (text: string) => {
+const cleanAiTextForStore = (text: string, options?: { stripEnglishReasoning?: boolean }) => {
   let cleaned = text;
   cleaned = cleaned.replaceAll(/<think>[\s\S]*?<\/think>/gi, '');
   cleaned = cleaned.replaceAll(/(?:\[\s*SCORE\s*:|SCORE\s*:)\s*(?:[-+]\s*)?\d+\s*\]?/gi, '');
   cleaned = cleaned.replaceAll(/(?:\[\s*CHECKPOINT\s*:|CHECKPOINT\s*:)\s*[A-Z_]+\s*\]?/gi, '');
   cleaned = cleaned.replaceAll(/\s+/g, ' ');
-  cleaned = stripEnglishReasoning(cleaned);
+  if (options?.stripEnglishReasoning) cleaned = stripEnglishReasoning(cleaned);
   return cleaned.trim();
 };
 
@@ -150,16 +129,19 @@ export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
   const trimmed = entries
     .map((e) => {
       const raw = typeof e.text === 'string' ? e.text : String(e.text ?? '');
-      const nextText = e.role === 'ai' ? cleanAiTextForStore(raw) : raw.trim();
+      const nextText =
+        e.role === 'ai'
+          ? cleanAiTextForStore(raw, { stripEnglishReasoning: options?.mode === 'analysis' })
+          : raw.trim();
       return { ...e, text: nextText };
     })
     .filter((e) => e.text.length > 0) as T[];
 
   if (trimmed.length === 0) return trimmed;
   const noAdjacentEcho = dropLikelyEchoUserEntries(trimmed);
-  const noEcho = dropLikelyEchoUserEntriesAgainstAiCorpus(noAdjacentEcho);
+  if (options?.mode !== 'analysis') return noAdjacentEcho;
 
-  if (options?.mode !== 'analysis') return noEcho;
+  const noEcho = dropLikelyEchoUserEntriesAgainstAiCorpus(noAdjacentEcho);
 
   // Для анализа дополнительно выкидываем «шумовые» короткие обрывки речи пользователя,
   // чтобы LLM не превращал их в phraseFeedback.
