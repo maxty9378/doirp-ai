@@ -13,6 +13,39 @@ export const normalizeEchoText = (text: string) =>
 
 const tokenize = (text: string) => normalizeEchoText(text).split(' ').filter(Boolean);
 
+/**
+ * Убирает длинные строки без кириллицы (часто это «служебные» рассуждения/мета-текст модели).
+ * Оставляет: строки с кириллицей; без кириллицы — только очень короткие фрагменты (цифры, %, аббревиатуры до 8 символов).
+ */
+const stripEnglishReasoning = (text: string) => {
+  const trimmed = text.trim();
+  if (!trimmed) return '';
+
+  const lines = trimmed
+    .split(/\n+/)
+    .flatMap((l) => l.split(/(?<=[.?!])\s+/))
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const kept = lines.filter((line) => {
+    if (/\p{Script=Cyrl}/u.test(line)) return true;
+    if (line.length <= 8) return true;
+    return false;
+  });
+
+  return kept.join(' ').trim();
+};
+
+const cleanAiTextForStore = (text: string) => {
+  let cleaned = text;
+  cleaned = cleaned.replaceAll(/<think>[\s\S]*?<\/think>/gi, '');
+  cleaned = cleaned.replaceAll(/(?:\[\s*SCORE\s*:|SCORE\s*:)\s*(?:[-+]\s*)?\d+\s*\]?/gi, '');
+  cleaned = cleaned.replaceAll(/(?:\[\s*CHECKPOINT\s*:|CHECKPOINT\s*:)\s*[A-Z_]+\s*\]?/gi, '');
+  cleaned = cleaned.replaceAll(/\s+/g, ' ');
+  cleaned = stripEnglishReasoning(cleaned);
+  return cleaned.trim();
+};
+
 const SHORT_USER_UTTERANCES_KEEP = new Set(['да', 'нет', 'угу', 'ага', 'ок', 'окей', 'готово']);
 
 const looksLikeNoisyUserFragment = (text: string) => {
@@ -115,10 +148,11 @@ export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
   options?: { mode?: 'store' | 'analysis' },
 ): T[] => {
   const trimmed = entries
-    .map((e) => ({
-      ...e,
-      text: typeof e.text === 'string' ? e.text.trim() : String(e.text ?? '').trim(),
-    }))
+    .map((e) => {
+      const raw = typeof e.text === 'string' ? e.text : String(e.text ?? '');
+      const nextText = e.role === 'ai' ? cleanAiTextForStore(raw) : raw.trim();
+      return { ...e, text: nextText };
+    })
     .filter((e) => e.text.length > 0) as T[];
 
   if (trimmed.length === 0) return trimmed;

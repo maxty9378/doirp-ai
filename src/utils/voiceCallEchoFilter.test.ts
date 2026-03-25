@@ -93,7 +93,10 @@ describe('voiceCallEchoFilter', () => {
   it('sanitizeVoiceCallTranscript in analysis mode drops noisy short user fragments', () => {
     const cleaned = sanitizeVoiceCallTranscript(
       [
-        { role: 'ai', text: 'Вы верите, что это безопасно?' },
+        {
+          role: 'ai',
+          text: "**Initiating the Interview Protocol** I'm now implementing the role-playing instructions.\n\nВы верите, что это безопасно?",
+        },
         { role: 'user', text: 'дель' }, // fragment
         { role: 'user', text: 'Да' }, // keep
         { role: 'user', text: 'хотите' }, // fragment-like
