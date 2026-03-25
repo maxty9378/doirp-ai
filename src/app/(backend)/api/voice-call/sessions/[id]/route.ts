@@ -1,20 +1,15 @@
-import {
-  type VoiceCallSessionAnalysisResult,
-  voiceCallSessions,
-} from '@lobechat/database/schemas';
+import { type VoiceCallSessionAnalysisResult, voiceCallSessions } from '@lobechat/database/schemas';
 import { and, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 import { serverDB } from '@/database/server';
+import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 
 export const runtime = 'nodejs';
 
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user?.id) {
@@ -29,19 +24,17 @@ export async function GET(
     const [row] = await serverDB
       .select()
       .from(voiceCallSessions)
-      .where(
-        and(
-          eq(voiceCallSessions.id, id),
-          eq(voiceCallSessions.userId, session.user.id),
-        ),
-      )
+      .where(and(eq(voiceCallSessions.id, id), eq(voiceCallSessions.userId, session.user.id)))
       .limit(1);
 
     if (!row) {
       return NextResponse.json({ error: 'Сессия не найдена' }, { status: 404 });
     }
 
-    return NextResponse.json(row);
+    return NextResponse.json({
+      ...row,
+      transcript: sanitizeVoiceCallTranscript(row.transcript),
+    });
   } catch (e) {
     console.error('[voice-call/sessions/[id] GET]', e);
     return NextResponse.json(
@@ -51,10 +44,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth.api.getSession({ headers: await headers() });
     if (!session?.user?.id) {
@@ -73,12 +63,7 @@ export async function PATCH(
     const [updated] = await serverDB
       .update(voiceCallSessions)
       .set({ analysisResult: body.analysisResult ?? null })
-      .where(
-        and(
-          eq(voiceCallSessions.id, id),
-          eq(voiceCallSessions.userId, session.user.id),
-        ),
-      )
+      .where(and(eq(voiceCallSessions.id, id), eq(voiceCallSessions.userId, session.user.id)))
       .returning();
 
     if (!updated) {
