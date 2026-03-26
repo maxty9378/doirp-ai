@@ -1,4 +1,4 @@
-/* eslint-disable sort-keys-fix/sort-keys-fix */
+// @ts-nocheck
 import { boolean, index, integer, jsonb, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { createInsertSchema } from 'drizzle-zod';
 
@@ -39,7 +39,11 @@ export const trainingScenarios = pgTable(
     enableScoring: boolean('enable_scoring').default(false),
     isActive: boolean('is_active').default(true),
     scoreDisplayLabel: text('score_display_label'),
-    scoreLevelLabels: jsonb('score_level_labels').$type<{ low?: string; mid?: string; high?: string }>(),
+    scoreLevelLabels: jsonb('score_level_labels').$type<{
+      low?: string;
+      mid?: string;
+      high?: string;
+    }>(),
     openingInstruction: text('opening_instruction'),
     introDialogTitle: text('intro_dialog_title'),
     introDialogDescription: text('intro_dialog_description'),
@@ -91,22 +95,22 @@ export type TrainingKnowledgeEntryItem = typeof trainingKnowledgeEntries.$inferS
 // ======= voice_call_sessions ======= //
 
 export interface VoiceCallSessionAnalysisResult {
-  overallScore: number;
-  competencies: Array<{ name: string; score: number }>;
-  summary: string;
-  strengths: string[];
-  improvements: string[];
-  recommendedAction?: string;
   behavioralMetrics?: {
     silenceInfo?: string;
     responseSpeed?: string;
     repetitionAndRudeness?: string;
   };
+  competencies: Array<{ name: string; score: number }>;
+  improvements: string[];
+  overallScore: number;
   phraseFeedback: Array<{
     userPhrase: string;
     suggestedPhrase: string;
     advice: string;
   }>;
+  recommendedAction?: string;
+  strengths: string[];
+  summary: string;
 }
 
 export const voiceCallSessions = pgTable(

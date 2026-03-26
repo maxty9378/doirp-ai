@@ -3,21 +3,25 @@
 import { Flexbox, Text } from '@lobehub/ui';
 import { FileTextIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useState } from 'react';
-
 import { useNavigate } from 'react-router-dom';
 
 import NavItem from '@/features/NavPanel/components/NavItem';
 import SkeletonList from '@/features/NavPanel/components/SkeletonList';
-
+import {
+  loadLocalVoiceCallSessions,
+  type LocalVoiceCallSession,
+  removeLocalVoiceCallSession,
+} from '@/utils/voiceCallLocalSessions';
 
 interface SessionListItem {
-  id: string;
-  scenarioId: string;
-  overallScore: number | null;
-  score: number | null;
-  hangUpReason?: string;
-  durationSeconds?: number;
   createdAt: string;
+  durationSeconds?: number;
+  hangUpReason?: string;
+  id: string;
+  isLocal?: boolean;
+  overallScore: number | null;
+  scenarioId: string;
+  score: number | null;
 }
 
 function formatDate(iso: string): string {
@@ -35,11 +39,58 @@ function formatDate(iso: string): string {
   }
 }
 
+const mapLocalToListItem = (session: LocalVoiceCallSession): SessionListItem => ({
+  id: session.id,
+  scenarioId: session.scenarioId,
+  overallScore: session.analysisResult?.overallScore ?? session.score ?? null,
+  score: session.score ?? null,
+  hangUpReason: session.hangUpReason,
+  durationSeconds: session.durationSeconds,
+  createdAt: session.createdAt,
+  isLocal: true,
+});
+
+const mergeSessions = (
+  server: SessionListItem[],
+  local: LocalVoiceCallSession[],
+): SessionListItem[] => {
+  const localMapped = local.map(mapLocalToListItem);
+  const ids = new Set(server.map((s) => s.id));
+  const merged = [...server, ...localMapped.filter((s) => !ids.has(s.id))];
+  return merged.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+};
+
+const syncLocalSessions = async (local: LocalVoiceCallSession[]) => {
+  if (local.length === 0) return;
+  for (const session of local) {
+    try {
+      const res = await fetch('/api/voice-call/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenarioId: session.scenarioId,
+          transcript: session.transcript,
+          analysisResult: session.analysisResult ?? null,
+          durationSeconds: session.durationSeconds,
+          speakerName: session.speakerName,
+          score: session.score ?? null,
+          hangUpReason: session.hangUpReason,
+        }),
+        credentials: 'include',
+      });
+      if (res.ok) removeLocalVoiceCallSession(session.id);
+    } catch {
+      // keep local session for retry
+    }
+  }
+};
+
 const SessionList = memo(() => {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<SessionListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [scenarioTitles, setScenarioTitles] = useState<Record<string, string>>({});
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('/api/training/scenarios', { credentials: 'include' })
@@ -62,13 +113,32 @@ const SessionList = memo(() => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setError(null);
+    const localSeed = loadLocalVoiceCallSessions();
+    if (localSeed.length > 0) {
+      setSessions(
+        localSeed.map(mapLocalToListItem).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+      );
+    }
     fetch('/api/voice-call/sessions?limit=50', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : { sessions: [] }))
+      .then(async (res) => {
+        if (!res.ok) throw new Error(res.statusText);
+        return res.json();
+      })
       .then((data: { sessions?: SessionListItem[] }) => {
-        if (!cancelled) setSessions(data.sessions ?? []);
+        if (cancelled) return;
+        const serverSessions = data.sessions ?? [];
+        const local = loadLocalVoiceCallSessions();
+        const merged = mergeSessions(serverSessions, local);
+        setSessions(merged);
+        void syncLocalSessions(local);
       })
       .catch(() => {
-        if (!cancelled) setSessions([]);
+        if (!cancelled) {
+          const local = loadLocalVoiceCallSessions();
+          setSessions(local.map(mapLocalToListItem));
+          setError('?? ??????? ????????? ??????. ????????? ???????????.');
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -89,11 +159,19 @@ const SessionList = memo(() => {
     return <SkeletonList paddingBlock={8} />;
   }
 
+  if (error) {
+    return (
+      <Flexbox padding={12}>
+        <Text style={{ fontSize: 12, color: 'var(--colorError)' }}>{error}</Text>
+      </Flexbox>
+    );
+  }
+
   if (sessions.length === 0) {
     return (
       <Flexbox padding={12}>
         <Text style={{ fontSize: 13, color: 'var(--colorTextSecondary)' }}>
-          Нет сохранённых сессий
+          ??? ??????????? ??????
         </Text>
       </Flexbox>
     );
@@ -103,9 +181,8 @@ const SessionList = memo(() => {
     <Flexbox gap={1} paddingBlock={4} paddingInline={4}>
       {sessions.map((session) => (
         <NavItem
-          key={session.id}
           icon={FileTextIcon}
-          onClick={handleClick(session.id)}
+          key={session.id}
           title={
             <Flexbox gap={2} style={{ overflow: 'hidden' }}>
               <Text ellipsis style={{ fontSize: 13, fontWeight: 500 }}>
@@ -113,10 +190,12 @@ const SessionList = memo(() => {
               </Text>
               <Text style={{ fontSize: 11, color: 'var(--colorTextTertiary)' }}>
                 {formatDate(session.createdAt)}
-                {session.overallScore != null && ` · ${Math.round(session.overallScore)}%`}
+                {session.overallScore != null && ` ? ${Math.round(session.overallScore)}%`}
+                {session.isLocal && ' ? ????????'}
               </Text>
             </Flexbox>
           }
+          onClick={handleClick(session.id)}
         />
       ))}
     </Flexbox>

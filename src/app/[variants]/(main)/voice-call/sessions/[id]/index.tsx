@@ -5,6 +5,12 @@ import { createStaticStyles } from 'antd-style';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import {
+  getLocalVoiceCallSession,
+  LOCAL_SESSION_PREFIX,
+  saveLocalVoiceCallSession,
+} from '@/utils/voiceCallLocalSessions';
+
 import PostCallReport from '../../features/GeminiLiveCall/PostCallReport';
 
 function formatSessionDate(iso: string): string {
@@ -24,23 +30,28 @@ function formatSessionDate(iso: string): string {
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
   root: css`
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+
     width: 100%;
     height: 100%;
     min-height: 0;
+
     background: ${cssVar.colorBgLayout};
-    overflow: hidden;
   `,
   header: css`
-    flex-shrink: 0;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-shrink: 0;
     flex-wrap: wrap;
     gap: 16px;
-    padding: 16px 24px;
-    border-bottom: 1px solid ${cssVar.colorBorderSecondary};
+    align-items: center;
+    justify-content: space-between;
+
+    padding-block: 16px;
+    padding-inline: 24px;
+    border-block-end: 1px solid ${cssVar.colorBorderSecondary};
+
     background: ${cssVar.colorBgContainer};
   `,
   title: css`
@@ -50,20 +61,36 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     color: ${cssVar.colorText};
   `,
   subtitle: css`
-    margin: 4px 0 0 0;
+    margin-block: 4px 0;
+    margin-inline: 0;
     font-size: 13px;
     color: ${cssVar.colorTextSecondary};
   `,
   reportScroll: css`
+    overflow: hidden auto;
     flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
   `,
   reportWrap: css`
     width: 100%;
     max-width: 1200px;
-    margin: 0 auto;
+    margin-block: 0;
+    margin-inline: auto;
     padding: 24px;
+  `,
+  localBadge: css`
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    padding-block: 2px;
+    padding-inline: 8px;
+    border-radius: 999px;
+
+    font-size: 11px;
+    font-weight: 600;
+    color: ${cssVar.colorTextSecondary};
+
+    background: ${cssVar.colorFillSecondary};
   `,
 }));
 
@@ -83,6 +110,7 @@ interface SessionDetail {
   } | null;
   createdAt: string;
   id: string;
+  isLocal?: boolean;
   scenarioId: string;
   speakerName?: string;
   transcript: Array<{ role: 'ai' | 'user'; text: string }>;
@@ -97,6 +125,7 @@ const VoiceCallSessionDetailPage = memo(() => {
   const [scenarioTitles, setScenarioTitles] = useState<Record<string, string>>({});
   const [retryLoading, setRetryLoading] = useState(false);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [isLocalSession, setIsLocalSession] = useState(false);
 
   useEffect(() => {
     fetch('/api/training/scenarios', { credentials: 'include' })
@@ -125,7 +154,7 @@ const VoiceCallSessionDetailPage = memo(() => {
         (e) => typeof e?.text === 'string' && e.text.trim().length > 0,
       );
       if (transcriptForApi.length === 0) {
-        throw new Error('Нет непустых сообщений в транскрипте');
+        throw new Error('??? ???????? ????????? ? ???????????');
       }
 
       const analyzeRes = await fetch('/api/voice-call/analyze', {
@@ -136,9 +165,27 @@ const VoiceCallSessionDetailPage = memo(() => {
       });
       if (!analyzeRes.ok) {
         const errData = await analyzeRes.json().catch(() => ({}));
-        throw new Error((errData as { error?: string }).error || 'Ошибка анализа');
+        throw new Error((errData as { error?: string }).error || '?????? ???????');
       }
       const analysisResult = await analyzeRes.json();
+
+      if (isLocalSession) {
+        const updated = { ...session, analysisResult };
+        saveLocalVoiceCallSession({
+          id: session.id,
+          scenarioId: session.scenarioId,
+          transcript: session.transcript,
+          analysisResult,
+          score: analysisResult?.overallScore ?? null,
+          hangUpReason: undefined,
+          durationSeconds: undefined,
+          speakerName: session.speakerName,
+          createdAt: session.createdAt,
+          localOnly: true,
+        });
+        setSession(updated);
+        return;
+      }
 
       const patchRes = await fetch(`/api/voice-call/sessions/${id}`, {
         method: 'PATCH',
@@ -147,28 +194,51 @@ const VoiceCallSessionDetailPage = memo(() => {
         credentials: 'include',
       });
       if (!patchRes.ok) {
-        throw new Error('Не удалось сохранить результат анализа');
+        throw new Error('?? ??????? ????????? ????????? ???????');
       }
 
-      setSession((prev) => prev ? { ...prev, analysisResult } : prev);
+      setSession((prev) => (prev ? { ...prev, analysisResult } : prev));
     } catch (e) {
-      setRetryError(e instanceof Error ? e.message : 'Ошибка');
+      setRetryError(e instanceof Error ? e.message : '??????');
     } finally {
       setRetryLoading(false);
     }
-  }, [session, id, retryLoading]);
+  }, [session, id, retryLoading, isLocalSession]);
 
   useEffect(() => {
     if (!id) {
       setLoading(false);
       return;
     }
+
+    if (id.startsWith(LOCAL_SESSION_PREFIX)) {
+      const local = getLocalVoiceCallSession(id);
+      if (local) {
+        setSession({
+          id: local.id,
+          scenarioId: local.scenarioId,
+          transcript: local.transcript,
+          analysisResult: local.analysisResult ?? null,
+          createdAt: local.createdAt,
+          speakerName: local.speakerName,
+          isLocal: true,
+        });
+        setIsLocalSession(true);
+        setLoading(false);
+        return;
+      }
+      setError('?????? ?? ???????');
+      setIsLocalSession(true);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
     setError(null);
     fetch(`/api/voice-call/sessions/${id}`, { credentials: 'include' })
       .then((res) => {
-        if (res.status === 404) throw new Error('Сессия не найдена');
+        if (res.status === 404) throw new Error('?????? ?? ???????');
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
       })
@@ -176,7 +246,7 @@ const VoiceCallSessionDetailPage = memo(() => {
         if (!cancelled) setSession(data);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка загрузки');
+        if (!cancelled) setError(e instanceof Error ? e.message : '?????? ????????');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -189,9 +259,9 @@ const VoiceCallSessionDetailPage = memo(() => {
   if (!id) {
     return (
       <div className={styles.root}>
-        <div style={{ color: 'var(--colorTextSecondary)' }}>Не указан id сессии.</div>
+        <div style={{ color: 'var(--colorTextSecondary)' }}>?? ?????? id ??????.</div>
         <Button style={{ marginTop: 16 }} onClick={() => navigate('/voice-call/sessions')}>
-          К списку сессий
+          ? ?????? ??????
         </Button>
       </div>
     );
@@ -199,7 +269,10 @@ const VoiceCallSessionDetailPage = memo(() => {
 
   if (loading) {
     return (
-      <div className={styles.root} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        className={styles.root}
+        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
         <Spin size="large" />
       </div>
     );
@@ -208,8 +281,10 @@ const VoiceCallSessionDetailPage = memo(() => {
   if (error || !session) {
     return (
       <div className={styles.root}>
-        <div style={{ color: 'var(--colorError)', marginBottom: 16 }}>{error ?? 'Сессия не найдена'}</div>
-        <Button onClick={() => navigate('/voice-call/sessions')}>К списку сессий</Button>
+        <div style={{ color: 'var(--colorError)', marginBottom: 16 }}>
+          {error ?? '?????? ?? ???????'}
+        </div>
+        <Button onClick={() => navigate('/voice-call/sessions')}>? ?????? ??????</Button>
       </div>
     );
   }
@@ -221,10 +296,11 @@ const VoiceCallSessionDetailPage = memo(() => {
           <h1 className={styles.title}>{getScenarioTitle(session.scenarioId)}</h1>
           <p className={styles.subtitle}>{formatSessionDate(session.createdAt)}</p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Button onClick={() => navigate('/voice-call/sessions')}>К списку сессий</Button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {session.isLocal && <span className={styles.localBadge}>????????</span>}
+          <Button onClick={() => navigate('/voice-call/sessions')}>? ?????? ??????</Button>
           <Button type="primary" onClick={() => navigate('/voice-call')}>
-            К тренажёру
+            ? ?????????
           </Button>
         </div>
       </header>
@@ -232,13 +308,25 @@ const VoiceCallSessionDetailPage = memo(() => {
       <div className={styles.reportScroll}>
         <div className={styles.reportWrap}>
           {session.analysisResult ? (
-            <PostCallReport data={session.analysisResult} speakerName={session.speakerName} transcript={session.transcript} />
+            <PostCallReport
+              data={session.analysisResult}
+              speakerName={session.speakerName}
+              transcript={session.transcript}
+            />
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '40px 0' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 16,
+                padding: '40px 0',
+              }}
+            >
               <div style={{ color: 'var(--colorTextSecondary)', fontSize: 15 }}>
                 {session.transcript.length > 0
-                  ? 'Анализ не был выполнен для этой сессии. Транскрипт сохранён — можно запустить анализ сейчас.'
-                  : 'Транскрипт пуст — анализ невозможен.'}
+                  ? '?????? ?? ??? ???????? ??? ???? ??????. ?????????? ???????? ? ????? ????????? ?????? ??????.'
+                  : '?????????? ???? ? ?????? ??????????.'}
               </div>
               {session.transcript.length > 0 && (
                 <>
@@ -248,7 +336,7 @@ const VoiceCallSessionDetailPage = memo(() => {
                     type="primary"
                     onClick={retryAnalysis}
                   >
-                    {retryLoading ? 'Анализируем...' : 'Запустить анализ'}
+                    {retryLoading ? '???????????...' : '????????? ??????'}
                   </Button>
                   {retryError && (
                     <div style={{ color: 'var(--colorError)', fontSize: 13 }}>{retryError}</div>
