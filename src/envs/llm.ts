@@ -31,6 +31,16 @@ export const getLLMConfig = () => {
       GOOGLE_TTS_API_KEY: z.string().optional(),
       /** Base URL for Gemini API (TTS, generateContent). Override if direct access is blocked (e.g. region). */
       GOOGLE_API_BASE: z.string().optional(),
+      /** Service account JSON for Google Cloud Speech-to-Text / temporary GCS uploads. */
+      GOOGLE_SPEECH_CREDENTIALS: z.string().optional(),
+      /** Optional override for Google Cloud project used by Speech-to-Text. Defaults to project_id from credentials. */
+      GOOGLE_SPEECH_PROJECT: z.string().optional(),
+      /** Cloud Storage bucket for temporary voice-call interview audio. */
+      GOOGLE_SPEECH_BUCKET: z.string().optional(),
+      /** Speech-to-Text location. Defaults to global. */
+      GOOGLE_SPEECH_LOCATION: z.string().optional(),
+      /** Speech-to-Text model. Defaults to latest_long. */
+      GOOGLE_SPEECH_MODEL: z.string().optional(),
 
       ENABLED_VERTEXAI: z.boolean(),
 
@@ -252,6 +262,11 @@ export const getLLMConfig = () => {
       GOOGLE_API_KEY: process.env.GOOGLE_API_KEY,
       GOOGLE_TTS_API_KEY: process.env.GOOGLE_TTS_API_KEY,
       GOOGLE_API_BASE: process.env.GOOGLE_API_BASE,
+      GOOGLE_SPEECH_CREDENTIALS: process.env.GOOGLE_SPEECH_CREDENTIALS,
+      GOOGLE_SPEECH_PROJECT: process.env.GOOGLE_SPEECH_PROJECT,
+      GOOGLE_SPEECH_BUCKET: process.env.GOOGLE_SPEECH_BUCKET,
+      GOOGLE_SPEECH_LOCATION: process.env.GOOGLE_SPEECH_LOCATION,
+      GOOGLE_SPEECH_MODEL: process.env.GOOGLE_SPEECH_MODEL,
 
       ENABLED_VERTEXAI: !!process.env.VERTEXAI_CREDENTIALS,
 

@@ -2,6 +2,8 @@ import {
   type VoiceCallSessionAnalysisResult,
   type VoiceCallSessionDebugLog,
   voiceCallSessions,
+  type VoiceCallSttStatus,
+  type VoiceCallTranscriptSource,
 } from '@lobechat/database/schemas';
 import { and, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
@@ -105,6 +107,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const body = (await req.json().catch(() => ({}))) as {
       analysisResult?: VoiceCallSessionAnalysisResult;
       debugLog?: VoiceCallSessionDebugLog | null;
+      sttError?: string | null;
+      sttStatus?: VoiceCallSttStatus | null;
+      transcriptSource?: VoiceCallTranscriptSource | null;
     };
     const debugLog = body.debugLog === undefined ? undefined : normalizeDebugLog(body.debugLog);
 
@@ -113,6 +118,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       .set({
         analysisResult: body.analysisResult ?? null,
         ...(debugLog !== undefined ? { debugLog } : {}),
+        ...(body.sttError !== undefined ? { sttError: body.sttError } : {}),
+        ...(body.sttStatus !== undefined ? { sttStatus: body.sttStatus } : {}),
+        ...(body.transcriptSource !== undefined
+          ? { transcriptSource: body.transcriptSource }
+          : {}),
       })
       .where(and(eq(voiceCallSessions.id, id), eq(voiceCallSessions.userId, session.user.id)))
       .returning();

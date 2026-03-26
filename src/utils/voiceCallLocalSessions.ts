@@ -1,3 +1,5 @@
+import type { VoiceCallSttStatus, VoiceCallTranscriptSource } from '@lobechat/database/schemas';
+
 import { type VoiceCallDebugSnapshot } from './voiceCallDebug';
 
 export interface LocalVoiceCallSession {
@@ -12,7 +14,10 @@ export interface LocalVoiceCallSession {
   scenarioId: string;
   score: number | null;
   speakerName?: string;
+  sttError?: string;
+  sttStatus?: VoiceCallSttStatus;
   transcript: Array<{ role: 'ai' | 'user'; text: string }>;
+  transcriptSource?: VoiceCallTranscriptSource;
 }
 
 const STORAGE_KEY = 'voiceCallLocalSessions:v1';

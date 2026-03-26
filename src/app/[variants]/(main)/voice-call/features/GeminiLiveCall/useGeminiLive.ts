@@ -23,9 +23,10 @@ const AI_VOLUME_SCALE = 0.15;
 const VOLUME_SMOOTH = 0.25;
 const VOLUME_DECAY = 0.85;
 const USER_AUDIO_ACTIVITY_THRESHOLD = 1.5;
-const AUDIO_STREAM_END_IDLE_MS = 1250;
 const HEALTH_LOG_INTERVAL_MS = 5000;
 const MAX_DEBUG_EVENTS = 200;
+const _MAX_SESSION_RESUME_ATTEMPTS = 3;
+const DEFAULT_TURN_PLANNER_TOOL_NAME = 'get_training_turn_context';
 
 export interface GeminiLiveConfig {
   apiKey: string;
@@ -36,6 +37,7 @@ export interface GeminiLiveConfig {
   contextWindow?: number;
   enableCheckpoints?: boolean;
   enableScoring?: boolean;
+  enableTurnPlanner?: boolean;
   /** URL WebSocket-прокси (когда задан VOICE_CALL_WS_PROXY_URL), иначе клиент подключается к Google напрямую */
   geminiWsUrl?: string | null;
   /** Массив целей сценария из редактора (используем как чекпоинты в UI) */
@@ -59,6 +61,7 @@ export interface GeminiLiveConfig {
   silenceNudgePhrases?: string[];
   silenceNudgeTemplate?: string | null;
   systemInstruction: string;
+  turnPlannerToolName?: string | null;
   userLabel?: string;
   voiceName: string;
 }
@@ -100,6 +103,51 @@ export interface GeminiLiveUIConfig {
   userLabel: string;
 }
 
+interface TrainingTurnPlannerState {
+  currentTopic: string | null;
+  evidenceUsed: string[];
+  lastKnowledgeIds: string[];
+  lastUserClaim: string | null;
+  openLoops: string[];
+  pressureLevel: number;
+}
+
+interface TrainingTurnPlan {
+  currentTopic: string | null;
+  lastUserClaim: string | null;
+  openLoops: string[];
+  pressureLevel: number;
+  reasoning: {
+    factualStrength: 'high' | 'low' | 'medium';
+    responseGap: 'answered' | 'evasive' | 'partial';
+    userTone: 'aggressive' | 'neutral' | 'uncertain';
+    weaknessCode:
+      | 'direct_answer_missing'
+      | 'emotional_defense'
+      | 'follow_up_open'
+      | 'no_evidence'
+      | 'partial_answer';
+  };
+  relevantKnowledge: Array<{
+    attackMyth: string;
+    id: string;
+    officialUsp: string;
+    productIngredient: string;
+  }>;
+  relevantKnowledgeIds: string[];
+  responseMode:
+    | 'acknowledge_then_pressure'
+    | 'answer_then_probe'
+    | 'deescalate_then_return'
+    | 'press_for_direct_answer';
+  state: TrainingTurnPlannerState;
+}
+
+interface PlannerToolCall {
+  id?: string;
+  name?: string;
+}
+
 const PATIENCE_INITIAL = 100;
 const DEFAULT_CONTEXT_WINDOW = 5;
 const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
@@ -107,16 +155,8 @@ const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
 // По умолчанию раунд длится 5 минут
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 300_000;
 const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слушаете?'];
-const DEFAULT_ROUND_ENDING_PROMPT =
-  'Через 15 секунд наш эфир на конференции подходит к концу. Кратко подведи итог: убедил ли тебя собеседник или нет, и скажи: "зрители нашего стрима сами сделают выводы". После этого естественно завершай разговор как в реальном живом общении на мероприятии, без служебных фраз про окончание звонка.';
-const DEFAULT_SILENCE_NUDGE_TEMPLATE =
-  'Если входной звук пропал, оборвался или собеседника плохо слышно, один раз коротко и нейтрально переспроси в живом разговорном тоне: "{{phrase}}". Не утверждай уверенно, что собеседник молчит, если не уверен.';
-const DEFAULT_SHORT_ANSWER_NUDGE =
-  'Отвечай короче: 1-2 предложения и по сути, затем жди ответ собеседника.';
-const DEFAULT_AUTO_SUCCESS_PROMPT =
-  'Маркетолог блестяще справился с напором, сохранил лицо бренда и не оставил места для манипуляций. Признай поражение иронично, например: "Ладно, вы хорошо подготовились к эфиру... Но мы ещё проверим ваши слова. На этом всё, возвращаемся в студию!" и естественно заверши диалог в стиле прямого эфира.';
-const MONOLOGUE_DURATION_MS = 15_000;
-const MONOLOGUE_VOLUME_THRESHOLD = 10;
+const _MONOLOGUE_DURATION_MS = 15_000;
+const _MONOLOGUE_VOLUME_THRESHOLD = 10;
 
 /** Очищает служебные теги в тексте от модели */
 function cleanAiText(text: string, options?: { stripEnglishReasoning?: boolean }): string {
@@ -131,6 +171,11 @@ function cleanAiText(text: string, options?: { stripEnglishReasoning?: boolean }
 export interface TranscriptEntry {
   role: 'ai' | 'user';
   text: string;
+}
+
+export interface GeminiLiveCallEndPayload {
+  transcript: TranscriptEntry[];
+  userAudioBlob: Blob | null;
 }
 
 export type HangUpReason = 'abuse' | 'silence' | 'ai' | 'success' | null;
@@ -228,6 +273,56 @@ const bytesToBase64 = (bytes: Uint8Array) => {
   return btoa(binary);
 };
 
+const buildWavBlobFromPcmChunks = (chunks: Uint8Array[], sampleRate: number) => {
+  if (chunks.length === 0) return null;
+
+  const pcmLength = chunks.reduce((total, chunk) => total + chunk.byteLength, 0);
+  if (pcmLength === 0) return null;
+
+  const wavBuffer = new ArrayBuffer(44 + pcmLength);
+  const view = new DataView(wavBuffer);
+  const bytes = new Uint8Array(wavBuffer);
+
+  let offset = 0;
+  const writeAscii = (value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+    offset += value.length;
+  };
+
+  writeAscii('RIFF');
+  view.setUint32(offset, 36 + pcmLength, true);
+  offset += 4;
+  writeAscii('WAVE');
+  writeAscii('fmt ');
+  view.setUint32(offset, 16, true);
+  offset += 4;
+  view.setUint16(offset, 1, true);
+  offset += 2;
+  view.setUint16(offset, 1, true);
+  offset += 2;
+  view.setUint32(offset, sampleRate, true);
+  offset += 4;
+  view.setUint32(offset, sampleRate * 2, true);
+  offset += 4;
+  view.setUint16(offset, 2, true);
+  offset += 2;
+  view.setUint16(offset, 16, true);
+  offset += 2;
+  writeAscii('data');
+  view.setUint32(offset, pcmLength, true);
+  offset += 4;
+
+  let cursor = offset;
+  for (const chunk of chunks) {
+    bytes.set(chunk, cursor);
+    cursor += chunk.byteLength;
+  }
+
+  return new Blob([wavBuffer], { type: 'audio/wav' });
+};
+
 const isWs = (c: string) => /\s/u.test(c);
 
 const parseScoreDeltaSum = (text: string) => {
@@ -307,7 +402,7 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 export interface UseGeminiLiveOptions {
   agentId?: string;
-  onCallEnd?: (transcript: TranscriptEntry[]) => void;
+  onCallEnd?: (payload: GeminiLiveCallEndPayload) => void | Promise<void>;
   onError?: (message: string) => void;
   speakerName?: string;
   systemInstruction: string;
@@ -371,6 +466,8 @@ export function useGeminiLive({
 
   const wsRef = useRef<WebSocket | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const recordedUserPcmChunksRef = useRef<Uint8Array[]>([]);
+  const recordedUserPcmBytesRef = useRef(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const playContextRef = useRef<AudioContext | null>(null);
   const streamerRef = useRef<AudioStreamer | null>(null);
@@ -380,6 +477,7 @@ export function useGeminiLive({
   const configFetchedRef = useRef(false);
   const configRef = useRef<GeminiLiveConfig | null>(null);
   const uiConfigRef = useRef<GeminiLiveUIConfig>(uiConfig);
+  const plannerStateRef = useRef<TrainingTurnPlannerState | null>(null);
   const lastAgentIdRef = useRef<string>(agentId);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const userVolumeTargetRef = useRef(0);
@@ -406,8 +504,8 @@ export function useGeminiLive({
   const isCallActive = status === 'connecting' || status === 'ready';
 
   const lastBotEndRef = useRef<number>(0);
-  const monologueTriggeredRef = useRef(false);
-  const silenceCooldownRef = useRef<number>(0);
+  const _monologueTriggeredRef = useRef(false);
+  const _silenceCooldownRef = useRef<number>(0);
   const silenceNudgeCountRef = useRef(0);
   const disconnectRef = useRef<() => void>(() => {});
   const hangupScheduledRef = useRef(false);
@@ -419,6 +517,9 @@ export function useGeminiLive({
   const firstAiTurnCompleteRef = useRef(false);
   const speakerNameRef = useRef(speakerName?.trim() || '');
   const deductedSessionRef = useRef(false);
+  const sessionResumeHandleRef = useRef<string | null>(null);
+  const sessionResumeAttemptsRef = useRef(0);
+  const resumeTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     speakerNameRef.current = speakerName?.trim() || '';
@@ -539,7 +640,15 @@ export function useGeminiLive({
     lastAudioStreamEndAtRef.current = 0;
     audioChunkSentCountRef.current = 0;
     audioStreamEndedRef.current = false;
+    recordedUserPcmChunksRef.current = [];
+    recordedUserPcmBytesRef.current = 0;
     lastHealthLogAtRef.current = 0;
+    sessionResumeHandleRef.current = null;
+    sessionResumeAttemptsRef.current = 0;
+    if (resumeTimerRef.current !== null) {
+      window.clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
+    }
   };
 
   const playTone = useCallback((freq: number, duration: number, startTime: number) => {
@@ -579,6 +688,63 @@ export function useGeminiLive({
     [onError],
   );
 
+  const requestTurnPlan = useCallback(async (): Promise<TrainingTurnPlan | null> => {
+    const transcript = transcriptRef.current.filter((entry) => entry.text.trim().length > 0);
+
+    if (transcript.length === 0) return null;
+
+    try {
+      const response = await fetch('/api/voice-call/plan-turn', {
+        body: JSON.stringify({
+          agentId,
+          previousState: plannerStateRef.current,
+          transcript,
+        }),
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+
+        throw new Error(payload.error || `Planner request failed: ${response.status}`);
+      }
+
+      const plan = (await response.json()) as TrainingTurnPlan;
+      plannerStateRef.current = plan.state;
+      pushDebugEvent('turn-plan', {
+        currentTopic: plan.currentTopic,
+        pressureLevel: plan.pressureLevel,
+        relevantKnowledgeIds: plan.relevantKnowledgeIds,
+        responseMode: plan.responseMode,
+      });
+
+      return plan;
+    } catch (error) {
+      console.error('[GeminiLive] turn planner failed:', error);
+      pushDebugEvent('turn-plan-error', {
+        message: error instanceof Error ? error.message : 'unknown planner error',
+      });
+
+      return null;
+    }
+  }, [agentId, pushDebugEvent]);
+
+  const sendToolResponses = useCallback((responses: Array<Record<string, unknown>>) => {
+    const ws = wsRef.current;
+
+    if (!ws || ws.readyState !== WebSocket.OPEN || responses.length === 0) return;
+
+    ws.send(
+      JSON.stringify({
+        toolResponse: {
+          functionResponses: responses,
+        },
+      }),
+    );
+  }, []);
+
   const sendClientText = useCallback((text: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -589,27 +755,6 @@ export function useGeminiLive({
       }),
     );
   }, [pushDebugEvent]);
-
-  const sendAudioStreamEnd = useCallback(
-    (reason: string) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN || !isSetupCompleteRef.current) return;
-      if (audioStreamEndedRef.current) return;
-
-      audioStreamEndedRef.current = true;
-      lastAudioStreamEndAtRef.current = Date.now();
-      pushDebugEvent('audio-stream-end', { reason });
-
-      ws.send(
-        JSON.stringify({
-          realtimeInput: {
-            audioStreamEnd: true,
-          },
-        }),
-      );
-    },
-    [pushDebugEvent],
-  );
 
   const finalizeCall = useCallback(
     (reason: Exclude<HangUpReason, null>, message: string, delayMs = 1200, markAsError = true) => {
@@ -645,7 +790,8 @@ export function useGeminiLive({
       if (!allDone || !enoughDialogue || latestScore < 12) return;
 
       autoFinishTriggeredRef.current = true;
-      sendClientText(uiConfigRef.current.autoSuccessPrompt ?? DEFAULT_AUTO_SUCCESS_PROMPT);
+      const autoSuccessPrompt = uiConfigRef.current.autoSuccessPrompt;
+      if (autoSuccessPrompt) sendClientText(autoSuccessPrompt);
 
       setTimeout(() => {
         if (hangupScheduledRef.current || statusRef.current !== 'ready') return;
@@ -725,6 +871,7 @@ export function useGeminiLive({
       };
       uiConfigRef.current = nextUiConfig;
       setUiConfig(nextUiConfig);
+      plannerStateRef.current = null;
 
       setStatus('connecting');
       setErrorMessage(null);
@@ -767,6 +914,13 @@ export function useGeminiLive({
       debugEventsRef.current = [];
       syncDebugSnapshot();
       pushDebugEvent('connect-start', { agentId });
+      recordedUserPcmChunksRef.current = [];
+      recordedUserPcmBytesRef.current = 0;
+      pushDebugEvent('recording-started', {
+        format: 'wav',
+        mimeType: 'audio/wav',
+        sampleRate: PCM_IN_SAMPLE_RATE,
+      });
 
       // Ensure any previous stream is stopped before requesting a new one
       if (streamRef.current) {
@@ -776,37 +930,19 @@ export function useGeminiLive({
 
       // eslint-disable-next-line no-console
       console.log('[GeminiLive] Requesting microphone...');
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          autoGainControl: false,
-          channelCount: 1,
-          echoCancellation: false,
-          noiseSuppression: false,
-        },
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       // eslint-disable-next-line no-console
       console.log('[GeminiLive] Microphone acquired');
       const [track] = stream.getAudioTracks();
       if (track) {
         pushDebugEvent('microphone-acquired', {
-          constraints: {
-            autoGainControl: false,
-            channelCount: 1,
-            echoCancellation: false,
-            noiseSuppression: false,
-          },
+          constraints: 'browser-default',
           settings: track.getSettings(),
         });
         track.onended = () => pushDebugEvent('microphone-track-ended');
-        track.onmute = () => {
-          pushDebugEvent('microphone-track-muted');
-          sendAudioStreamEnd('track-muted');
-        };
-        track.onunmute = () => {
-          audioStreamEndedRef.current = false;
-          pushDebugEvent('microphone-track-unmuted');
-        };
+        track.onmute = () => pushDebugEvent('microphone-track-muted');
+        track.onunmute = () => pushDebugEvent('microphone-track-unmuted');
       }
 
       const Ctx =
@@ -954,23 +1090,28 @@ export function useGeminiLive({
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: config.voiceName || voiceName } },
               },
             },
-            contextWindowCompression: {
-              slidingWindow: {},
-            },
-            realtimeInputConfig: {
-              automaticActivityDetection: {
-                disabled: false,
-                endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
-                prefixPaddingMs: 80,
-                silenceDurationMs: 400,
-                startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
-              },
-            },
             sessionResumption: {},
             outputAudioTranscription: {},
             inputAudioTranscription: {},
           },
         };
+        if (config.enableTurnPlanner) {
+          (setupMsg.setup as Record<string, unknown>).tools = [
+            {
+              functionDeclarations: [
+                {
+                  description:
+                    'Получить актуальный контекст интервью: текущую тему, незакрытые вопросы, уровень давления и 1-2 релевантных факта из базы знаний.',
+                  name: config.turnPlannerToolName || DEFAULT_TURN_PLANNER_TOOL_NAME,
+                  parameters: {
+                    properties: {},
+                    type: 'OBJECT',
+                  },
+                },
+              ],
+            },
+          ];
+        }
         if (sysInst)
           (setupMsg.setup as Record<string, unknown>).systemInstruction = {
             parts: [{ text: sysInst }],
@@ -992,10 +1133,77 @@ export function useGeminiLive({
             pushDebugEvent('server-go-away', data.goAway as Record<string, unknown>);
           }
           if (data.sessionResumptionUpdate) {
+            const update = data.sessionResumptionUpdate as Record<string, unknown>;
+            const nextHandle =
+              typeof update.newHandle === 'string'
+                ? update.newHandle
+                : typeof update.handle === 'string'
+                  ? update.handle
+                  : null;
+            if (nextHandle) {
+              sessionResumeHandleRef.current = nextHandle;
+              sessionResumeAttemptsRef.current = 0;
+            }
             pushDebugEvent(
               'server-session-resumption',
-              data.sessionResumptionUpdate as Record<string, unknown>,
+              update,
             );
+          }
+
+          const toolCalls = Array.isArray(data.toolCall?.functionCalls)
+            ? (data.toolCall.functionCalls as PlannerToolCall[])
+            : [];
+          if (toolCalls.length > 0) {
+            const functionResponses: Array<Record<string, unknown>> = [];
+
+            for (const toolCall of toolCalls) {
+              const toolName = toolCall.name || '';
+              const toolId = toolCall.id;
+
+              if (toolName !== (config.turnPlannerToolName || DEFAULT_TURN_PLANNER_TOOL_NAME)) {
+                functionResponses.push({
+                  id: toolId,
+                  name: toolName,
+                  response: { error: 'Unsupported tool' },
+                });
+                continue;
+              }
+
+              const plan = await requestTurnPlan();
+
+              functionResponses.push({
+                id: toolId,
+                name: toolName,
+                response: plan ?? {
+                  currentTopic: plannerStateRef.current?.currentTopic ?? null,
+                  lastUserClaim: plannerStateRef.current?.lastUserClaim ?? null,
+                  openLoops: plannerStateRef.current?.openLoops ?? [],
+                  pressureLevel: plannerStateRef.current?.pressureLevel ?? 1,
+                  reasoning: {
+                    factualStrength: 'low',
+                    responseGap: 'partial',
+                    userTone: 'neutral',
+                    weaknessCode: 'follow_up_open',
+                  },
+                  relevantKnowledge: [],
+                  relevantKnowledgeIds: [],
+                  responseMode: 'answer_then_probe',
+                  state:
+                    plannerStateRef.current ?? {
+                      currentTopic: null,
+                      evidenceUsed: [],
+                      lastKnowledgeIds: [],
+                      lastUserClaim: null,
+                      openLoops: [],
+                      pressureLevel: 1,
+                    },
+                },
+              });
+            }
+
+            sendToolResponses(functionResponses);
+
+            return;
           }
 
           if (data.error?.message) {
@@ -1014,6 +1222,7 @@ export function useGeminiLive({
             console.log('[GeminiLive] Received setupComplete! Connection is ready.');
             pushDebugEvent('setup-complete');
             isSetupCompleteRef.current = true;
+            connectionLockRef.current = false;
             setStatus('ready');
             playConnectionTone();
             roundStartRef.current = Date.now();
@@ -1171,6 +1380,12 @@ export function useGeminiLive({
       ) => {
         const { buffer, volume } = event.data;
         const now = Date.now();
+        const bytes = new Uint8Array(buffer);
+        if (bytes.byteLength > 0) {
+          const recordedChunk = bytes.slice();
+          recordedUserPcmChunksRef.current.push(recordedChunk);
+          recordedUserPcmBytesRef.current += recordedChunk.byteLength;
+        }
         const scaledVolume = Math.min(100, volume * USER_VOLUME_SCALE);
         userVolumeTargetRef.current = scaledVolume;
         lastWorkletMessageAtRef.current = now;
@@ -1182,9 +1397,7 @@ export function useGeminiLive({
         if (!wsState || wsState.readyState !== WebSocket.OPEN || !isSetupCompleteRef.current)
           return;
 
-        const bytes = new Uint8Array(buffer);
         const dataB64 = bytesToBase64(bytes);
-        audioStreamEndedRef.current = false;
         lastAudioChunkSentAtRef.current = now;
         audioChunkSentCountRef.current += 1;
         if (audioChunkSentCountRef.current % 150 === 0) {
@@ -1204,7 +1417,7 @@ export function useGeminiLive({
         wsState.send(
           JSON.stringify({
             realtimeInput: {
-              mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: dataB64 }],
+              audio: { mimeType: 'audio/pcm;rate=16000', data: dataB64 },
             },
           }),
         );
@@ -1226,7 +1439,8 @@ export function useGeminiLive({
     finalizeCall,
     maybeAutoFinish,
     pushDebugEvent,
-    sendAudioStreamEnd,
+    requestTurnPlan,
+    sendToolResponses,
     syncDebugSnapshot,
   ]);
 
@@ -1243,9 +1457,25 @@ export function useGeminiLive({
     currentAiTurnMetaTextRef.current = '';
 
     const transcript = [...transcriptRef.current];
-    onCallEnd?.(transcript);
+    const userAudioBlob = buildWavBlobFromPcmChunks(
+      recordedUserPcmChunksRef.current,
+      PCM_IN_SAMPLE_RATE,
+    );
+    pushDebugEvent('recording-stopped', {
+      bytes:
+        userAudioBlob?.size ??
+        recordedUserPcmBytesRef.current +
+          (recordedUserPcmChunksRef.current.length > 0 ? 44 : 0),
+      mimeType: userAudioBlob?.type ?? null,
+    });
+    void Promise.resolve(onCallEnd?.({ transcript, userAudioBlob })).catch((error) => {
+      console.error('[GeminiLive] onCallEnd failed:', error);
+    });
 
     transcriptRef.current = [];
+    plannerStateRef.current = null;
+    recordedUserPcmChunksRef.current = [];
+    recordedUserPcmBytesRef.current = 0;
     lastUserAudioActiveAtRef.current = 0;
     lastInputTranscriptionAtRef.current = 0;
     lastOutputTranscriptionAtRef.current = 0;
@@ -1302,10 +1532,7 @@ export function useGeminiLive({
 
     const id = setInterval(() => {
       const now = Date.now();
-      const silenceAfterMs = uiConfigRef.current.silenceNudgeAfterMs;
-      const silenceCooldownMs = uiConfigRef.current.silenceNudgeCooldownMs;
       const silenceHardHangupMs = uiConfigRef.current.silenceHardHangupMs;
-      const silencePhrases = uiConfigRef.current.silenceNudgePhrases;
 
       // Логика списания сессии: если прошла 1 минута, списываем
       if (roundStartRef.current && !deductedSessionRef.current) {
@@ -1322,13 +1549,6 @@ export function useGeminiLive({
         }
       }
 
-      if (
-        lastWorkletMessageAtRef.current > 0 &&
-        now - lastWorkletMessageAtRef.current >= AUDIO_STREAM_END_IDLE_MS
-      ) {
-        sendAudioStreamEnd('worklet-idle');
-      }
-
       // Логика раунда по времени: за 15 секунд до конца просим ИИ подвести итоги,
       // по истечении времени — завершаем интервью.
       if (silenceHardHangupMs && roundStartRef.current) {
@@ -1337,73 +1557,14 @@ export function useGeminiLive({
 
         if (!roundVerdictTriggeredRef.current && remaining <= 15_000 && remaining > 0) {
           roundVerdictTriggeredRef.current = true;
-          sendClientText(uiConfigRef.current.roundEndingPrompt ?? DEFAULT_ROUND_ENDING_PROMPT);
+          const roundEndingPrompt = uiConfigRef.current.roundEndingPrompt;
+          if (roundEndingPrompt) sendClientText(roundEndingPrompt);
         }
 
         if (remaining <= 0 && !hangupScheduledRef.current) {
           finalizeCall('success', 'Время интервью истекло. Эфир завершён.', 1200, false);
           return;
         }
-      }
-
-      if (isPlayingRef.current) {
-        if (aiVolumeCurrentRef.current >= MONOLOGUE_VOLUME_THRESHOLD) {
-          if (aiSpeakingSinceRef.current === 0) aiSpeakingSinceRef.current = now;
-
-          const monologueDuration = now - aiSpeakingSinceRef.current;
-          if (monologueDuration >= MONOLOGUE_DURATION_MS && !monologueTriggeredRef.current) {
-            monologueTriggeredRef.current = true;
-            pushDebugEvent('monologue-nudge', { monologueDuration });
-            sendClientText(uiConfigRef.current.shortAnswerNudge ?? DEFAULT_SHORT_ANSWER_NUDGE);
-          }
-        }
-
-        silenceNudgeCountRef.current = 0;
-      } else if (aiSpeakingSinceRef.current > 0) {
-        aiSpeakingSinceRef.current = 0;
-        lastBotEndRef.current = now;
-        monologueTriggeredRef.current = false;
-      }
-
-      const lastBotEnd = lastBotEndRef.current;
-      const userSpokeAfterBot = lastUserSpeechRef.current > lastBotEnd;
-      const roundStart = roundStartRef.current;
-
-      if (
-        lastBotEnd > 0 &&
-        !userSpokeAfterBot &&
-        now - lastBotEnd >= silenceAfterMs &&
-        now >= silenceCooldownRef.current
-      ) {
-        const phrase =
-          silencePhrases[Math.floor(Math.random() * silencePhrases.length)] ||
-          DEFAULT_SILENCE_NUDGE_PHRASES[0];
-        const template = uiConfigRef.current.silenceNudgeTemplate ?? DEFAULT_SILENCE_NUDGE_TEMPLATE;
-        pushDebugEvent('silence-nudge', {
-          phrase,
-          sinceLastBotEndMs: now - lastBotEnd,
-          sinceLastUserSpeechMs: lastUserSpeechRef.current ? now - lastUserSpeechRef.current : null,
-        });
-        sendClientText(template.replaceAll('{{phrase}}', phrase));
-        silenceCooldownRef.current = now + silenceCooldownMs;
-        silenceNudgeCountRef.current += 1;
-      } else if (
-        !firstAiTurnCompleteRef.current &&
-        roundStart != null &&
-        now - roundStart >= silenceAfterMs &&
-        now >= silenceCooldownRef.current
-      ) {
-        const phrase =
-          silencePhrases[Math.floor(Math.random() * silencePhrases.length)] ||
-          DEFAULT_SILENCE_NUDGE_PHRASES[0];
-        const template = uiConfigRef.current.silenceNudgeTemplate ?? DEFAULT_SILENCE_NUDGE_TEMPLATE;
-        pushDebugEvent('initial-silence-nudge', {
-          phrase,
-          sinceRoundStartMs: now - roundStart,
-        });
-        sendClientText(template.replaceAll('{{phrase}}', phrase));
-        silenceCooldownRef.current = now + silenceCooldownMs;
-        silenceNudgeCountRef.current += 1;
       }
 
       if (now - lastHealthLogAtRef.current >= HEALTH_LOG_INTERVAL_MS) {
@@ -1433,7 +1594,7 @@ export function useGeminiLive({
     }, 1000);
 
     return () => clearInterval(id);
-  }, [status, sendAudioStreamEnd, sendClientText, finalizeCall, pushDebugEvent]);
+  }, [status, sendClientText, finalizeCall, pushDebugEvent]);
 
   useEffect(() => {
     if (status !== 'connecting' && status !== 'ready') return;
@@ -1485,6 +1646,7 @@ export function useGeminiLive({
   }, [agentId]);
 
   return {
+    appendDebugEvent: pushDebugEvent,
     clearError,
     connect,
     disconnect,

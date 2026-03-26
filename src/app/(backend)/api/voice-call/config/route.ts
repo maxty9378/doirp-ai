@@ -5,28 +5,21 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
-import {
-  GFD_STRESS_TRAINING_KEY,
-  GFD_STRESS_TRAINING_KNOWLEDGE,
-  GFD_STRESS_TRAINING_SCENARIO,
-} from '@/config/training/gfdStressScenario';
 import { serverDB } from '@/database/server';
 import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
-import {
-  buildTrainingKnowledgeContext,
-  getTrainingScenarioWithKnowledge,
-  type TrainingScenarioWithKnowledge,
-} from '@/server/services/training';
+import { getTrainingScenarioWithKnowledge } from '@/server/services/training';
 
 const TP_PRICE_AGENT_ID = 'training-tp-price-objection';
+const DEFAULT_TRAINING_AGENT_ID = 'training-gfd-stress';
 const DEFAULT_CONTEXT_WINDOW = 5;
 const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
 const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
-// Длительность раунда по умолчанию: 3 минуты
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 180_000;
-const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слушаете?'];
+const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слышите?'];
 const DEFAULT_LIVE_VOICE = 'Kore';
+const TRAINING_TURN_TOOL_NAME = 'get_training_turn_context';
+
 const LIVE_VOICES = new Set([
   'Zephyr',
   'Kore',
@@ -59,17 +52,6 @@ const LIVE_VOICES = new Set([
   'Vindemiatrix',
   'Sulafat',
 ]);
-const LIVE_BEHAVIOR_RULES = [
-  'Если собеседник закрывает ключевые возражения и фиксирует следующий шаг, заверши разговор сам.',
-  'Финал диалога должен звучать как естественное завершение живой беседы на конференции, без служебных фраз про «кладу трубку».',
-  'Если собеседник переходит на оскорбления или хамство, ответь жестко, предупреди о последствиях и заверши разговор.',
-  'Каждая реплика короткая: 1-2 предложения, только прямая речь персонажа.',
-].join('\n');
-const LIVE_AUDIO_BEHAVIOR_RULES = [
-  'Если речь собеседника оборвалась, часть слов пропала или звук был неразборчив, сначала нейтрально попроси повторить или уточнить последнюю мысль.',
-  'Не утверждай уверенно, что собеседник молчит, пока не переспросишь его хотя бы один раз.',
-  'Если звук временно пропал, реагируй как в реальном разговоре: коротко уточни, слышно ли собеседника, и затем вернись к интервью.',
-].join('\n');
 
 const buildTpPriceVoiceSystem = (preset: {
   goals?: string[];
@@ -82,12 +64,12 @@ const buildTpPriceVoiceSystem = (preset: {
 
   return [
     'Ты — Марина Ивановна, директор магазина «У дома».',
-    'Идет живой разговор с опытным торговым представителем.',
+    'Идёт живой разговор с опытным торговым представителем.',
     'Говори только от лица Марины Ивановны.',
-    'Отвечай коротко (1-2 предложения), по-русски, без рассуждений и метакомментариев.',
-    'Держи жесткий тон и дави по возражению «Дорого», но реагируй на сильные аргументы о доходности, сервисе и маркетинговой поддержке.',
-    'Нельзя сводить переговоры к прямой скидке как единственному выходу.',
-    'После каждой своей реплики добавляй технический тег в конце: [CURRENT_SCORE: X], где X — накопительный счет.',
+    'Отвечай коротко: 1-2 предложения, по-русски, без метакомментариев.',
+    'Держи жёсткий тон и дави по возражению «дорого», но реагируй на сильные аргументы о доходности, сервисе и маркетинговой поддержке.',
+    'Не своди переговоры к скидке как к единственному решению.',
+    'После каждой своей реплики добавляй технический тег в конце: [CURRENT_SCORE: X], где X — накопительный счёт.',
     '',
     `Легенда:\n${scenario}`,
     '',
@@ -135,22 +117,19 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const agentId = searchParams.get('agentId') || 'training-gfd-stress';
+    const agentId = searchParams.get('agentId') || DEFAULT_TRAINING_AGENT_ID;
     const speakerName = searchParams.get('speakerName')?.trim() || null;
     const preset = VOICE_CALL_PRESETS[agentId];
-
-    let trainingScenario: Awaited<ReturnType<typeof getTrainingScenarioWithKnowledge>> = null;
-    try {
-      trainingScenario = await getTrainingScenarioWithKnowledge(agentId);
-    } catch (dbError) {
+    const trainingScenario = await getTrainingScenarioWithKnowledge(agentId).catch((dbError) => {
       console.warn('[voice-call/config] Training scenario from DB failed:', dbError);
-    }
-    // Fallback на сид GFD при недоступности БД (таблицы не созданы и т.п.)
-    if (!trainingScenario && agentId === GFD_STRESS_TRAINING_KEY) {
-      trainingScenario = {
-        scenario: GFD_STRESS_TRAINING_SCENARIO as TrainingScenarioWithKnowledge['scenario'],
-        knowledgeEntries: GFD_STRESS_TRAINING_KNOWLEDGE as unknown as TrainingScenarioWithKnowledge['knowledgeEntries'],
-      };
+      return null;
+    });
+
+    if (agentId.startsWith('training-') && !trainingScenario && !preset) {
+      return NextResponse.json(
+        { error: 'Сценарий тренажёра не найден в базе данных.' },
+        { status: 404 },
+      );
     }
 
     const { GOOGLE_API_KEY } = getLLMConfig();
@@ -164,8 +143,7 @@ export async function GET(request: Request) {
     }
 
     const isTpPrice = agentId === TP_PRICE_AGENT_ID;
-    const sessionUser =
-      (session as any)?.user || {};
+    const sessionUser = (session as any)?.user || {};
     const rawFullName: string | undefined =
       sessionUser.fullName ||
       sessionUser.full_name ||
@@ -173,28 +151,22 @@ export async function GET(request: Request) {
       sessionUser.username ||
       sessionUser.email;
     const userFullName = (rawFullName && String(rawFullName).trim()) || 'Менеджер';
-    const baseSystemInstruction = isTpPrice && preset ? buildTpPriceVoiceSystem(preset) : preset?.systemRole ?? '';
-    const knowledgeContext = trainingScenario
-      ? buildTrainingKnowledgeContext(trainingScenario.knowledgeEntries)
-      : null;
 
-    const baseWithScenario = trainingScenario
-      ? [trainingScenario.scenario.systemPrompt, knowledgeContext].filter(Boolean).join('\n\n')
-      : `${baseSystemInstruction}\n\n${LIVE_BEHAVIOR_RULES}`;
+    const baseSystemInstruction = isTpPrice && preset ? buildTpPriceVoiceSystem(preset) : preset?.systemRole ?? '';
+    const systemInstructionBase = trainingScenario?.scenario.systemPrompt || baseSystemInstruction;
 
     const userContextLines = [
-      'Данные о собеседнике (менеджере):',
+      'Контекст собеседника:',
       `- Полное имя в аккаунте: ${userFullName}.`,
       speakerName
         ? `- В этой сессии на вопросы отвечает сотрудник: ${speakerName}. Обращайся к нему по этому имени.`
-        : '- В диалоге обращайся к собеседнику вежливо на «вы», без упоминания имени из аккаунта, если явно не указано другое имя.',
+        : '- Если отдельное имя не передано, обращайся к собеседнику вежливо на «вы».',
     ];
 
-    const systemInstruction = [
-      baseWithScenario,
-      LIVE_AUDIO_BEHAVIOR_RULES,
-      userContextLines.join('\n'),
-    ].join('\n\n');
+    const systemInstruction = [systemInstructionBase, userContextLines.join('\n')]
+      .filter(Boolean)
+      .join('\n\n');
+
     const requestedVoice = trainingScenario?.scenario.voiceName || DEFAULT_LIVE_VOICE;
     const voiceName = LIVE_VOICES.has(requestedVoice) ? requestedVoice : DEFAULT_LIVE_VOICE;
 
@@ -205,66 +177,64 @@ export async function GET(request: Request) {
       trainingScenario?.scenario.userLabel ||
       (isTpPrice ? 'Вы (Торговый представитель)' : 'Вы');
 
-    /** Публичный WS-прокси (VPS + nginx). Локальный dev без переменной — через него, чтобы не требовать :3011. */
     const DEV_DEFAULT_VOICE_WS = 'wss://apidoirp.ru/voice-call-ws';
     const rawProxyUrl =
       process.env.VOICE_CALL_WS_PROXY_URL?.trim() ||
       (process.env.NODE_ENV === 'development'
         ? process.env.VOICE_CALL_WS_PROXY_DEV?.trim() || DEV_DEFAULT_VOICE_WS
         : null);
-    const geminiWsUrl = rawProxyUrl
-      ? rawProxyUrl.replace(/^http/, 'ws')
-      : null;
+    const geminiWsUrl = rawProxyUrl ? rawProxyUrl.replace(/^http/, 'ws') : null;
 
     const payload: Record<string, unknown> = {
       apiKey,
       ...(geminiWsUrl ? { geminiWsUrl } : {}),
-      systemInstruction,
-      voiceName,
       assistantLabel,
-      userLabel,
-      userName: userFullName,
-      speakerName: speakerName || undefined,
       contextWindow: trainingScenario?.scenario.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+      enableCheckpoints: trainingScenario?.scenario.enableCheckpoints ?? isTpPrice,
+      enableScoring: trainingScenario?.scenario.enableScoring ?? true,
+      enableTurnPlanner: Boolean(trainingScenario),
+      silenceHardHangupMs:
+        trainingScenario?.scenario.silenceHardHangupMs ?? DEFAULT_SILENCE_HARD_HANGUP_MS,
       silenceNudgeAfterMs:
         trainingScenario?.scenario.silenceNudgeAfterMs ?? DEFAULT_SILENCE_NUDGE_AFTER_MS,
       silenceNudgeCooldownMs:
         trainingScenario?.scenario.silenceNudgeCooldownMs ?? DEFAULT_SILENCE_NUDGE_COOLDOWN_MS,
-      sessionDurationMs:
-        trainingScenario?.scenario.sessionDurationMs ??
-        trainingScenario?.scenario.silenceHardHangupMs ??
-        DEFAULT_SILENCE_HARD_HANGUP_MS,
-      silenceHardHangupMs:
-        trainingScenario?.scenario.silenceHardHangupMs ?? DEFAULT_SILENCE_HARD_HANGUP_MS,
       silenceNudgePhrases:
         trainingScenario?.scenario.silenceNudgePhrases?.length
           ? trainingScenario.scenario.silenceNudgePhrases
           : DEFAULT_SILENCE_NUDGE_PHRASES,
-      enableCheckpoints: trainingScenario?.scenario.enableCheckpoints ?? isTpPrice,
-      // Для тренажёров по умолчанию включаем скoring, даже если в сид‑данных не выставлен.
-      enableScoring: trainingScenario?.scenario.enableScoring ?? true,
+      speakerName: speakerName || undefined,
+      systemInstruction,
+      turnPlannerToolName: trainingScenario ? TRAINING_TURN_TOOL_NAME : null,
+      userLabel,
+      userName: userFullName,
+      voiceName,
+      sessionDurationMs:
+        trainingScenario?.scenario.sessionDurationMs ??
+        trainingScenario?.scenario.silenceHardHangupMs ??
+        DEFAULT_SILENCE_HARD_HANGUP_MS,
     };
 
     if (trainingScenario) {
-      payload.title = trainingScenario.scenario.title ?? null;
-      payload.legend = trainingScenario.scenario.legend ?? null;
-      payload.showLegend = trainingScenario.scenario.showLegend ?? true;
-      payload.goals = trainingScenario.scenario.goals ?? [];
+      payload.autoSuccessPrompt = trainingScenario.scenario.autoSuccessPrompt ?? null;
       payload.checkpointIds = trainingScenario.scenario.checkpointIds ?? [];
+      payload.goals = trainingScenario.scenario.goals ?? [];
+      payload.introDialogButtonLabel = trainingScenario.scenario.introDialogButtonLabel ?? null;
+      payload.introDialogDescription = trainingScenario.scenario.introDialogDescription ?? null;
+      payload.introDialogHint = trainingScenario.scenario.introDialogHint ?? null;
+      payload.introDialogPlaceholder = trainingScenario.scenario.introDialogPlaceholder ?? null;
+      payload.introDialogTitle = trainingScenario.scenario.introDialogTitle ?? null;
+      payload.legend = trainingScenario.scenario.legend ?? null;
+      payload.openingInstruction = trainingScenario.scenario.openingInstruction ?? null;
+      payload.quietSpeakerNudge = trainingScenario.scenario.quietSpeakerNudge ?? null;
+      payload.roundEndingPrompt = trainingScenario.scenario.roundEndingPrompt ?? null;
       payload.scoreDisplayLabel = trainingScenario.scenario.scoreDisplayLabel ?? null;
       payload.scoreLevelLabels = trainingScenario.scenario.scoreLevelLabels ?? null;
-      payload.openingInstruction = trainingScenario.scenario.openingInstruction ?? null;
-      payload.showIntroDialog = trainingScenario.scenario.showIntroDialog ?? true;
-      payload.introDialogTitle = trainingScenario.scenario.introDialogTitle ?? null;
-      payload.introDialogDescription = trainingScenario.scenario.introDialogDescription ?? null;
-      payload.introDialogPlaceholder = trainingScenario.scenario.introDialogPlaceholder ?? null;
-      payload.introDialogHint = trainingScenario.scenario.introDialogHint ?? null;
-      payload.introDialogButtonLabel = trainingScenario.scenario.introDialogButtonLabel ?? null;
-      payload.roundEndingPrompt = trainingScenario.scenario.roundEndingPrompt ?? null;
-      payload.silenceNudgeTemplate = trainingScenario.scenario.silenceNudgeTemplate ?? null;
       payload.shortAnswerNudge = trainingScenario.scenario.shortAnswerNudge ?? null;
-      payload.quietSpeakerNudge = trainingScenario.scenario.quietSpeakerNudge ?? null;
-      payload.autoSuccessPrompt = trainingScenario.scenario.autoSuccessPrompt ?? null;
+      payload.showIntroDialog = trainingScenario.scenario.showIntroDialog ?? true;
+      payload.showLegend = trainingScenario.scenario.showLegend ?? true;
+      payload.silenceNudgeTemplate = trainingScenario.scenario.silenceNudgeTemplate ?? null;
+      payload.title = trainingScenario.scenario.title ?? null;
     }
 
     return NextResponse.json(payload);

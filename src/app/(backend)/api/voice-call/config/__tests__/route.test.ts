@@ -1,8 +1,5 @@
-/**
- * Tests for GET /api/voice-call/config — scoreDisplayLabel and GFD fallback.
- * Run: bunx vitest run --silent='passed-only' 'src/app/(backend)/api/voice-call/config/__tests__/route.test.ts'
- */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
@@ -24,7 +21,6 @@ vi.mock('next/headers', () => ({
 const mockGetTrainingScenarioWithKnowledge = vi.fn();
 vi.mock('@/server/services/training', () => ({
   getTrainingScenarioWithKnowledge: (key: string) => mockGetTrainingScenarioWithKnowledge(key),
-  buildTrainingKnowledgeContext: vi.fn().mockReturnValue(null),
 }));
 
 const mockGetLLMConfig = vi.fn();
@@ -75,14 +71,14 @@ describe('GET /api/voice-call/config', () => {
     const res = await GET(req);
 
     expect(res.status).toBe(401);
-  }, 10000);
+  });
 
   it('returns 503 when GOOGLE_API_KEY is not configured', async () => {
     mockGetLLMConfig.mockReturnValueOnce({});
     mockApiKeyManagerPick.mockReturnValueOnce(null);
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       scenario: {
-        systemPrompt: 'Test',
+        systemPrompt: 'System prompt from DB',
         scoreDisplayLabel: SCORE_LABEL_GFD,
         voiceName: 'Kore',
         contextWindow: 5,
@@ -97,20 +93,20 @@ describe('GET /api/voice-call/config', () => {
     expect(res.status).toBe(503);
   });
 
-  it('returns scoreDisplayLabel "ЭФИРНЫЙ ПРЕССИНГ" when scenario from DB has it', async () => {
+  it('returns scoreDisplayLabel from DB scenario', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       scenario: {
-        systemPrompt: 'System prompt from DB',
-        scoreDisplayLabel: SCORE_LABEL_GFD,
-        scoreLevelLabels: { low: 'Нужно улучшить', mid: 'Неплохо', high: 'Отлично' },
-        voiceName: 'Kore',
+        assistantLabel: 'Журналистка-расследователь',
         contextWindow: 5,
         goals: [],
-        title: 'GFD: Стресс‑интервью',
         legend: 'Legend',
+        scoreDisplayLabel: SCORE_LABEL_GFD,
+        scoreLevelLabels: { high: 'Отлично', low: 'Нужно улучшить', mid: 'Неплохо' },
         showLegend: true,
-        assistantLabel: 'Журналистка-расследователь',
+        systemPrompt: 'System prompt from DB',
+        title: 'GFD: Стресс-интервью',
         userLabel: 'Вы (Маркетолог GFD)',
+        voiceName: 'Kore',
       },
       knowledgeEntries: [],
     });
@@ -123,14 +119,12 @@ describe('GET /api/voice-call/config', () => {
     expect(body.scoreDisplayLabel).toBe(SCORE_LABEL_GFD);
   });
 
-  it('returns scoreDisplayLabel "ЭФИРНЫЙ ПРЕССИНГ" from GFD fallback when DB returns null', async () => {
+  it('returns 404 when training scenario is missing in DB', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce(null);
 
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
     const res = await GET(req);
 
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { scoreDisplayLabel?: string | null };
-    expect(body.scoreDisplayLabel).toBe(SCORE_LABEL_GFD);
+    expect(res.status).toBe(404);
   });
 });

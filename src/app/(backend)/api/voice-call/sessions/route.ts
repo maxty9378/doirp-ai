@@ -2,6 +2,8 @@ import {
   type VoiceCallSessionAnalysisResult,
   type VoiceCallSessionDebugLog,
   voiceCallSessions,
+  type VoiceCallSttStatus,
+  type VoiceCallTranscriptSource,
 } from '@lobechat/database/schemas';
 import { desc, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
@@ -79,6 +81,9 @@ export async function GET(req: Request) {
         hangUpReason: voiceCallSessions.hangUpReason,
         durationSeconds: voiceCallSessions.durationSeconds,
         speakerName: voiceCallSessions.speakerName,
+        sttError: voiceCallSessions.sttError,
+        sttStatus: voiceCallSessions.sttStatus,
+        transcriptSource: voiceCallSessions.transcriptSource,
         createdAt: voiceCallSessions.createdAt,
       })
       .from(voiceCallSessions)
@@ -98,6 +103,9 @@ export async function GET(req: Request) {
       hangUpReason: r.hangUpReason ?? undefined,
       durationSeconds: r.durationSeconds ?? undefined,
       speakerName: r.speakerName ?? undefined,
+      sttError: r.sttError ?? undefined,
+      sttStatus: r.sttStatus ?? undefined,
+      transcriptSource: r.transcriptSource ?? undefined,
       createdAt: r.createdAt,
     }));
 
@@ -127,6 +135,9 @@ export async function POST(req: Request) {
       durationSeconds?: number;
       score?: number;
       speakerName?: string;
+      sttError?: string;
+      sttStatus?: VoiceCallSttStatus;
+      transcriptSource?: VoiceCallTranscriptSource;
       debugLog?: VoiceCallSessionDebugLog | null;
     };
 
@@ -167,6 +178,9 @@ export async function POST(req: Request) {
         debugLog,
         score: typeof body.score === 'number' ? body.score : null,
         speakerName: typeof body.speakerName === 'string' ? body.speakerName : null,
+        sttError: typeof body.sttError === 'string' ? body.sttError : null,
+        sttStatus: typeof body.sttStatus === 'string' ? body.sttStatus : null,
+        transcriptSource: typeof body.transcriptSource === 'string' ? body.transcriptSource : null,
         hangUpReason: typeof body.hangUpReason === 'string' ? body.hangUpReason : null,
         durationSeconds: typeof body.durationSeconds === 'number' ? body.durationSeconds : null,
       })

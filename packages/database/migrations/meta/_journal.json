@@ -742,6 +742,20 @@
       "when": 1774503677073,
       "tag": "0105_empty_lizard",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1774760000000,
+      "tag": "0106_voice_call_session_debug_log",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1774763600000,
+      "tag": "0107_voice_call_stt_metadata",
+      "breakpoints": true
     }
   ],
   "version": "6"

@@ -197,12 +197,10 @@ export function useGeminiSocket(options: UseGeminiSocketOptions): GeminiSocketAp
 
       const msg = {
         realtimeInput: {
-          mediaChunks: [
-            {
-              mimeType: 'audio/pcm;rate=16000',
-              data: base64PCM,
-            },
-          ],
+          audio: {
+            mimeType: 'audio/pcm;rate=16000',
+            data: base64PCM,
+          },
         },
       };
 
@@ -264,4 +262,3 @@ export function useGeminiSocket(options: UseGeminiSocketOptions): GeminiSocketAp
     isConnected,
   };
 }
-

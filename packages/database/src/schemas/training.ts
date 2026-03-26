@@ -123,6 +123,9 @@ export interface VoiceCallSessionDebugLog {
   status: string;
 }
 
+export type VoiceCallTranscriptSource = 'gemini-live-fallback' | 'google-stt';
+export type VoiceCallSttStatus = 'failed' | 'skipped' | 'succeeded';
+
 export const voiceCallSessions = pgTable(
   'voice_call_sessions',
   {
@@ -138,6 +141,9 @@ export const voiceCallSessions = pgTable(
     transcript: jsonb('transcript').$type<Array<{ role: 'ai' | 'user'; text: string }>>().notNull(),
     analysisResult: jsonb('analysis_result').$type<VoiceCallSessionAnalysisResult>(),
     debugLog: jsonb('debug_log').$type<VoiceCallSessionDebugLog>(),
+    transcriptSource: text('transcript_source').$type<VoiceCallTranscriptSource>(),
+    sttStatus: text('stt_status').$type<VoiceCallSttStatus>(),
+    sttError: text('stt_error'),
     score: integer('score'),
     hangUpReason: text('hang_up_reason'),
     durationSeconds: integer('duration_seconds'),

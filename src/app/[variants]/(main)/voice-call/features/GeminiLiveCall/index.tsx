@@ -1,5 +1,9 @@
 'use client';
 
+import type {
+  VoiceCallSttStatus,
+  VoiceCallTranscriptSource,
+} from '@lobechat/database/schemas';
 import { Avatar, Button, Icon, Modal, Text } from '@lobehub/ui';
 import { message } from 'antd';
 import { createStaticStyles, cssVar } from 'antd-style';
@@ -20,7 +24,11 @@ import { getVoiceCallDebugSnapshot, type VoiceCallDebugSnapshot } from '@/utils/
 import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 import { LOCAL_SESSION_PREFIX, saveLocalVoiceCallSession } from '@/utils/voiceCallLocalSessions';
 
-import { type TranscriptEntry, useGeminiLive } from './useGeminiLive';
+import {
+  type GeminiLiveCallEndPayload as GeminiLiveHookEndPayload,
+  type TranscriptEntry,
+  useGeminiLive,
+} from './useGeminiLive';
 
 const styles = createStaticStyles(({ css }) => ({
   root: css`
@@ -766,11 +774,73 @@ export interface VoiceCallEndPayload {
   error?: string;
   sessionId?: string;
   speakerName?: string;
+  sttError?: string;
+  sttStatus?: VoiceCallSttStatus;
   transcript: TranscriptEntry[];
+  transcriptSource?: VoiceCallTranscriptSource;
 }
 
 type AnalyzeTranscriptResponse = NonNullable<VoiceCallEndPayload['analysisResult']> & {
   normalizedTranscript?: TranscriptEntry[];
+};
+
+interface PostCallSttSegment {
+  confidence?: number;
+  endTimeMs?: number;
+  text: string;
+}
+
+interface PostCallTranscribeResponse {
+  segments?: PostCallSttSegment[];
+  transcriptSource?: VoiceCallTranscriptSource;
+}
+
+const normalizeSttSegments = (segments: PostCallSttSegment[] | undefined) =>
+  (Array.isArray(segments) ? segments : [])
+    .map((segment) => ({
+      ...segment,
+      text: typeof segment?.text === 'string' ? segment.text.trim() : '',
+    }))
+    .filter((segment) => segment.text.length > 0);
+
+const mergeTranscriptWithUserSegments = (
+  transcript: TranscriptEntry[],
+  segments: PostCallSttSegment[],
+) => {
+  const cleanTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
+  const normalizedSegments = normalizeSttSegments(segments);
+
+  if (cleanTranscript.length === 0 || normalizedSegments.length === 0) {
+    return cleanTranscript;
+  }
+
+  const userTexts = normalizedSegments.map((segment) => segment.text);
+  const merged: TranscriptEntry[] = [];
+  let userIndex = 0;
+
+  for (const entry of cleanTranscript) {
+    if (entry.role !== 'user') {
+      merged.push(entry);
+      continue;
+    }
+
+    const replacementText = userTexts[userIndex];
+    userIndex += 1;
+
+    if (replacementText) {
+      merged.push({ ...entry, text: replacementText });
+      continue;
+    }
+
+    merged.push(entry);
+  }
+
+  while (userIndex < userTexts.length) {
+    merged.push({ role: 'user', text: userTexts[userIndex] });
+    userIndex += 1;
+  }
+
+  return sanitizeVoiceCallTranscript(merged, { mode: 'store' });
 };
 
 export interface GeminiLiveCallProps {
@@ -788,7 +858,7 @@ const CONNECTION_ERROR_DESC =
   'Не удалось установить соединение с голосовым сервисом. Проверьте подключение к интернету, отключите или настройте VPN, антивирус и прокси. Убедитесь, что сервис Google доступен в вашем регионе.';
 
 const GeminiLiveCall = memo(
-  ({ agentId, autoConnect, embedded, layoutMode = 'desktop', onEnd, onExit }: GeminiLiveCallProps) => {
+  ({ agentId, autoConnect: _autoConnect, embedded, layoutMode = 'desktop', onEnd, onExit }: GeminiLiveCallProps) => {
     const navigate = useNavigate();
     const isMobileLayout = layoutMode === 'mobile';
 
@@ -810,13 +880,19 @@ const GeminiLiveCall = memo(
       null,
     );
     const [analysisText, setAnalysisText] = useState('Анализ интервью');
+    const appendDebugEventRef = useRef<
+      ((type: string, data?: Record<string, unknown>) => void) | null
+    >(null);
     const manualFailRef = useRef(false);
     const hangUpReasonRef = useRef<string | null>(null);
 
     const analyzeTranscript = useCallback(
-      async (transcript: TranscriptEntry[]): Promise<VoiceCallEndPayload> => {
+      async ({ transcript, userAudioBlob }: GeminiLiveHookEndPayload): Promise<VoiceCallEndPayload> => {
         let analysisResult: VoiceCallEndPayload['analysisResult'] | undefined;
         let analyzeError: string | undefined;
+        let sttError: string | undefined;
+        let transcriptSource: VoiceCallTranscriptSource = 'gemini-live-fallback';
+        let sttStatus: VoiceCallSttStatus = userAudioBlob ? 'failed' : 'skipped';
         const debugLog = getVoiceCallDebugSnapshot();
         const durationSec = callStartAtRef.current
           ? Math.floor((Date.now() - callStartAtRef.current) / 1000)
@@ -824,7 +900,76 @@ const GeminiLiveCall = memo(
 
         const cleanedTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
         let transcriptToStore = cleanedTranscript;
-        const transcriptForApi = sanitizeVoiceCallTranscript(transcript, { mode: 'analysis' });
+
+        if (userAudioBlob && userAudioBlob.size > 44) {
+          appendDebugEventRef.current?.('stt-uploaded', {
+            bytes: userAudioBlob.size,
+            mimeType: userAudioBlob.type || 'audio/wav',
+          });
+
+          try {
+            const formData = new FormData();
+            formData.append(
+              'audio',
+              new File([userAudioBlob], 'voice-call.wav', {
+                type: userAudioBlob.type || 'audio/wav',
+              }),
+            );
+
+            const sttRes = await fetch('/api/voice-call/transcribe', {
+              body: formData,
+              credentials: 'include',
+              method: 'POST',
+            });
+
+            if (!sttRes.ok) {
+              const errText = await sttRes.text();
+              let errMsg = 'Ошибка post-call транскрибации';
+              try {
+                const errJson = JSON.parse(errText);
+                if (errJson?.error) errMsg = errJson.error;
+              } catch {
+                if (errText) errMsg = errText.slice(0, 200);
+              }
+
+              sttError = errMsg;
+              sttStatus = 'failed';
+              appendDebugEventRef.current?.('stt-failed', { error: errMsg });
+            } else {
+              const sttPayload = (await sttRes.json()) as PostCallTranscribeResponse;
+              const sttSegments = normalizeSttSegments(sttPayload.segments);
+
+              if (sttSegments.length > 0) {
+                transcriptToStore = mergeTranscriptWithUserSegments(cleanedTranscript, sttSegments);
+                transcriptSource = sttPayload.transcriptSource ?? 'google-stt';
+                sttStatus = 'succeeded';
+                appendDebugEventRef.current?.('stt-succeeded', {
+                  segments: sttSegments.length,
+                  transcriptSource,
+                });
+              } else {
+                sttError = 'Google Speech-to-Text вернул пустой результат.';
+                sttStatus = 'failed';
+                appendDebugEventRef.current?.('stt-failed', { error: sttError });
+              }
+            }
+          } catch (error) {
+            sttError =
+              error instanceof Error ? error.message : 'Ошибка post-call транскрибации';
+            sttStatus = 'failed';
+            appendDebugEventRef.current?.('stt-failed', { error: sttError });
+          }
+        } else if (userAudioBlob) {
+          sttError = 'Не удалось получить валидную запись микрофона для post-call транскрибации.';
+          sttStatus = 'failed';
+          appendDebugEventRef.current?.('stt-failed', { error: sttError });
+        } else {
+          appendDebugEventRef.current?.('stt-skipped', { reason: 'missing-user-audio' });
+        }
+
+        const transcriptForApi = sanitizeVoiceCallTranscript(transcriptToStore, {
+          mode: 'analysis',
+        });
         if (transcriptForApi.length === 0) {
           analyzeError =
             'Нет распознанного текста для анализа. Убедитесь, что микрофон включён и речь попала в транскрипт.';
@@ -890,6 +1035,9 @@ const GeminiLiveCall = memo(
               durationSeconds: durationSec,
               speakerName,
               score: analysisResult?.overallScore ?? null,
+              sttError,
+              sttStatus,
+              transcriptSource,
             }),
             credentials: 'include',
           });
@@ -915,12 +1063,22 @@ const GeminiLiveCall = memo(
             hangUpReason: hangUpReasonRef.current ?? undefined,
             durationSeconds: durationSec,
             speakerName,
+            sttError,
+            sttStatus,
+            transcriptSource,
             createdAt: new Date().toISOString(),
             localOnly: true,
             saveError,
           });
           sessionId = localId;
           message.warning('Сессия сохранена локально. Попробуем синхронизировать позже.');
+        }
+
+        if (sttStatus !== 'succeeded' && sttError) {
+          appendDebugEventRef.current?.('stt-fallback', { error: sttError });
+          message.warning(
+            'Не удалось получить улучшенную post-call транскрибацию. Сохранена резервная версия интервью.',
+          );
         }
 
         if (analyzeError) {
@@ -930,9 +1088,21 @@ const GeminiLiveCall = memo(
             sessionId,
             speakerName,
             debugLog,
+            sttError,
+            sttStatus,
+            transcriptSource,
           };
         }
-        return { transcript: transcriptToStore, analysisResult, sessionId, speakerName, debugLog };
+        return {
+          transcript: transcriptToStore,
+          analysisResult,
+          sessionId,
+          speakerName,
+          debugLog,
+          sttError,
+          sttStatus,
+          transcriptSource,
+        };
       },
       [agentId, speakerName],
     );
@@ -962,6 +1132,8 @@ const GeminiLiveCall = memo(
             hangUpReason: hangUpReasonRef.current ?? null,
             score: null,
             analysisResult: null,
+            sttStatus: 'skipped',
+            transcriptSource: 'gemini-live-fallback',
           }),
           credentials: 'include',
         });
@@ -986,6 +1158,8 @@ const GeminiLiveCall = memo(
           hangUpReason: hangUpReasonRef.current ?? undefined,
           durationSeconds: durationSec,
           speakerName,
+          sttStatus: 'skipped',
+          transcriptSource: 'gemini-live-fallback',
           createdAt: new Date().toISOString(),
           localOnly: true,
           saveError,
@@ -1006,7 +1180,7 @@ const GeminiLiveCall = memo(
     };
 
     const handleCallEnd = useCallback(
-      async (transcript: TranscriptEntry[]) => {
+      async ({ transcript, userAudioBlob }: GeminiLiveHookEndPayload) => {
         setAllowAutoConnect(false);
 
         if (transcript.length === 0) {
@@ -1040,7 +1214,7 @@ const GeminiLiveCall = memo(
         if (manualFailRef.current) {
           setIsBackgroundAnalyzing(true);
           try {
-            const payload = await analyzeTranscript(transcript);
+            const payload = await analyzeTranscript({ transcript, userAudioBlob });
             setPendingManualPayload(payload);
           } catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'Ошибка анализа';
@@ -1057,7 +1231,7 @@ const GeminiLiveCall = memo(
 
         setIsAnalyzing(true);
         try {
-          const payload = await analyzeTranscript(transcript);
+          const payload = await analyzeTranscript({ transcript, userAudioBlob });
           if (onEnd) onEnd(payload);
           else navigate(isMobileLayout ? '/training' : '/');
         } catch (e) {
@@ -1072,6 +1246,7 @@ const GeminiLiveCall = memo(
     );
 
     const {
+      appendDebugEvent,
       checkpoints,
       clearError,
       connect,
@@ -1093,6 +1268,13 @@ const GeminiLiveCall = memo(
       voiceName: 'Kore',
       speakerName,
     });
+
+    useEffect(() => {
+      appendDebugEventRef.current = appendDebugEvent;
+      return () => {
+        appendDebugEventRef.current = null;
+      };
+    }, [appendDebugEvent]);
 
     useEffect(() => {
       hangUpReasonRef.current = hangUpReason ?? null;
