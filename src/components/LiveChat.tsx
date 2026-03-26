@@ -10,6 +10,7 @@ export interface LiveChatProps {
   fullHeight?: boolean;
   /** When embedded inside broadcast bar — no border/radius/header, fills container */
   embedded?: boolean;
+  transcript?: Array<{ role: 'ai' | 'user'; text: string }>;
 }
 
 interface ChatMessage {
@@ -18,6 +19,13 @@ interface ChatMessage {
   text: string;
   type: 'neutral' | 'positive' | 'negative';
 }
+
+interface PendingReaction {
+  dueAt: number;
+  message: ChatMessage;
+}
+
+type ReactionPriority = 'high' | 'low' | 'medium';
 
 const MAX_MESSAGES = 300;
 
@@ -216,12 +224,247 @@ const AUTHOR_COLORS = [
   '#f87171', '#2dd4bf', '#c084fc', '#facc15', '#22d3ee',
 ];
 
+const TOPIC_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
+  { label: 'кофеин', pattern: /кофеин|энергетик/iu },
+  { label: 'сахар', pattern: /сахар|подсласт|аспартам|zero/iu },
+  { label: 'таурин', pattern: /таурин/iu },
+  { label: 'экологию', pattern: /пластик|упаковк|эколог/iu },
+  { label: 'исследования', pattern: /исслед|данн|статист|доказ|факт/iu },
+  { label: 'репутацию бренда', pattern: /бренд|репутац|компани/iu },
+];
+
+const AI_TOPIC_REACTIONS = [
+  'Ого, опять пошли вопросы про {{topic}}.',
+  'Жестко давит на тему {{topic}}.',
+  'Чат зафиксировал новый заход на {{topic}}.',
+  'Это уже прям лобовая атака по теме «{{topic}}».',
+];
+
+const AI_QUESTION_REACTIONS = [
+  'Неприятный вопрос. Смотрим, что ответит.',
+  'Вот это подколка. Сейчас будет жарко.',
+  'Журналистка не отпускает, вопрос прям в лоб.',
+  'Хорошо поджала. Здесь легко поплыть.',
+];
+
+const USER_FACT_REACTIONS = [
+  'О, пошли факты, уже лучше.',
+  'Нормально, наконец ответ по существу.',
+  'Вот это уже похоже на подготовленный ответ.',
+  'Так, аргументация появилась, плюс.',
+];
+
+const USER_APOLOGY_REACTIONS = [
+  'Не-не, только не оправдания.',
+  'Вот тут зря пошёл в защиту.',
+  'Плохой ход, звучит как оправдание.',
+  'Ой, вот это уже скользкая дорожка.',
+];
+
+const USER_TOPIC_REACTIONS = [
+  'Неплохо раскрыл тему {{topic}}.',
+  'По {{topic}} ответил заметно увереннее.',
+  'Вот это уже ближе к нормальной позиции по {{topic}}.',
+  'Сейчас хотя бы есть за что зацепиться в ответе про {{topic}}.',
+];
+
+const USER_SHORT_REACTIONS = [
+  'Коротко. Хотелось бы конкретнее.',
+  'Ответ лаконичный, но пока без вау-эффекта.',
+  'Слишком коротко, можно было дожать.',
+  'Ну хоть без воды, уже что-то.',
+];
+
+const META_REACTIONS = [
+  'Народ в чате явно напрягся.',
+  'Темп хороший, беседа не провисает.',
+  'Это интервью всё жестче с каждой минутой.',
+  'Сценарий развивается бодро.',
+];
+
+const TRANSCRIPT_STOP_WORDS = new Set([
+  'это', 'как', 'что', 'или', 'для', 'про', 'чтобы', 'если', 'только', 'очень',
+  'просто', 'когда', 'тогда', 'потому', 'который', 'которая', 'которые', 'есть',
+  'его', 'ее', 'ещё', 'уже', 'вам', 'вас', 'они', 'она', 'оно', 'мы', 'вы',
+  'так', 'тут', 'там', 'под', 'над', 'при', 'без', 'где', 'чем', 'мне',
+]);
+
 function getAuthorColor(name: string): string {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   }
   return AUTHOR_COLORS[Math.abs(hash) % AUTHOR_COLORS.length];
+}
+
+function hashString(input: string): number {
+  let hash = 0;
+  for (let i = 0; i < input.length; i++) {
+    hash = (hash << 5) - hash + input.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function pickDeterministic<T>(items: T[], seed: number): T {
+  return items[seed % items.length];
+}
+
+function detectTopic(text: string): string | null {
+  for (const topic of TOPIC_PATTERNS) {
+    if (topic.pattern.test(text)) return topic.label;
+  }
+  return null;
+}
+
+function getFallbackTopic(text: string): string | null {
+  const tokens = text
+    .toLowerCase()
+    .replaceAll(/[^\p{L}\p{N}\s-]+/gu, ' ')
+    .split(/\s+/)
+    .filter((token) => token.length >= 5 && !TRANSCRIPT_STOP_WORDS.has(token));
+
+  return tokens[0] ?? null;
+}
+
+function renderTemplate(template: string, topic: string | null) {
+  return template.replaceAll('{{topic}}', topic || 'тему разговора');
+}
+
+function randomBetween(min: number, max: number) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function createRandomAudienceMessage(
+  type: ChatMessage['type'],
+  pool: string[],
+  idPrefix: string,
+): ChatMessage {
+  const author = AUTHORS[Math.floor(Math.random() * AUTHORS.length)];
+  const text = pool[Math.floor(Math.random() * pool.length)];
+
+  return {
+    id: `${idPrefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    author,
+    text,
+    type,
+  };
+}
+
+function buildAmbientAudienceMessage(
+  score: number,
+  transcript?: Array<{ role: 'ai' | 'user'; text: string }>,
+): ChatMessage {
+  const lastEntry = transcript?.at(-1);
+
+  if (lastEntry?.role === 'ai' && lastEntry.text.includes('?')) {
+    return createRandomAudienceMessage('neutral', PHRASES_QUESTION, 'ambient-question');
+  }
+
+  if (score >= 8) {
+    return createRandomAudienceMessage(
+      Math.random() > 0.2 ? 'positive' : 'neutral',
+      Math.random() > 0.35 ? PHRASES_POSITIVE : PHRASES_NEUTRAL,
+      'ambient-positive',
+    );
+  }
+
+  if (score <= -8) {
+    return createRandomAudienceMessage(
+      Math.random() > 0.2 ? 'negative' : 'neutral',
+      Math.random() > 0.35 ? PHRASES_NEGATIVE : PHRASES_MEME,
+      'ambient-negative',
+    );
+  }
+
+  return createRandomAudienceMessage(
+    'neutral',
+    Math.random() > 0.6 ? PHRASES_MEME : PHRASES_NEUTRAL,
+    'ambient-neutral',
+  );
+}
+
+function shouldScheduleReaction(priority: ReactionPriority) {
+  const roll = Math.random();
+
+  if (priority === 'high') return roll < 0.82;
+  if (priority === 'medium') return roll < 0.46;
+  return roll < 0.18;
+}
+
+function getReactionDelay(priority: ReactionPriority) {
+  if (priority === 'high') return randomBetween(900, 2200);
+  if (priority === 'medium') return randomBetween(1600, 3600);
+  return randomBetween(2600, 5400);
+}
+
+function getReactionSpacing(priority: ReactionPriority) {
+  if (priority === 'high') return randomBetween(900, 1600);
+  if (priority === 'medium') return randomBetween(1300, 2400);
+  return randomBetween(1800, 3200);
+}
+
+function buildReactionPlanFromTranscript(entry: { role: 'ai' | 'user'; text: string }, index: number, score: number): { message: ChatMessage; priority: ReactionPriority } | null {
+  const text = entry.text.trim();
+  if (!text) return null;
+
+  const seed = hashString(`${entry.role}:${text}:${index}`);
+  const author = pickDeterministic(AUTHORS, seed);
+  const topic = detectTopic(text) || getFallbackTopic(text);
+
+  if (entry.role === 'ai') {
+    const isQuestion = text.includes('?');
+    const isAggressive = /вред|обман|опасн|трав|стыд|провал|лож|оправд/iu.test(text);
+    const pool = isQuestion
+      ? (topic ? AI_TOPIC_REACTIONS : AI_QUESTION_REACTIONS)
+      : topic
+        ? AI_TOPIC_REACTIONS
+        : META_REACTIONS;
+
+    return {
+      message: {
+        id: `transcript-${index}-${seed}`,
+        author,
+        text: renderTemplate(pickDeterministic(pool, seed), topic),
+        type: isAggressive ? 'negative' : 'neutral',
+      },
+      priority: isAggressive || isQuestion ? 'high' : topic ? 'medium' : 'low',
+    };
+  }
+
+  const isApology = /простит|извин|жаль|виноват/iu.test(text);
+  const hasFacts = /исслед|данн|факт|доказ|норм|состав|процент|сертифик|регулятор/iu.test(text);
+  const isShort = text.length < 48;
+
+  let pool = META_REACTIONS;
+  let type: ChatMessage['type'] = 'neutral';
+
+  if (isApology) {
+    pool = USER_APOLOGY_REACTIONS;
+    type = 'negative';
+  } else if (hasFacts) {
+    pool = USER_FACT_REACTIONS;
+    type = 'positive';
+  } else if (topic) {
+    pool = USER_TOPIC_REACTIONS;
+    type = score >= 0 ? 'positive' : 'neutral';
+  } else if (isShort) {
+    pool = USER_SHORT_REACTIONS;
+    type = score > 5 ? 'positive' : 'neutral';
+  } else {
+    pool = score < -5 ? USER_SHORT_REACTIONS : META_REACTIONS;
+    type = score > 5 ? 'positive' : 'neutral';
+  }
+
+  return {
+    message: {
+      id: `transcript-${index}-${seed}`,
+      author,
+      text: renderTemplate(pickDeterministic(pool, seed), topic),
+      type,
+    },
+    priority: isApology || hasFacts ? 'high' : topic ? 'medium' : isShort ? 'low' : 'medium',
+  };
 }
 
 const useStyles = createStyles(({ css }) => ({
@@ -354,12 +597,17 @@ export function LiveChat({
   mode = 'default',
   fullHeight = false,
   embedded = false,
+  transcript,
 }: LiveChatProps) {
   const { styles, cx } = useStyles();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [canShowMessages, setCanShowMessages] = useState(!showMessagesAfterTs);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const viewersRef = useRef(Math.floor(Math.random() * 1000 + 500));
+  const pendingReactionsRef = useRef<PendingReaction[]>([]);
+  const processedTranscriptLengthRef = useRef(0);
+  const lastPublishedAtRef = useRef(0);
+  const ambientCooldownUntilRef = useRef(0);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -378,6 +626,60 @@ export function LiveChat({
 
   useEffect(() => {
     if (!canShowMessages) return;
+
+    if (mode === 'default') {
+      if (!transcript || transcript.length === 0) {
+        pendingReactionsRef.current = [];
+        processedTranscriptLengthRef.current = 0;
+        lastPublishedAtRef.current = 0;
+        ambientCooldownUntilRef.current = 0;
+        setMessages([]);
+        return;
+      }
+
+      if (transcript.length < processedTranscriptLengthRef.current) {
+        pendingReactionsRef.current = [];
+        processedTranscriptLengthRef.current = 0;
+        lastPublishedAtRef.current = 0;
+        ambientCooldownUntilRef.current = 0;
+        setMessages([]);
+      }
+
+      const nextEntries = transcript.slice(processedTranscriptLengthRef.current);
+      if (nextEntries.length === 0) return;
+
+      const now = Date.now();
+      let nextAvailableAt = Math.max(
+        pendingReactionsRef.current.at(-1)?.dueAt ?? 0,
+        lastPublishedAtRef.current,
+      );
+
+      for (const [offset, entry] of nextEntries.entries()) {
+        const index = processedTranscriptLengthRef.current + offset;
+        const plan = buildReactionPlanFromTranscript(entry, index, score);
+        if (!plan || !shouldScheduleReaction(plan.priority)) continue;
+
+        const dueAt = Math.max(
+          now + getReactionDelay(plan.priority),
+          nextAvailableAt + getReactionSpacing(plan.priority),
+        );
+
+        pendingReactionsRef.current.push({
+          dueAt,
+          message: plan.message,
+        });
+
+        nextAvailableAt = dueAt;
+      }
+
+      pendingReactionsRef.current = pendingReactionsRef.current
+        .sort((a, b) => a.dueAt - b.dueAt)
+        .slice(-MAX_MESSAGES);
+
+      processedTranscriptLengthRef.current = transcript.length;
+      return;
+    }
+
     const makeEscapeMessage = (): ChatMessage => {
       const text = PHRASES_ESCAPE_POOL[Math.floor(Math.random() * PHRASES_ESCAPE_POOL.length)];
       const author = AUTHORS[Math.floor(Math.random() * AUTHORS.length)];
@@ -452,7 +754,48 @@ export function LiveChat({
     const intervalMs = mode === 'escape' ? Math.random() * 700 + 600 : Math.random() * 2500 + 1500;
     const interval = setInterval(generateMessage, intervalMs);
     return () => clearInterval(interval);
-  }, [canShowMessages, mode, score]);
+  }, [canShowMessages, mode, score, transcript]);
+
+  useEffect(() => {
+    if (!canShowMessages || mode !== 'default') return;
+
+    const interval = setInterval(() => {
+      const nextReaction = pendingReactionsRef.current[0];
+      if (!nextReaction) return;
+
+      const now = Date.now();
+      if (nextReaction.dueAt > now) return;
+      if (lastPublishedAtRef.current && now - lastPublishedAtRef.current < 700) return;
+
+      pendingReactionsRef.current.shift();
+      lastPublishedAtRef.current = now;
+      setMessages((prev) => [...prev, nextReaction.message].slice(-MAX_MESSAGES));
+    }, 350);
+
+    return () => clearInterval(interval);
+  }, [canShowMessages, mode]);
+
+  useEffect(() => {
+    if (!canShowMessages || mode !== 'default' || !transcript || transcript.length === 0) return;
+
+    const interval = setInterval(() => {
+      const now = Date.now();
+      if (now < ambientCooldownUntilRef.current) return;
+      if (pendingReactionsRef.current.length > 2) return;
+      if (lastPublishedAtRef.current && now - lastPublishedAtRef.current < 5000) return;
+      if (Math.random() > 0.22) return;
+
+      const ambientMessage = buildAmbientAudienceMessage(score, transcript);
+      pendingReactionsRef.current.push({
+        dueAt: now + randomBetween(900, 2600),
+        message: ambientMessage,
+      });
+      pendingReactionsRef.current.sort((a, b) => a.dueAt - b.dueAt);
+      ambientCooldownUntilRef.current = now + randomBetween(7000, 12000);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [canShowMessages, mode, score, transcript]);
 
   return (
     <div

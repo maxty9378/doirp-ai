@@ -770,6 +770,7 @@ const GeminiLiveCall = memo(
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [manualFail, setManualFail] = useState(false);
     const [isBackgroundAnalyzing, setIsBackgroundAnalyzing] = useState(false);
+    const [liveTranscript, setLiveTranscript] = useState<TranscriptEntry[]>([]);
     const [pendingManualPayload, setPendingManualPayload] = useState<VoiceCallEndPayload | null>(
       null,
     );
@@ -1032,6 +1033,36 @@ const GeminiLiveCall = memo(
         connect();
       }
     }, [showNameDialog, allowAutoConnect, status, hangUpByAi, speakerName, connect]);
+
+    useEffect(() => {
+      if (!isCallActive) {
+        setLiveTranscript([]);
+        return;
+      }
+
+      const syncTranscript = () => {
+        const nextTranscript = getTranscript();
+        setLiveTranscript((prev) => {
+          if (
+            prev.length === nextTranscript.length &&
+            prev.every(
+              (entry, index) =>
+                entry.role === nextTranscript[index]?.role &&
+                entry.text === nextTranscript[index]?.text,
+            )
+          ) {
+            return prev;
+          }
+
+          return nextTranscript;
+        });
+      };
+
+      syncTranscript();
+      const timer = setInterval(syncTranscript, 500);
+
+      return () => clearInterval(timer);
+    }, [getTranscript, isCallActive]);
 
     const handleManualDisconnect = useCallback(() => {
       manualFailRef.current = true;
@@ -1410,6 +1441,7 @@ const GeminiLiveCall = memo(
                 embedded
                 score={score}
                 showMessagesAfterTs={callStartAt ? callStartAt + 10000 : null}
+                transcript={liveTranscript}
               />
             </div>
           </div>
