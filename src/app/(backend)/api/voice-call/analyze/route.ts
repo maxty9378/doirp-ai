@@ -7,6 +7,7 @@ import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { getTrainingScenarioByKey } from '@/server/services/training';
 import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 
+import { normalizeVoiceCallTranscriptWithGemini } from '../_normalizeTranscript';
 import { proxyFetch } from '../_proxyFetch';
 
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
@@ -128,7 +129,10 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json()) as { transcript?: unknown; scenarioId?: string; speakerName?: string; durationSec?: number };
-    const entries = normalizeTranscriptEntries(body?.transcript);
+    const normalizedEntries = normalizeTranscriptEntries(body?.transcript);
+    const entries = await normalizeVoiceCallTranscriptWithGemini(normalizedEntries, {
+      force: true,
+    });
     const transcript = formatTranscript(entries);
     if (!transcript.trim()) {
       return NextResponse.json(
@@ -208,7 +212,10 @@ export async function POST(req: Request) {
     if (!Array.isArray(parsed.improvements)) parsed.improvements = [];
     if (!Array.isArray(parsed.phraseFeedback)) parsed.phraseFeedback = [];
 
-    return NextResponse.json(parsed);
+    return NextResponse.json({
+      ...parsed,
+      normalizedTranscript: entries,
+    });
   } catch (e) {
     console.error('[voice-call/analyze]', e);
     return NextResponse.json(

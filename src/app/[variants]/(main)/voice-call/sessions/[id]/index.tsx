@@ -116,6 +116,10 @@ interface SessionDetail {
   transcript: Array<{ role: 'ai' | 'user'; text: string }>;
 }
 
+type AnalyzeSessionResponse = NonNullable<SessionDetail['analysisResult']> & {
+  normalizedTranscript?: SessionDetail['transcript'];
+};
+
 const VoiceCallSessionDetailPage = memo(() => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -167,14 +171,18 @@ const VoiceCallSessionDetailPage = memo(() => {
         const errData = await analyzeRes.json().catch(() => ({}));
         throw new Error((errData as { error?: string }).error || 'Ошибка анализа');
       }
-      const analysisResult = await analyzeRes.json();
+      const analysisPayload = (await analyzeRes.json()) as AnalyzeSessionResponse;
+      const nextTranscript = Array.isArray(analysisPayload.normalizedTranscript)
+        ? analysisPayload.normalizedTranscript
+        : session.transcript;
+      const { normalizedTranscript: _normalizedTranscript, ...analysisResult } = analysisPayload;
 
       if (isLocalSession) {
-        const updated = { ...session, analysisResult };
+        const updated = { ...session, analysisResult, transcript: nextTranscript };
         saveLocalVoiceCallSession({
           id: session.id,
           scenarioId: session.scenarioId,
-          transcript: session.transcript,
+          transcript: nextTranscript,
           analysisResult,
           score: analysisResult?.overallScore ?? null,
           hangUpReason: undefined,
@@ -197,7 +205,7 @@ const VoiceCallSessionDetailPage = memo(() => {
         throw new Error('Не удалось сохранить результат анализа');
       }
 
-      setSession((prev) => (prev ? { ...prev, analysisResult } : prev));
+      setSession((prev) => (prev ? { ...prev, analysisResult, transcript: nextTranscript } : prev));
     } catch (e) {
       setRetryError(e instanceof Error ? e.message : 'Ошибка');
     } finally {

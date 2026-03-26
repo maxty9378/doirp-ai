@@ -7,6 +7,8 @@ import { auth } from '@/auth';
 import { serverDB } from '@/database/server';
 import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 
+import { normalizeVoiceCallTranscriptWithGemini } from '../_normalizeTranscript';
+
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 
@@ -103,7 +105,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const cleanedTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
+    const sanitizedTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
+    const cleanedTranscript = await normalizeVoiceCallTranscriptWithGemini(sanitizedTranscript);
     if (cleanedTranscript.length === 0) {
       return NextResponse.json(
         { error: 'transcript is required (non-empty array after cleanup)' },

@@ -3,8 +3,10 @@
 import { Flexbox, Text } from '@lobehub/ui';
 import { Progress } from 'antd';
 import { createStaticStyles } from 'antd-style';
-import { Activity, Award, FileText,Lightbulb, MessageSquare, Target, TrendingUp } from 'lucide-react';
+import { Activity, Award, FileText, Lightbulb, MessageSquare, Target, TrendingUp } from 'lucide-react';
 import { memo, useState } from 'react';
+
+import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 
 export interface PostCallReportData {
   behavioralMetrics?: {
@@ -185,6 +187,9 @@ export interface PostCallReportProps {
 
 const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerName }) => {
   const [showTranscript, setShowTranscript] = useState(false);
+  const normalizedTranscript = transcript
+    ? sanitizeVoiceCallTranscript(transcript, { mode: 'store' })
+    : [];
 
   const scoreColor =
     data.overallScore >= 70 ? '#22c55e' : data.overallScore >= 40 ? '#eab308' : '#ef4444';
@@ -332,7 +337,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
         </div>
       )}
 
-      {transcript && transcript.length > 0 && (
+      {normalizedTranscript.length > 0 && (
         <div className={styles.section}>
           <div className={styles.sectionTitle} style={{ cursor: 'pointer', color: 'var(--colorPrimary)' }} onClick={() => setShowTranscript(!showTranscript)}>
             <FileText size={16} />
@@ -341,7 +346,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
           
           {showTranscript && (
             <div className={styles.transcriptCard}>
-              {transcript.map((msg, i) => (
+              {normalizedTranscript.map((msg, i) => (
                 <div className={styles.transcriptMsg} key={i}>
                   <div className={msg.role === 'ai' ? styles.roleAi : styles.roleUser}>
                     {msg.role === 'ai' ? 'ИИ-агент:' : (speakerName || 'Вы') + ':'}

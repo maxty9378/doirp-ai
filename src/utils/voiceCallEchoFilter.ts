@@ -25,6 +25,116 @@ const cleanAiTextForStore = (text: string, options?: { stripEnglishReasoning?: b
   return cleaned.trim();
 };
 
+const USER_WORD_JOIN_STOPWORDS = new Set([
+  'а',
+  'бы',
+  'был',
+  'была',
+  'были',
+  'было',
+  'быть',
+  'в',
+  'вас',
+  'вот',
+  'вроде',
+  'все',
+  'всё',
+  'вы',
+  'где',
+  'да',
+  'для',
+  'до',
+  'его',
+  'ее',
+  'её',
+  'если',
+  'еще',
+  'ещё',
+  'же',
+  'за',
+  'знаю',
+  'и',
+  'или',
+  'их',
+  'к',
+  'как',
+  'когда',
+  'кто',
+  'ли',
+  'мы',
+  'на',
+  'не',
+  'но',
+  'ну',
+  'о',
+  'он',
+  'она',
+  'они',
+  'от',
+  'по',
+  'под',
+  'при',
+  'просто',
+  'с',
+  'так',
+  'там',
+  'то',
+  'тут',
+  'ты',
+  'у',
+  'уже',
+  'что',
+  'это',
+  'этом',
+  'я',
+]);
+
+const normalizeUserTranscriptText = (text: string) => {
+  let normalized = text.trim();
+  if (!normalized) return normalized;
+
+  normalized = normalized
+    .replaceAll(/\s+([,.;!?])/g, '$1')
+    .replaceAll(/([([{])\s+/g, '$1')
+    .replaceAll(/\s+([)\]}])/g, '$1')
+    .replaceAll(/\s{2,}/g, ' ');
+
+  normalized = normalized.replaceAll(
+    /\b(кто|что|где|когда|куда|откуда|почему|зачем|какой|какая|какое|какие|чей|чья|чье|чьи)\s+(то|либо|нибудь)\b/giu,
+    '$1-$2',
+  );
+
+  const shouldJoinSplitWord = (parts: string[]) => {
+    if (parts.length < 2) return false;
+
+    const lowered = parts.map((part) => part.toLowerCase());
+    if (lowered[0] === 'не') return parts.length >= 3;
+    if (lowered.some((part) => USER_WORD_JOIN_STOPWORDS.has(part))) return false;
+
+    if (parts.length === 2) {
+      const [first, second] = parts;
+      if (first.length === 1 || second.length === 1) return false;
+      if (first.length <= 2 && second.length >= 5) return true;
+      return first.length >= 3 && second.length >= 2 && first.length + second.length >= 5;
+    }
+
+    return parts[0].length >= 2 && parts.slice(1).every((part) => part.length <= 4);
+  };
+
+  const joinPattern =
+    /\b([а-яё]{2,4})\s+([а-яё]{2,8})(?:\s+([а-яё]{2,4}))?(?:\s+([а-яё]{2,4}))?\b/giu;
+
+  for (let iteration = 0; iteration < 3; iteration++) {
+    normalized = normalized.replaceAll(joinPattern, (match, p1, p2, p3, p4) => {
+      const parts = [p1, p2, p3, p4].filter(Boolean);
+      if (!shouldJoinSplitWord(parts)) return match;
+      return parts.join('');
+    });
+  }
+
+  return normalized.replaceAll(/\s{2,}/g, ' ').trim();
+};
+
 const mergeAdjacentTranscriptText = (prev: string, next: string) => {
   const a = prev.trim();
   const b = next.trim();
@@ -177,8 +287,7 @@ export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
   const trimmed = entries
     .map((e) => {
       const raw = typeof e.text === 'string' ? e.text : String(e.text ?? '');
-      const nextText =
-        e.role === 'ai' ? cleanAiTextForStore(raw) : raw.trim();
+      const nextText = e.role === 'ai' ? cleanAiTextForStore(raw) : normalizeUserTranscriptText(raw);
       return { ...e, text: nextText };
     })
     .filter((e) => e.text.length > 0) as T[];

@@ -741,6 +741,10 @@ export interface VoiceCallEndPayload {
   transcript: TranscriptEntry[];
 }
 
+type AnalyzeTranscriptResponse = NonNullable<VoiceCallEndPayload['analysisResult']> & {
+  normalizedTranscript?: TranscriptEntry[];
+};
+
 export interface GeminiLiveCallProps {
   agentId: string;
   autoConnect?: boolean;
@@ -788,6 +792,7 @@ const GeminiLiveCall = memo(
           : 0;
 
         const cleanedTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
+        let transcriptToStore = cleanedTranscript;
         const transcriptForApi = sanitizeVoiceCallTranscript(transcript, { mode: 'analysis' });
         if (transcriptForApi.length === 0) {
           analyzeError =
@@ -819,7 +824,20 @@ const GeminiLiveCall = memo(
               }
               analyzeError = errMsg;
             } else {
-              analysisResult = (await analyzeRes.json()) as VoiceCallEndPayload['analysisResult'];
+              const analysisPayload = (await analyzeRes.json()) as AnalyzeTranscriptResponse;
+              const llmNormalizedTranscript = Array.isArray(analysisPayload.normalizedTranscript)
+                ? sanitizeVoiceCallTranscript(analysisPayload.normalizedTranscript, {
+                    mode: 'store',
+                  })
+                : [];
+
+              if (llmNormalizedTranscript.length > 0) {
+                transcriptToStore = llmNormalizedTranscript;
+              }
+
+              const { normalizedTranscript: _normalizedTranscript, ...analysisOnly } =
+                analysisPayload;
+              analysisResult = analysisOnly as VoiceCallEndPayload['analysisResult'];
             }
           }
         } catch (e) {
@@ -835,7 +853,7 @@ const GeminiLiveCall = memo(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               scenarioId: agentId,
-              transcript: cleanedTranscript,
+              transcript: transcriptToStore,
               analysisResult: analysisResult ?? null,
               durationSeconds: durationSec,
               speakerName,
@@ -858,7 +876,7 @@ const GeminiLiveCall = memo(
           saveLocalVoiceCallSession({
             id: localId,
             scenarioId: agentId,
-            transcript: cleanedTranscript,
+            transcript: transcriptToStore,
             analysisResult: analysisResult ?? null,
             score: analysisResult?.overallScore ?? null,
             hangUpReason: hangUpReasonRef.current ?? undefined,
@@ -873,9 +891,9 @@ const GeminiLiveCall = memo(
         }
 
         if (analyzeError) {
-          return { transcript: cleanedTranscript, error: analyzeError, sessionId, speakerName };
+          return { transcript: transcriptToStore, error: analyzeError, sessionId, speakerName };
         }
-        return { transcript: cleanedTranscript, analysisResult, sessionId, speakerName };
+        return { transcript: transcriptToStore, analysisResult, sessionId, speakerName };
       },
       [agentId, speakerName],
     );
