@@ -156,8 +156,10 @@ const VoiceCallSessionsPage = memo(() => {
       .catch(() => {
         if (!cancelled) {
           const local = loadLocalVoiceCallSessions();
-          setSessions(local.map(mapLocalToListItem));
-          setError('?? ??????? ????????? ??????. ????????? ???????????.');
+          setSessions(
+            local.map(mapLocalToListItem).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+          );
+          setError('Не удалось загрузить сессии с сервера. Показаны локальные данные.');
         }
       })
       .finally(() => {
@@ -186,9 +188,9 @@ const VoiceCallSessionsPage = memo(() => {
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <h1 className={styles.title}>??? ?????? ?????????</h1>
+        <h1 className={styles.title}>Мои сессии тренажёра</h1>
         <Button type="primary" onClick={() => navigate('/voice-call')}>
-          ? ?????????
+          Новый звонок
         </Button>
       </div>
 
@@ -202,7 +204,7 @@ const VoiceCallSessionsPage = memo(() => {
 
       {!loading && !error && sessions.length === 0 && (
         <div style={{ color: 'var(--colorTextSecondary)', padding: 24 }}>
-          ???? ??? ??????????? ??????. ????????? ?????? ? ????????? ? ????????? ???????? ?????.
+          Пока нет сохранённых сессий. Начните звонок в тренажёре, и результат появится здесь.
         </div>
       )}
 
@@ -227,19 +229,19 @@ const VoiceCallSessionsPage = memo(() => {
                 >
                   <div>
                     <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                      ????????: {item.scenarioId}
+                      Сценарий: {item.scenarioId}
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--colorTextSecondary)' }}>
                       {formatDate(item.createdAt)}
                       {item.durationSeconds != null && (
                         <span style={{ marginLeft: 12 }}>
-                          ????????????: {Math.floor(item.durationSeconds / 60)} ???
+                          Длительность: {Math.floor(item.durationSeconds / 60)} мин
                         </span>
                       )}
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    {item.isLocal && <span className={styles.localBadge}>????????</span>}
+                    {item.isLocal && <span className={styles.localBadge}>Локально</span>}
                     {item.overallScore != null && (
                       <span
                         style={{

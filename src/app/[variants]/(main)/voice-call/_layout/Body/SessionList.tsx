@@ -136,8 +136,10 @@ const SessionList = memo(() => {
       .catch(() => {
         if (!cancelled) {
           const local = loadLocalVoiceCallSessions();
-          setSessions(local.map(mapLocalToListItem));
-          setError('?? ??????? ????????? ??????. ????????? ???????????.');
+          setSessions(
+            local.map(mapLocalToListItem).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+          );
+          setError('Не удалось загрузить сессии с сервера. Показаны локальные данные.');
         }
       })
       .finally(() => {
@@ -159,7 +161,7 @@ const SessionList = memo(() => {
     return <SkeletonList paddingBlock={8} />;
   }
 
-  if (error) {
+  if (error && sessions.length === 0) {
     return (
       <Flexbox padding={12}>
         <Text style={{ fontSize: 12, color: 'var(--colorError)' }}>{error}</Text>
@@ -171,7 +173,7 @@ const SessionList = memo(() => {
     return (
       <Flexbox padding={12}>
         <Text style={{ fontSize: 13, color: 'var(--colorTextSecondary)' }}>
-          ??? ??????????? ??????
+          Пока нет сохранённых сессий
         </Text>
       </Flexbox>
     );
@@ -179,6 +181,11 @@ const SessionList = memo(() => {
 
   return (
     <Flexbox gap={1} paddingBlock={4} paddingInline={4}>
+      {error && (
+        <Flexbox paddingBlock={6} paddingInline={8}>
+          <Text style={{ fontSize: 12, color: 'var(--colorWarning)' }}>{error}</Text>
+        </Flexbox>
+      )}
       {sessions.map((session) => (
         <NavItem
           icon={FileTextIcon}
@@ -190,8 +197,8 @@ const SessionList = memo(() => {
               </Text>
               <Text style={{ fontSize: 11, color: 'var(--colorTextTertiary)' }}>
                 {formatDate(session.createdAt)}
-                {session.overallScore != null && ` ? ${Math.round(session.overallScore)}%`}
-                {session.isLocal && ' ? ????????'}
+                {session.overallScore != null && ` | ${Math.round(session.overallScore)}%`}
+                {session.isLocal && ' | локально'}
               </Text>
             </Flexbox>
           }

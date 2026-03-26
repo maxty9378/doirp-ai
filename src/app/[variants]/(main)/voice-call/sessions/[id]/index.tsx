@@ -154,7 +154,7 @@ const VoiceCallSessionDetailPage = memo(() => {
         (e) => typeof e?.text === 'string' && e.text.trim().length > 0,
       );
       if (transcriptForApi.length === 0) {
-        throw new Error('??? ???????? ????????? ? ???????????');
+        throw new Error('Нет доступной транскрипции для анализа');
       }
 
       const analyzeRes = await fetch('/api/voice-call/analyze', {
@@ -165,7 +165,7 @@ const VoiceCallSessionDetailPage = memo(() => {
       });
       if (!analyzeRes.ok) {
         const errData = await analyzeRes.json().catch(() => ({}));
-        throw new Error((errData as { error?: string }).error || '?????? ???????');
+        throw new Error((errData as { error?: string }).error || 'Ошибка анализа');
       }
       const analysisResult = await analyzeRes.json();
 
@@ -194,12 +194,12 @@ const VoiceCallSessionDetailPage = memo(() => {
         credentials: 'include',
       });
       if (!patchRes.ok) {
-        throw new Error('?? ??????? ????????? ????????? ???????');
+        throw new Error('Не удалось сохранить результат анализа');
       }
 
       setSession((prev) => (prev ? { ...prev, analysisResult } : prev));
     } catch (e) {
-      setRetryError(e instanceof Error ? e.message : '??????');
+      setRetryError(e instanceof Error ? e.message : 'Ошибка');
     } finally {
       setRetryLoading(false);
     }
@@ -227,7 +227,7 @@ const VoiceCallSessionDetailPage = memo(() => {
         setLoading(false);
         return;
       }
-      setError('?????? ?? ???????');
+      setError('Сессия не найдена');
       setIsLocalSession(true);
       setLoading(false);
       return;
@@ -238,7 +238,7 @@ const VoiceCallSessionDetailPage = memo(() => {
     setError(null);
     fetch(`/api/voice-call/sessions/${id}`, { credentials: 'include' })
       .then((res) => {
-        if (res.status === 404) throw new Error('?????? ?? ???????');
+        if (res.status === 404) throw new Error('Сессия не найдена');
         if (!res.ok) throw new Error(res.statusText);
         return res.json();
       })
@@ -246,7 +246,7 @@ const VoiceCallSessionDetailPage = memo(() => {
         if (!cancelled) setSession(data);
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : '?????? ????????');
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Ошибка загрузки');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -259,9 +259,9 @@ const VoiceCallSessionDetailPage = memo(() => {
   if (!id) {
     return (
       <div className={styles.root}>
-        <div style={{ color: 'var(--colorTextSecondary)' }}>?? ?????? id ??????.</div>
+        <div style={{ color: 'var(--colorTextSecondary)' }}>Не указан идентификатор сессии.</div>
         <Button style={{ marginTop: 16 }} onClick={() => navigate('/voice-call/sessions')}>
-          ? ?????? ??????
+          К списку сессий
         </Button>
       </div>
     );
@@ -282,9 +282,9 @@ const VoiceCallSessionDetailPage = memo(() => {
     return (
       <div className={styles.root}>
         <div style={{ color: 'var(--colorError)', marginBottom: 16 }}>
-          {error ?? '?????? ?? ???????'}
+          {error ?? 'Сессия не найдена'}
         </div>
-        <Button onClick={() => navigate('/voice-call/sessions')}>? ?????? ??????</Button>
+        <Button onClick={() => navigate('/voice-call/sessions')}>К списку сессий</Button>
       </div>
     );
   }
@@ -297,10 +297,10 @@ const VoiceCallSessionDetailPage = memo(() => {
           <p className={styles.subtitle}>{formatSessionDate(session.createdAt)}</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {session.isLocal && <span className={styles.localBadge}>????????</span>}
-          <Button onClick={() => navigate('/voice-call/sessions')}>? ?????? ??????</Button>
+          {session.isLocal && <span className={styles.localBadge}>Локально</span>}
+          <Button onClick={() => navigate('/voice-call/sessions')}>К списку сессий</Button>
           <Button type="primary" onClick={() => navigate('/voice-call')}>
-            ? ?????????
+            Новый звонок
           </Button>
         </div>
       </header>
@@ -325,8 +325,8 @@ const VoiceCallSessionDetailPage = memo(() => {
             >
               <div style={{ color: 'var(--colorTextSecondary)', fontSize: 15 }}>
                 {session.transcript.length > 0
-                  ? '?????? ?? ??? ???????? ??? ???? ??????. ?????????? ???????? ? ????? ????????? ?????? ??????.'
-                  : '?????????? ???? ? ?????? ??????????.'}
+                  ? 'Для этой сессии ещё нет готового анализа. Можно запустить повторный разбор по сохранённой транскрипции.'
+                  : 'Транскрипция для этой сессии отсутствует.'}
               </div>
               {session.transcript.length > 0 && (
                 <>
@@ -336,7 +336,7 @@ const VoiceCallSessionDetailPage = memo(() => {
                     type="primary"
                     onClick={retryAnalysis}
                   >
-                    {retryLoading ? '???????????...' : '????????? ??????'}
+                    {retryLoading ? 'Анализируем...' : 'Запустить анализ'}
                   </Button>
                   {retryError && (
                     <div style={{ color: 'var(--colorError)', fontSize: 13 }}>{retryError}</div>

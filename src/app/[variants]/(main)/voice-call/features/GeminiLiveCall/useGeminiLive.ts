@@ -797,13 +797,14 @@ export function useGeminiLive({
       const flushInterruptedAiTurn = () => {
         const rawTurnText =
           `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
-        const spokenText = cleanAiText(currentAiTurnTextRef.current.trim(), {
-          stripEnglishReasoning: false,
-        });
+        const spokenText = cleanAiText(currentAiTurnTextRef.current.trim());
         const storeText = spokenText || (rawTurnText ? cleanAiText(rawTurnText) : '');
         if (storeText) {
           transcriptRef.current.push({ role: 'ai', text: storeText });
           lastAiTextForEchoRef.current = storeText;
+        }
+        if (!firstAiTurnCompleteRef.current && (storeText || streamerRef.current?.isPlaying)) {
+          firstAiTurnCompleteRef.current = true;
         }
         currentAiTurnTextRef.current = '';
         currentAiTurnMetaTextRef.current = '';
@@ -812,6 +813,9 @@ export function useGeminiLive({
       const appendAiSpokenTranscription = (text: unknown) => {
         const next = typeof text === 'string' ? text.trim() : '';
         if (!next) return;
+        if (!firstAiTurnCompleteRef.current) {
+          firstAiTurnCompleteRef.current = true;
+        }
         currentAiTurnTextRef.current = mergeLiveTranscriptionText(
           currentAiTurnTextRef.current,
           next,
@@ -977,9 +981,17 @@ export function useGeminiLive({
           if (parts?.length) {
             for (const part of parts) {
               const audioB64 = part.inlineData?.data ?? part.audio?.data;
-              if (audioB64) streamerRef.current?.addPCM16(audioB64);
+              if (audioB64) {
+                if (!firstAiTurnCompleteRef.current) {
+                  firstAiTurnCompleteRef.current = true;
+                }
+                streamerRef.current?.addPCM16(audioB64);
+              }
 
               if (part.text) {
+                if (!firstAiTurnCompleteRef.current) {
+                  firstAiTurnCompleteRef.current = true;
+                }
                 currentAiTurnMetaTextRef.current += part.text + ' ';
               }
             }
@@ -1023,9 +1035,7 @@ export function useGeminiLive({
               setCheckpoints(next);
             }
 
-            const spokenText = cleanAiText(currentAiTurnTextRef.current.trim(), {
-              stripEnglishReasoning: false,
-            });
+            const spokenText = cleanAiText(currentAiTurnTextRef.current.trim());
             const fallbackText = spokenText ? '' : cleanAiText(rawTurnText);
             const storeText = spokenText || fallbackText;
 
@@ -1198,9 +1208,7 @@ export function useGeminiLive({
     // Захватываем незаконченную реплику ИИ, если она есть
     const rawPendingAiText =
       `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
-    const pendingSpokenText = cleanAiText(currentAiTurnTextRef.current.trim(), {
-      stripEnglishReasoning: false,
-    });
+    const pendingSpokenText = cleanAiText(currentAiTurnTextRef.current.trim());
     const pendingAiText =
       pendingSpokenText || (rawPendingAiText ? cleanAiText(rawPendingAiText) : '');
     if (pendingAiText) transcriptRef.current.push({ role: 'ai', text: pendingAiText });

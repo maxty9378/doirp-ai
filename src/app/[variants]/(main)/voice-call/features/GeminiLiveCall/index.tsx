@@ -16,6 +16,7 @@ import { VOICE_AGENT_TITLES } from '@/config/voiceAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
+import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 import { LOCAL_SESSION_PREFIX, saveLocalVoiceCallSession } from '@/utils/voiceCallLocalSessions';
 
 import { type TranscriptEntry, useGeminiLive } from './useGeminiLive';
@@ -786,9 +787,8 @@ const GeminiLiveCall = memo(
           ? Math.floor((Date.now() - callStartAtRef.current) / 1000)
           : 0;
 
-        const transcriptForApi = transcript.filter(
-          (e) => typeof e?.text === 'string' && e.text.trim().length > 0,
-        );
+        const cleanedTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
+        const transcriptForApi = sanitizeVoiceCallTranscript(transcript, { mode: 'analysis' });
         if (transcriptForApi.length === 0) {
           analyzeError =
             'Нет распознанного текста для анализа. Убедитесь, что микрофон включён и речь попала в транскрипт.';
@@ -835,7 +835,7 @@ const GeminiLiveCall = memo(
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               scenarioId: agentId,
-              transcript,
+              transcript: cleanedTranscript,
               analysisResult: analysisResult ?? null,
               durationSeconds: durationSec,
               speakerName,
@@ -858,7 +858,7 @@ const GeminiLiveCall = memo(
           saveLocalVoiceCallSession({
             id: localId,
             scenarioId: agentId,
-            transcript,
+            transcript: cleanedTranscript,
             analysisResult: analysisResult ?? null,
             score: analysisResult?.overallScore ?? null,
             hangUpReason: hangUpReasonRef.current ?? undefined,
@@ -873,9 +873,9 @@ const GeminiLiveCall = memo(
         }
 
         if (analyzeError) {
-          return { transcript, error: analyzeError, sessionId, speakerName };
+          return { transcript: cleanedTranscript, error: analyzeError, sessionId, speakerName };
         }
-        return { transcript, analysisResult, sessionId, speakerName };
+        return { transcript: cleanedTranscript, analysisResult, sessionId, speakerName };
       },
       [agentId, speakerName],
     );

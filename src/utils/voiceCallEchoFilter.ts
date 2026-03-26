@@ -21,8 +21,36 @@ const cleanAiTextForStore = (text: string, options?: { stripEnglishReasoning?: b
   cleaned = cleaned.replaceAll(/(?:\[\s*SCORE\s*:|SCORE\s*:)\s*(?:[-+]\s*)?\d+\s*\]?/gi, '');
   cleaned = cleaned.replaceAll(/(?:\[\s*CHECKPOINT\s*:|CHECKPOINT\s*:)\s*[A-Z_]+\s*\]?/gi, '');
   cleaned = cleaned.replaceAll(/\s+/g, ' ');
-  if (options?.stripEnglishReasoning) cleaned = stripEnglishReasoning(cleaned);
+  if (options?.stripEnglishReasoning !== false) cleaned = stripEnglishReasoning(cleaned);
   return cleaned.trim();
+};
+
+const mergeAdjacentTranscriptText = (prev: string, next: string) => {
+  const a = prev.trim();
+  const b = next.trim();
+
+  if (!a) return b;
+  if (!b) return a;
+  if (a === b) return a;
+  if (b.startsWith(a)) return b;
+  if (a.startsWith(b)) return a;
+
+  const wordsA = a.split(/\s+/);
+  const wordsB = b.split(/\s+/);
+  let maxOverlap = 0;
+
+  for (let i = 1; i <= Math.min(wordsA.length, wordsB.length); i++) {
+    const suffixA = normalizeEchoText(wordsA.slice(-i).join(' '));
+    const prefixB = normalizeEchoText(wordsB.slice(0, i).join(' '));
+    if (suffixA && suffixA === prefixB) maxOverlap = i;
+  }
+
+  if (maxOverlap > 0) {
+    const keepA = wordsA.slice(0, wordsA.length - maxOverlap).join(' ');
+    return keepA ? `${keepA} ${b}` : b;
+  }
+
+  return `${a} ${b}`;
 };
 
 const SHORT_USER_UTTERANCES_KEEP = new Set(['да', 'нет', 'угу', 'ага', 'ок', 'окей', 'готово']);
@@ -121,6 +149,26 @@ export const dropLikelyEchoUserEntriesAgainstAiCorpus = <T extends VoiceCallTran
   });
 };
 
+export const mergeAdjacentTranscriptEntries = <T extends VoiceCallTranscriptEntry>(
+  entries: T[],
+): T[] => {
+  if (entries.length < 2) return entries;
+
+  const merged: T[] = [];
+
+  for (const entry of entries) {
+    const last = merged.at(-1);
+    if (!last || last.role !== entry.role) {
+      merged.push({ ...entry });
+      continue;
+    }
+
+    last.text = mergeAdjacentTranscriptText(last.text, entry.text);
+  }
+
+  return merged;
+};
+
 /** Нормализует транскрипт для сохранения/анализа: trim + удаление вероятного «эха». */
 export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
   entries: T[],
@@ -130,15 +178,14 @@ export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
     .map((e) => {
       const raw = typeof e.text === 'string' ? e.text : String(e.text ?? '');
       const nextText =
-        e.role === 'ai'
-          ? cleanAiTextForStore(raw, { stripEnglishReasoning: options?.mode === 'analysis' })
-          : raw.trim();
+        e.role === 'ai' ? cleanAiTextForStore(raw) : raw.trim();
       return { ...e, text: nextText };
     })
     .filter((e) => e.text.length > 0) as T[];
 
   if (trimmed.length === 0) return trimmed;
-  const noAdjacentEcho = dropLikelyEchoUserEntries(trimmed);
+  const merged = mergeAdjacentTranscriptEntries(trimmed);
+  const noAdjacentEcho = dropLikelyEchoUserEntries(merged);
   if (options?.mode !== 'analysis') return noAdjacentEcho;
 
   const noEcho = dropLikelyEchoUserEntriesAgainstAiCorpus(noAdjacentEcho);
