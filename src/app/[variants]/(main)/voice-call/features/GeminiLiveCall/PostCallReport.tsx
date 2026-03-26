@@ -2,22 +2,27 @@
 
 import { Flexbox, Text } from '@lobehub/ui';
 import { Progress } from 'antd';
-import { createStaticStyles, cssVar } from 'antd-style';
-import { Award, MessageSquare, Target, TrendingUp, Lightbulb } from 'lucide-react';
-import { memo } from 'react';
+import { createStaticStyles } from 'antd-style';
+import { Activity, Award, FileText,Lightbulb, MessageSquare, Target, TrendingUp } from 'lucide-react';
+import { memo, useState } from 'react';
 
 export interface PostCallReportData {
-  overallScore: number;
+  behavioralMetrics?: {
+    silenceInfo?: string;
+    responseSpeed?: string;
+    repetitionAndRudeness?: string;
+  };
   competencies: Array<{ name: string; score: number }>;
-  summary: string;
-  strengths: string[];
   improvements: string[];
-  recommendedAction?: string;
+  overallScore: number;
   phraseFeedback: Array<{
     userPhrase: string;
     suggestedPhrase: string;
     advice: string;
   }>;
+  recommendedAction?: string;
+  strengths: string[];
+  summary: string;
 }
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
@@ -119,13 +124,68 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     font-style: italic;
     margin-top: 6px;
   `,
+  behaviorGrid: css`
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 16px;
+    margin-top: 12px;
+  `,
+  behaviorCard: css`
+    background: ${cssVar.colorBgElevated};
+    border: 1px solid ${cssVar.colorBorder};
+    border-radius: 12px;
+    padding: 16px;
+  `,
+  behaviorTitle: css`
+    font-size: 12px;
+    font-weight: 600;
+    color: ${cssVar.colorTextSecondary};
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  `,
+  behaviorText: css`
+    font-size: 14px;
+    color: ${cssVar.colorText};
+    line-height: 1.5;
+  `,
+  transcriptCard: css`
+    background: ${cssVar.colorBgElevated};
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 12px;
+    padding: 16px;
+    margin-top: 12px;
+    max-height: 500px;
+    overflow-y: auto;
+  `,
+  transcriptMsg: css`
+    margin-bottom: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+  `,
+  roleAi: css`
+    font-weight: 600;
+    color: ${cssVar.colorInfoText};
+    margin-bottom: 2px;
+  `,
+  roleUser: css`
+    font-weight: 600;
+    color: ${cssVar.colorSuccessText};
+    margin-bottom: 2px;
+  `,
 }));
 
 export interface PostCallReportProps {
   data: PostCallReportData;
+  speakerName?: string;
+  transcript?: Array<{ role: 'ai' | 'user'; text: string }>;
 }
 
-const PostCallReport = memo<PostCallReportProps>(({ data }) => {
+const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerName }) => {
+  const [showTranscript, setShowTranscript] = useState(false);
+
   const scoreColor =
     data.overallScore >= 70 ? '#22c55e' : data.overallScore >= 40 ? '#eab308' : '#ef4444';
 
@@ -141,7 +201,10 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
             <div className={styles.scoreBig} style={{ color: scoreColor }}>
               {Math.round(data.overallScore)}%
             </div>
-            <div className={styles.scoreLabel}>Оценка за диалог</div>
+            <div className={styles.scoreLabel}>
+              Оценка за диалог
+              {speakerName && <><br /><span style={{ fontWeight: 600 }}>Спикер:</span> {speakerName}</>}
+            </div>
           </div>
 
           {data.competencies?.length > 0 && (
@@ -151,7 +214,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
                 Компетенции
               </div>
               {data.competencies.map((c) => (
-                <div key={c.name} className={styles.competencyRow}>
+                <div className={styles.competencyRow} key={c.name}>
                   <span className={styles.competencyName}>{c.name}</span>
                   <div className={styles.competencyBar}>
                     <Progress
@@ -160,7 +223,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
                       strokeColor={c.score >= 60 ? '#22c55e' : c.score >= 40 ? '#eab308' : '#ef4444'}
                     />
                   </div>
-                  <Text type="secondary" style={{ fontSize: 12, minWidth: 32 }}>
+                  <Text style={{ fontSize: 12, minWidth: 32 }} type="secondary">
                     {c.score}%
                   </Text>
                 </div>
@@ -188,7 +251,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
           </div>
           <ul className={styles.list}>
             {data.strengths.map((s, i) => (
-              <li key={i} className={styles.listItem}>
+              <li className={styles.listItem} key={i}>
                 {s}
               </li>
             ))}
@@ -201,7 +264,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
           <div className={styles.sectionTitle}>Области для улучшения</div>
           <ul className={styles.list}>
             {data.improvements.map((s, i) => (
-              <li key={i} className={styles.listItem}>
+              <li className={styles.listItem} key={i}>
                 {s}
               </li>
             ))}
@@ -221,12 +284,41 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
         </div>
       )}
 
+      {data.behavioralMetrics && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle}>
+            <Activity size={16} />
+            Анализ поведения
+          </div>
+          <div className={styles.behaviorGrid}>
+            {data.behavioralMetrics.silenceInfo && (
+              <div className={styles.behaviorCard}>
+                <div className={styles.behaviorTitle}>Паузы и молчание</div>
+                <div className={styles.behaviorText}>{data.behavioralMetrics.silenceInfo}</div>
+              </div>
+            )}
+            {data.behavioralMetrics.responseSpeed && (
+              <div className={styles.behaviorCard}>
+                <div className={styles.behaviorTitle}>Скорость реакции</div>
+                <div className={styles.behaviorText}>{data.behavioralMetrics.responseSpeed}</div>
+              </div>
+            )}
+            {data.behavioralMetrics.repetitionAndRudeness && (
+              <div className={styles.behaviorCard}>
+                <div className={styles.behaviorTitle}>Этика и повторяемость</div>
+                <div className={styles.behaviorText}>{data.behavioralMetrics.repetitionAndRudeness}</div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {data.phraseFeedback?.length > 0 && (
         <div className={styles.section}>
           <div className={styles.sectionTitle}>Построчный разбор реплик</div>
           <Flexbox gap={8} style={{ flexDirection: 'column' }}>
             {data.phraseFeedback.map((p, i) => (
-              <div key={i} className={styles.phraseCard}>
+              <div className={styles.phraseCard} key={i}>
                 <div className={styles.phraseLabel}>Вы сказали</div>
                 <div className={styles.phraseText}>{p.userPhrase}</div>
                 <div className={styles.phraseLabel}>Предлагаемый вариант</div>
@@ -237,6 +329,28 @@ const PostCallReport = memo<PostCallReportProps>(({ data }) => {
               </div>
             ))}
           </Flexbox>
+        </div>
+      )}
+
+      {transcript && transcript.length > 0 && (
+        <div className={styles.section}>
+          <div className={styles.sectionTitle} style={{ cursor: 'pointer', color: 'var(--colorPrimary)' }} onClick={() => setShowTranscript(!showTranscript)}>
+            <FileText size={16} />
+            {showTranscript ? 'Скрыть полную транскрипцию' : 'Посмотреть полную транскрипцию'}
+          </div>
+          
+          {showTranscript && (
+            <div className={styles.transcriptCard}>
+              {transcript.map((msg, i) => (
+                <div className={styles.transcriptMsg} key={i}>
+                  <div className={msg.role === 'ai' ? styles.roleAi : styles.roleUser}>
+                    {msg.role === 'ai' ? 'ИИ-агент:' : (speakerName || 'Вы') + ':'}
+                  </div>
+                  <div>{msg.text}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

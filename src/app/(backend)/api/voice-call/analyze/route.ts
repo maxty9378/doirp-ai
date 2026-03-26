@@ -35,6 +35,11 @@ function normalizeTranscriptEntries(raw: unknown): TranscriptEntryInput[] {
 }
 
 export interface AnalyzeResponse {
+  behavioralMetrics?: {
+    silenceInfo?: string;
+    responseSpeed?: string;
+    repetitionAndRudeness?: string;
+  };
   competencies: Array<{ name: string; score: number }>;
   improvements: string[];
   overallScore: number;
@@ -57,8 +62,12 @@ function formatTranscript(entries: TranscriptEntryInput[]): string {
     .join('\n');
 }
 
-const ANALYZE_PROMPT = (transcript: string) =>
-  `Ты — эксперт по коммуникациям и бизнес-тренер. Оцени транскрипт стресс-интервью обучаемого (роль: "Пользователь (Обучаемый)") с провокационным ИИ-собеседником (роль: "Собеседник (AI-провокатор)").
+const ANALYZE_PROMPT = (transcript: string, speakerName?: string, durationSec?: number) => {
+  const speakerText = speakerName ? `Имя обучаемого: ${speakerName}. ` : '';
+  const durationText = durationSec ? `Длительность звонка: ${durationSec} сек. ` : '';
+
+  return `Ты — эксперт по коммуникациям и бизнес-тренер. Оцени транскрипт стресс-интервью обучаемого (роль: "Пользователь (Обучаемый)") с провокационным ИИ-собеседником (роль: "Собеседник (AI-провокатор)").
+${speakerText}${durationText}
 
 Транскрипт:
 """
@@ -74,9 +83,14 @@ ${transcript}
     { "name": "Управление конфликтом/эмоциями", "score": число 0-100 },
     { "name": "Следование этике бренда", "score": число 0-100 }
   ],
-  "summary": "Краткое текстовое резюме (2-4 предложения): сильные стороны и области для улучшения.",
+  "summary": "Развернутое и реалистичное резюме (3-5 предложений) о том, как обучаемый справился со стрессом, какие ошибки допустил и что сделал хорошо. Оценивай строго, но справедливо.",
   "strengths": ["сильная сторона 1", "сильная сторона 2"],
   "improvements": ["что конкретно улучшить 1", "что конкретно улучшить 2"],
+  "behavioralMetrics": {
+    "silenceInfo": "Текстовое описание того, много ли обучаемый молчал (оцени по количеству его реплик относительно длительности звонка)",
+    "responseSpeed": "Оценка скорости реакции (отвечал сразу, брал паузы, или тормозил)",
+    "repetitionAndRudeness": "Оценка того, повторялся ли обучаемый или вел себя грубо/непрофессионально"
+  },
   "recommendedAction": "Рекомендованное следующее действие для развития навыков коммуникации",
   "phraseFeedback": [
     {
@@ -91,14 +105,16 @@ ${transcript}
 1. Анализируй ТОЛЬКО реплики, начинающиеся на "Пользователь (Обучаемый)". Не приписывай обучаемому реплики провокатора!
 2. В phraseFeedback разбирай по очереди фразы обучаемого. Если фраза удачная — suggestedPhrase может совпадать или быть с небольшим улучшением, advice — что сделано хорошо.
 3. Если "Пользователь (Обучаемый)" всё время молчал (нет его реплик в транскрипте), напиши об этом в summary (укажи на ступор/молчание), поставь низкий балл, а в phraseFeedback добавь один объект, где userPhrase — "[Молчание]", а suggestedPhrase — пример уверенного ответа на провокацию, чтобы начать диалог.
+4. Обязательно заполни behavioralMetrics, оценив поведение пользователя по тексту транскрипта и длительности разговора.
 Пиши все тексты по-русски.`;
+};
 
-function buildAnalyzePrompt(transcript: string, scenarioId?: string | null): Promise<string> {
-  if (!scenarioId?.trim()) return Promise.resolve(ANALYZE_PROMPT(transcript));
+function buildAnalyzePrompt(transcript: string, scenarioId?: string | null, speakerName?: string, durationSec?: number): Promise<string> {
+  if (!scenarioId?.trim()) return Promise.resolve(ANALYZE_PROMPT(transcript, speakerName, durationSec));
   return getTrainingScenarioByKey(scenarioId.trim()).then((scenario) => {
     const custom = scenario?.analyzePrompt?.trim();
     if (custom) return custom.replaceAll('{{transcript}}', transcript);
-    return ANALYZE_PROMPT(transcript);
+    return ANALYZE_PROMPT(transcript, speakerName, durationSec);
   });
 }
 
@@ -111,7 +127,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json()) as { transcript?: unknown; scenarioId?: string };
+    const body = (await req.json()) as { transcript?: unknown; scenarioId?: string; speakerName?: string; durationSec?: number };
     const entries = normalizeTranscriptEntries(body?.transcript);
     const transcript = formatTranscript(entries);
     if (!transcript.trim()) {
@@ -124,7 +140,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const promptTextBase = await buildAnalyzePrompt(transcript, body.scenarioId);
+    const promptTextBase = await buildAnalyzePrompt(transcript, body.scenarioId, body.speakerName, body.durationSec);
 
     const hasUserLines = entries.some((e) => e.role === 'user');
     let promptText = promptTextBase;

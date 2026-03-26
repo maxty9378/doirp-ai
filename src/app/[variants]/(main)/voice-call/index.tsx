@@ -1,7 +1,7 @@
 'use client';
 
-import { createStaticStyles } from 'antd-style';
 import { Button } from 'antd';
+import { createStaticStyles } from 'antd-style';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -95,10 +95,10 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
 }));
 
 interface VoiceCallConfigPayload {
+  goals?: string[];
   legend?: string | null;
   showLegend?: boolean;
   title?: string | null;
-  goals?: string[];
 }
 
 const LEGEND_CACHE_PREFIX = 'voice-call-config:';
@@ -142,6 +142,8 @@ const VoiceCallPage = memo(() => {
 
   const [reportView, setReportView] = useState<'call' | 'report'>('call');
   const [reportData, setReportData] = useState<VoiceCallEndPayload['analysisResult'] | null>(null);
+  const [reportTranscript, setReportTranscript] = useState<any[]>([]);
+  const [reportSpeakerName, setReportSpeakerName] = useState<string>('');
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportSessionId, setReportSessionId] = useState<string | undefined>(undefined);
 
@@ -209,10 +211,14 @@ const VoiceCallPage = memo(() => {
       if (payload.error) {
         setReportError(payload.error);
         setReportData(null);
+        setReportTranscript(payload.transcript || []);
+        setReportSpeakerName(payload.speakerName || '');
         setReportSessionId(undefined);
       } else {
         setReportError(null);
         setReportData(payload.analysisResult ?? null);
+        setReportTranscript(payload.transcript || []);
+        setReportSpeakerName(payload.speakerName || '');
         setReportSessionId(payload.sessionId);
       }
       setReportView('report');
@@ -236,7 +242,7 @@ const VoiceCallPage = memo(() => {
         isAdmin ? (
           <>
             <div className={styles.editHeader} style={{ marginBottom: 0, marginTop: 0 }}>
-              <Button onClick={openCall} type="default">
+              <Button type="default" onClick={openCall}>
                 ← К тренажёру
               </Button>
             </div>
@@ -256,8 +262,8 @@ const VoiceCallPage = memo(() => {
           goals={legendState.config.goals ?? []}
           legend={legendState.config.legend}
           title={legendState.config.title ?? undefined}
-          onStart={skipToCall}
           onEdit={isAdmin ? openEditor : undefined}
+          onStart={skipToCall}
         />
       ) : reportView === 'report' ? (
         <div className={styles.reportScreen}>
@@ -288,7 +294,7 @@ const VoiceCallPage = memo(() => {
                   {reportError}
                 </div>
               )}
-              {reportData && <PostCallReport data={reportData} />}
+              {reportData && <PostCallReport data={reportData} speakerName={reportSpeakerName} transcript={reportTranscript} />}
             </div>
           </div>
         </div>

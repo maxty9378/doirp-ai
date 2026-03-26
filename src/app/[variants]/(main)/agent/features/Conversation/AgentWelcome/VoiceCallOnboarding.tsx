@@ -346,6 +346,7 @@ const VoiceCallOnboarding = memo(() => {
   const switchTopic = useChatStore((s) => s.switchTopic);
   const [step, setStep] = useState<'enter' | 'legend' | 'call' | 'report'>('enter');
   const [reportData, setReportData] = useState<PostCallReportData | null>(null);
+  const [reportTranscript, setReportTranscript] = useState<any[]>([]);
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const legendAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -408,7 +409,7 @@ const VoiceCallOnboarding = memo(() => {
             ) : reportError ? (
               <div style={{ color: 'var(--colorError)', marginBottom: 16 }}>{reportError}</div>
             ) : reportData ? (
-              <PostCallReport data={reportData} />
+              <PostCallReport data={reportData} transcript={reportTranscript} />
             ) : null}
 
             {!reportLoading && (
@@ -440,8 +441,17 @@ const VoiceCallOnboarding = memo(() => {
               autoConnect
               embedded
               agentId={VOICE_CALL_AGENT_ID}
-              onEnd={() => {
-                setStep('legend');
+              onEnd={(payload) => {
+                if (payload.analysisResult) {
+                  setReportData(payload.analysisResult);
+                }
+                if (payload.transcript) {
+                  setReportTranscript(payload.transcript);
+                }
+                if (payload.error) {
+                  setReportError(payload.error);
+                }
+                setStep('report');
               }}
             />
           </div>

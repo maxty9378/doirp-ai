@@ -105,7 +105,7 @@ const MUMBLE_DURATION_MS = 10_000;
 const MUMBLE_COOLDOWN_MS = 30_000;
 // Чем ниже порог — тем легче «перебить» ИИ и тем меньше риск, что ИИ "не слышит" пользователя.
 // Слишком низкий порог увеличит шанс, что в микрофон попадёт эхо из динамиков.
-const BARGE_IN_VOLUME_THRESHOLD = 4;
+const BARGE_IN_VOLUME_THRESHOLD = 2.5;
 const BARGE_IN_SUSTAIN_MS = 90;
 const BARGE_IN_COOLDOWN_MS = 150;
 const DEFAULT_CONTEXT_WINDOW = 5;
@@ -151,7 +151,7 @@ export interface VoiceCallCheckpoint {
 }
 
 const USER_ECHO_COOLDOWN_MS = 900;
-const USER_AUDIO_ACTIVITY_THRESHOLD = 8;
+const USER_AUDIO_ACTIVITY_THRESHOLD = 5;
 const USER_AUDIO_ACTIVITY_WINDOW_MS = 2500;
 const USER_UTTERANCE_BREAK_MS = 2500;
 
@@ -167,8 +167,70 @@ const mergeLiveTranscriptionText = (prev: string, next: string) => {
   const b = next.trim();
   if (!b) return a;
   if (!a) return b;
+  
   if (b.startsWith(a)) return b;
   if (a.startsWith(b)) return a;
+
+  // Если Gemini присылает корректировку (например, "я пошел" -> "Я пошёл."), 
+  // часто новые варианты очень похожи или содержат перекрытие.
+  
+  const aLower = a.toLowerCase();
+  const bLower = b.toLowerCase();
+  
+  // Проверка полного перекрытия без учета регистра и пунктуации
+  const cleanA = aLower.replaceAll(/[.,!?:;()]/g, '').replaceAll(/\s+/g, ' ');
+  const cleanB = bLower.replaceAll(/[.,!?:;()]/g, '').replaceAll(/\s+/g, ' ');
+  
+  // Если новая строка содержит старую или наоборот
+  if (cleanB.startsWith(cleanA) || cleanB.includes(cleanA)) return b;
+  if (cleanA.startsWith(cleanB)) return a;
+  
+  // Проверка перекрытия конца A и начала B (suffix/prefix overlap)
+  // Ищем совпадение от 15 символов или целых слов
+  const wordsA = a.split(/\s+/);
+  const wordsB = b.split(/\s+/);
+  
+  // Пробуем найти пересечение по словам (от 1 слова и больше)
+  let maxOverlap = 0;
+  for (let i = 1; i <= Math.min(wordsA.length, wordsB.length); i++) {
+    const suffixA = wordsA.slice(-i).join(' ').toLowerCase().replaceAll(/[.,!?:;()]/g, '');
+    const prefixB = wordsB.slice(0, i).join(' ').toLowerCase().replaceAll(/[.,!?:;()]/g, '');
+    
+    // Сравниваем нормализованные строки. Если совпадают, фиксируем длину перекрытия
+    if (suffixA && prefixB && suffixA === prefixB) {
+      maxOverlap = i;
+    }
+  }
+  
+  if (maxOverlap > 0) {
+    const keepA = wordsA.slice(0, wordsA.length - maxOverlap).join(' ');
+    return keepA ? `${keepA} ${b}` : b;
+  }
+
+  // Эвристика: часто Gemini присылает кусок, который перекрывает почти весь старый текст, но с небольшим отличием в середине.
+  // Например, prev: "Как тебя зовут" -> next: "А как тебя зовут?"
+  // В таких случаях лучше просто вернуть next.
+  // Если строка B длинная и содержит большинство слов из A:
+  const aCleanWords = wordsA.map((w) => w.toLowerCase().replaceAll(/[.,!?:;()]/g, '')).filter(Boolean);
+  const bCleanWords = wordsB.map((w) => w.toLowerCase().replaceAll(/[.,!?:;()]/g, '')).filter(Boolean);
+  
+  if (aCleanWords.length > 0 && bCleanWords.length >= aCleanWords.length) {
+      let commonWords = 0;
+      for (const w of aCleanWords) {
+          if (bCleanWords.includes(w)) commonWords++;
+      }
+      // Если 80% слов из A есть в B, и B длиннее или равно, заменяем A на B (считая это коррекцией)
+      if (commonWords / aCleanWords.length >= 0.8) {
+          return b;
+      }
+  }
+
+  // Распространенная ситуация с Interim транскрипциями: 
+  // prev: "как тебя"
+  // next: "как тебя зовут"
+  // Это покрывается cleanB.startsWith(cleanA) выше.
+  // Но если "Как тебя" и "А как тебя зовут", то это не сработает.
+  // Оставляем базовую склейку, если не найдено пересечений.
   return `${a} ${b}`.trim();
 };
 

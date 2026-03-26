@@ -97,6 +97,11 @@ export interface VoiceCallSessionAnalysisResult {
   strengths: string[];
   improvements: string[];
   recommendedAction?: string;
+  behavioralMetrics?: {
+    silenceInfo?: string;
+    responseSpeed?: string;
+    repetitionAndRudeness?: string;
+  };
   phraseFeedback: Array<{
     userPhrase: string;
     suggestedPhrase: string;
@@ -115,6 +120,7 @@ export const voiceCallSessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     scenarioId: text('scenario_id').notNull(),
+    speakerName: text('speaker_name'),
     transcript: jsonb('transcript').$type<Array<{ role: 'ai' | 'user'; text: string }>>().notNull(),
     analysisResult: jsonb('analysis_result').$type<VoiceCallSessionAnalysisResult>(),
     score: integer('score'),

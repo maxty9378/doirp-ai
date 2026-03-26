@@ -38,6 +38,7 @@ export async function GET(req: Request) {
         score: voiceCallSessions.score,
         hangUpReason: voiceCallSessions.hangUpReason,
         durationSeconds: voiceCallSessions.durationSeconds,
+        speakerName: voiceCallSessions.speakerName,
         createdAt: voiceCallSessions.createdAt,
       })
       .from(voiceCallSessions)
@@ -56,6 +57,7 @@ export async function GET(req: Request) {
       score: r.score,
       hangUpReason: r.hangUpReason ?? undefined,
       durationSeconds: r.durationSeconds ?? undefined,
+      speakerName: r.speakerName ?? undefined,
       createdAt: r.createdAt,
     }));
 
@@ -84,6 +86,7 @@ export async function POST(req: Request) {
       hangUpReason?: string;
       durationSeconds?: number;
       score?: number;
+      speakerName?: string;
     };
 
     const scenarioId =
@@ -116,6 +119,7 @@ export async function POST(req: Request) {
         transcript: cleanedTranscript,
         analysisResult: body.analysisResult ?? null,
         score: typeof body.score === 'number' ? body.score : null,
+        speakerName: typeof body.speakerName === 'string' ? body.speakerName : null,
         hangUpReason: typeof body.hangUpReason === 'string' ? body.hangUpReason : null,
         durationSeconds: typeof body.durationSeconds === 'number' ? body.durationSeconds : null,
       })

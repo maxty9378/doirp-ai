@@ -1,7 +1,7 @@
 'use client';
 
-import { createStaticStyles } from 'antd-style';
 import { Button, Spin } from 'antd';
+import { createStaticStyles } from 'antd-style';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
@@ -68,9 +68,6 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
 }));
 
 interface SessionDetail {
-  id: string;
-  scenarioId: string;
-  transcript: Array<{ role: 'ai' | 'user'; text: string }>;
   analysisResult: {
     overallScore: number;
     competencies: Array<{ name: string; score: number }>;
@@ -85,6 +82,10 @@ interface SessionDetail {
     }>;
   } | null;
   createdAt: string;
+  id: string;
+  scenarioId: string;
+  speakerName?: string;
+  transcript: Array<{ role: 'ai' | 'user'; text: string }>;
 }
 
 const VoiceCallSessionDetailPage = memo(() => {
@@ -231,7 +232,7 @@ const VoiceCallSessionDetailPage = memo(() => {
       <div className={styles.reportScroll}>
         <div className={styles.reportWrap}>
           {session.analysisResult ? (
-            <PostCallReport data={session.analysisResult} />
+            <PostCallReport data={session.analysisResult} speakerName={session.speakerName} transcript={session.transcript} />
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '40px 0' }}>
               <div style={{ color: 'var(--colorTextSecondary)', fontSize: 15 }}>
@@ -243,8 +244,8 @@ const VoiceCallSessionDetailPage = memo(() => {
                 <>
                   <Button
                     loading={retryLoading}
-                    type="primary"
                     size="large"
+                    type="primary"
                     onClick={retryAnalysis}
                   >
                     {retryLoading ? 'Анализируем...' : 'Запустить анализ'}

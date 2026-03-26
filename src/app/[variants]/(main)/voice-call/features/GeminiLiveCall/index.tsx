@@ -6,7 +6,6 @@ import { Mic, PhoneOff } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { CheckpointsDisplay } from '@/components/CheckpointsDisplay';
 import { EqualizerBars } from '@/components/EqualizerBars';
 import { LiveChat } from '@/components/LiveChat';
 import NeuralNetworkLoading from '@/components/NeuralNetworkLoading';
@@ -14,20 +13,21 @@ import { RoundTimer } from '@/components/RoundTimer';
 import { ScoreDisplayBroadcast } from '@/components/ScoreDisplayBroadcast';
 import { VOICE_AGENT_TITLES } from '@/config/voiceAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
-import { useGeminiLive, type TranscriptEntry } from './useGeminiLive';
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
 
+import { type TranscriptEntry,useGeminiLive } from './useGeminiLive';
+
 const styles = createStaticStyles(({ css }) => ({
   root: css`
-    height: 100%; width: 100%; display: flex; flex-direction: column; background: var(--colorBgLayout); padding: 16px; padding-bottom: 72px;
+    height: 100%; width: 100%; display: flex; flex-direction: column; background: var(--color-bg-layout); padding: 16px; padding-bottom: 72px;
     position: relative; overflow: hidden;
     transition: box-shadow 0.5s ease;
     @media (min-width: 640px) { padding-bottom: 16px; }
   `,
   back: css`
-    position: absolute; top: 16px; left: 16px; color: var(--colorTextSecondary); font-size: 13px; cursor: pointer; z-index: 10; background: none; border: none;
-    &:hover { color: var(--colorText); }
+    position: absolute; top: 16px; left: 16px; color: var(--color-text-secondary); font-size: 13px; cursor: pointer; z-index: 10; background: none; border: none;
+    &:hover { color: var(--color-text); }
   `,
   hangUpBanner: css`
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(220, 38, 38, 0.95); color: #fff; padding: 20px 32px; border-radius: 16px; font-size: 16px; font-weight: 600; text-align: center; z-index: 20; box-shadow: 0 10px 30px rgba(220,38,38,0.3);
@@ -196,14 +196,14 @@ const styles = createStaticStyles(({ css }) => ({
     font-size: 14px;
   `,
   nameDialogTitle: css`
-    font-size: 16px; font-weight: 600; color: var(--colorText); letter-spacing: -0.01em; margin-bottom: 4px;
+    font-size: 16px; font-weight: 600; color: var(--color-text); letter-spacing: -0.01em; margin-bottom: 4px;
   `,
   nameDialogDesc: css`
-    font-size: 13px; color: var(--colorTextSecondary); line-height: 1.5;
+    font-size: 13px; color: var(--color-text-secondary); line-height: 1.5;
   `,
   nameDialogLabel: css`
     font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.14em;
-    color: var(--colorTextTertiary); margin-bottom: 6px; display: block;
+    color: var(--color-text-tertiary); margin-bottom: 6px; display: block;
   `,
   nameDialogInput: css`
     width: 100%;
@@ -219,20 +219,20 @@ const styles = createStaticStyles(({ css }) => ({
     }
     &:focus-visible {
       outline: none;
-      border-color: var(--colorPrimary) !important;
-      box-shadow: 0 0 0 1px var(--colorPrimaryActive);
+      border-color: var(--color-primary) !important;
+      box-shadow: 0 0 0 1px var(--color-primary-active);
       background: rgba(255, 255, 255, 0.09) !important;
     }
   `,
   nameDialogHint: css`
-    font-size: 11px; color: var(--colorTextTertiary); margin-top: 6px; line-height: 1.4;
+    font-size: 11px; color: var(--color-text-tertiary); margin-top: 6px; line-height: 1.4;
   `,
   nameDialogFooter: css`
     display: flex; justify-content: space-between; align-items: center; margin-top: 18px;
-    border-top: 1px solid var(--colorSplit); padding-top: 12px;
+    border-top: 1px solid var(--color-split); padding-top: 12px;
   `,
   nameDialogMeta: css`
-    font-size: 11px; color: var(--colorTextTertiary); max-width: 60%; line-height: 1.4;
+    font-size: 11px; color: var(--color-text-tertiary); max-width: 60%; line-height: 1.4;
   `,
   nameDialogBtn: css`
     min-width: 0;
@@ -247,6 +247,13 @@ const styles = createStaticStyles(({ css }) => ({
     box-shadow: 0 4px 12px rgba(6, 95, 70, 0.6);
     transition: background-color 0.16s ease, box-shadow 0.16s ease,
       transform 0.1s ease;
+    &:disabled {
+      background: var(--color-fill-quaternary) !important;
+      color: var(--color-text-quaternary);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+
     &:hover:not(:disabled) {
       background: #10b981 !important;
       box-shadow: 0 6px 18px rgba(5, 150, 105, 0.75);
@@ -255,12 +262,6 @@ const styles = createStaticStyles(({ css }) => ({
     &:active:not(:disabled) {
       transform: translateY(0.5px);
       box-shadow: 0 1px 4px rgba(15, 23, 42, 0.5);
-    }
-    &:disabled {
-      background: var(--colorFillQuaternary) !important;
-      color: var(--colorTextQuaternary);
-      cursor: not-allowed;
-      box-shadow: none;
     }
   `,
   nameDialogBtnAlt: css`
@@ -292,7 +293,7 @@ const styles = createStaticStyles(({ css }) => ({
     justify-content: center;
     background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(8px);
-    color: var(--colorText);
+    color: var(--color-text);
     font-size: 16px;
     font-weight: 600;
   `,
@@ -355,18 +356,36 @@ const styles = createStaticStyles(({ css }) => ({
     color: #ff4d4f;
     letter-spacing: 8px;
     text-shadow: 0 0 20px rgba(255, 77, 79, 0.6);
-    animation: glitch 0.3s 16 alternate, zoomIn 0.4s ease-out;
+    animation: glitch 0.3s 16 alternate, zoom-in 0.4s ease-out;
     @keyframes glitch {
-      0% { transform: translate(0, 0); }
-      20% { transform: translate(-2px, 2px); }
-      40% { transform: translate(-2px, -2px); }
-      60% { transform: translate(2px, 2px); }
-      80% { transform: translate(2px, -2px); }
-      100% { transform: translate(0, 0); }
+      0% { 
+        transform: translate(0, 0); 
+      }
+      20% { 
+        transform: translate(-2px, 2px); 
+      }
+      40% { 
+        transform: translate(-2px, -2px); 
+      }
+      60% { 
+        transform: translate(2px, 2px); 
+      }
+      80% { 
+        transform: translate(2px, -2px); 
+      }
+      100% { 
+        transform: translate(0, 0); 
+      }
     }
-    @keyframes zoomIn {
-      from { transform: scale(2); opacity: 0; }
-      to { transform: scale(1); opacity: 1; }
+    @keyframes zoom-in {
+      from { 
+        transform: scale(2); 
+        opacity: 0; 
+      }
+      to { 
+        transform: scale(1); 
+        opacity: 1; 
+      }
     }
     margin-bottom: 12px;
   `,
@@ -427,6 +446,12 @@ const styles = createStaticStyles(({ css }) => ({
     transition: all 0.2s ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 
+    &:disabled {
+      background: #86d6c0;
+      color: rgba(255, 255, 255, 0.8);
+      cursor: not-allowed;
+    }
+
     &:hover:not(:disabled) {
       background: #139870;
       border-color: rgba(16, 185, 129, 0.75);
@@ -436,12 +461,6 @@ const styles = createStaticStyles(({ css }) => ({
 
     &:active:not(:disabled) {
       transform: translateY(0);
-    }
-
-    &:disabled {
-      background: #86d6c0;
-      color: rgba(255, 255, 255, 0.8);
-      cursor: not-allowed;
     }
   `,
   analysisLoader: css`
@@ -469,7 +488,6 @@ const statusLabels: Record<string, string> = {
 };
 
 export interface VoiceCallEndPayload {
-  transcript: TranscriptEntry[];
   analysisResult?: {
     overallScore: number;
     competencies: Array<{ name: string; score: number }>;
@@ -477,10 +495,17 @@ export interface VoiceCallEndPayload {
     strengths: string[];
     improvements: string[];
     recommendedAction?: string;
+    behavioralMetrics?: {
+      silenceInfo?: string;
+      responseSpeed?: string;
+      repetitionAndRudeness?: string;
+    };
     phraseFeedback: Array<{ userPhrase: string; suggestedPhrase: string; advice: string }>;
   };
-  sessionId?: string;
   error?: string;
+  sessionId?: string;
+  speakerName?: string;
+  transcript: TranscriptEntry[];
 }
 
 export interface GeminiLiveCallProps {
@@ -521,6 +546,7 @@ const GeminiLiveCall = memo(
     async (transcript: TranscriptEntry[]): Promise<VoiceCallEndPayload> => {
       let analysisResult: VoiceCallEndPayload['analysisResult'] | undefined;
       let analyzeError: string | undefined;
+      const durationSec = callStartAtRef.current ? Math.floor((Date.now() - callStartAtRef.current) / 1000) : 0;
 
       const transcriptForApi = transcript.filter(
         (e) => typeof e?.text === 'string' && e.text.trim().length > 0,
@@ -535,7 +561,12 @@ const GeminiLiveCall = memo(
           const analyzeRes = await fetch('/api/voice-call/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ transcript: transcriptForApi, scenarioId: agentId }),
+            body: JSON.stringify({ 
+              transcript: transcriptForApi, 
+              scenarioId: agentId,
+              speakerName,
+              durationSec
+            }),
             credentials: 'include',
           });
 
@@ -567,6 +598,9 @@ const GeminiLiveCall = memo(
             scenarioId: agentId,
             transcript,
             analysisResult: analysisResult ?? null,
+            durationSeconds: durationSec,
+            speakerName,
+            score: analysisResult?.overallScore ?? null,
           }),
           credentials: 'include',
         });
@@ -577,11 +611,11 @@ const GeminiLiveCall = memo(
       }
 
       if (analyzeError) {
-        return { transcript, error: analyzeError, sessionId };
+        return { transcript, error: analyzeError, sessionId, speakerName };
       }
-      return { transcript, analysisResult, sessionId };
+      return { transcript, analysisResult, sessionId, speakerName };
     },
-    [agentId],
+    [agentId, speakerName],
   );
 
   const handleConfirmSpeaker = () => {
@@ -763,7 +797,7 @@ const GeminiLiveCall = memo(
       <div className={styles.root}>
         <div className={styles.failedWrap}>
           <div className={styles.failedChatBg}>
-            <LiveChat score={score} showMessagesAfterTs={null} mode="escape" fullHeight />
+            <LiveChat fullHeight mode="escape" score={score} showMessagesAfterTs={null} />
           </div>
           <div className={styles.failedOverlay} />
           <div className={styles.failedCenter}>
@@ -847,9 +881,18 @@ const GeminiLiveCall = memo(
       )}
       <style>{`
         @keyframes shame-pop {
-          0% { opacity: 0.25; transform: translate(-50%, -50%) scale(0.5); }
-          30% { opacity: 0.18; transform: translate(-50%, -50%) scale(1.2); }
-          100% { opacity: 0; transform: translate(-50%, -50%) scale(1.5); }
+          0% { 
+            opacity: 0.25; 
+            transform: translate(-50%, -50%) scale(0.5); 
+          }
+          30% { 
+            opacity: 0.18; 
+            transform: translate(-50%, -50%) scale(1.2); 
+          }
+          100% { 
+            opacity: 0; 
+            transform: translate(-50%, -50%) scale(1.5); 
+          }
         }
       `}</style>
       {showNameDialog && (
@@ -873,11 +916,11 @@ const GeminiLiveCall = memo(
               <div className={styles.nameDialogLabel}>Имя / позывной агента</div>
               <input
                 className={styles.nameDialogInput}
+                value={speakerName}
                 placeholder={
                   uiConfig.introDialogPlaceholder?.trim() ||
                   'Например: Иван Петров или «Маркетолог GFD»'
                 }
-                value={speakerName}
                 onChange={(e) => setSpeakerName(e.target.value)}
               />
               <div className={styles.nameDialogHint}>
@@ -889,8 +932,8 @@ const GeminiLiveCall = memo(
             <div className={styles.nameDialogFooter}>
               {profileName && (
                 <button
-                  type="button"
                   className={styles.nameDialogBtnAlt}
+                  type="button"
                   onClick={() => {
                     setSpeakerName(profileName);
                     setShowNameDialog(false);
@@ -900,10 +943,10 @@ const GeminiLiveCall = memo(
                 </button>
               )}
               <button
-                type="button"
                 className={styles.nameDialogBtn}
-                style={!profileName ? { marginLeft: 'auto' } : undefined}
                 disabled={!speakerName.trim()}
+                style={!profileName ? { marginLeft: 'auto' } : undefined}
+                type="button"
                 onClick={handleConfirmSpeaker}
               >
                 {uiConfig.introDialogButtonLabel?.trim() || 'Начать интервью'}
@@ -933,7 +976,6 @@ const GeminiLiveCall = memo(
         open={status === 'error' && !!errorMessage}
         title={CONNECTION_ERROR_TITLE}
         width={440}
-        onCancel={() => clearError()}
         footer={
           <div
             style={{
@@ -962,8 +1004,9 @@ const GeminiLiveCall = memo(
             </Button>
           </div>
         }
+        onCancel={() => clearError()}
       >
-        <p style={{ color: 'var(--colorTextSecondary)', margin: 0, fontSize: 14, lineHeight: 1.6 }}>
+        <p style={{ color: 'var(--color-text-secondary)', margin: 0, fontSize: 14, lineHeight: 1.6 }}>
           {CONNECTION_ERROR_DESC}
         </p>
       </Modal>
@@ -985,7 +1028,7 @@ const GeminiLiveCall = memo(
           <Text className={styles.status}>
             {status === 'ready' ? (aiIsSpeaking ? 'Говорит' : 'Слушает') : statusLabels[status]}
           </Text>
-          <EqualizerBars volume={aiVolume} variant="ai" />
+          <EqualizerBars variant="ai" volume={aiVolume} />
         </div>
 
         <div className={`${styles.panel} ${styles.panelUser} ${userIsSpeaking ? styles.panelUserActive : ''}`}>
@@ -993,13 +1036,13 @@ const GeminiLiveCall = memo(
             className={styles.avatarWrap}
             style={{ borderColor: userIsSpeaking ? '#34d399' : 'transparent' }}
           >
-            <Icon icon={Mic} size={32} color="#fff" />
+            <Icon color="#fff" icon={Mic} size={32} />
           </div>
           <Text className={styles.name}>{speakerName || 'Вы (Менеджер)'}</Text>
           <Text className={styles.status}>
             {isCallActive ? (userIsSpeaking ? 'Говорите' : 'Микрофон активен') : '—'}
           </Text>
-          <EqualizerBars volume={userVolume} variant="user" />
+          <EqualizerBars variant="user" volume={userVolume} />
         </div>
       </div>
 
@@ -1008,7 +1051,7 @@ const GeminiLiveCall = memo(
           {/* Левая колонка: цели */}
           <div className={styles.bbSection}>
             <div className={styles.bbGoalsTitle}>
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <svg fill="none" height={14} stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} viewBox="0 0 24 24" width={14}>
                 <circle cx={12} cy={12} r={10} />
                 <path d="m9 12 2 2 4-4" />
               </svg>
@@ -1019,7 +1062,7 @@ const GeminiLiveCall = memo(
                 const cp = checkpoints[index];
                 const done = cp?.done;
                 return (
-                  <div key={index} className={styles.bbGoalItem} style={{ color: done ? '#34d399' : '#94a3b8' }}>
+                  <div className={styles.bbGoalItem} key={index} style={{ color: done ? '#34d399' : '#94a3b8' }}>
                     <div
                       className={styles.bbGoalIcon}
                       style={{
@@ -1043,16 +1086,16 @@ const GeminiLiveCall = memo(
           <div className={styles.bbCenter}>
             <div className={styles.bbTimerBox}>
               <RoundTimer
-                isCallActive={isCallActive}
                 callStartAt={callStartAt}
                 hardHangupMs={uiConfig.sessionDurationMs}
+                isCallActive={isCallActive}
               />
             </div>
             <ScoreDisplayBroadcast
+              embedded
               score={score}
               scoreDisplayLabel={uiConfig.scoreDisplayLabel}
               scoreLevelLabels={uiConfig.scoreLevelLabels}
-              embedded
             />
           </div>
 
@@ -1061,9 +1104,9 @@ const GeminiLiveCall = memo(
           {/* Правая колонка: чат */}
           <div className={styles.bbChatSection}>
             <LiveChat
+              embedded
               score={score}
               showMessagesAfterTs={callStartAt ? callStartAt + 10000 : null}
-              embedded
             />
           </div>
         </div>
@@ -1072,9 +1115,9 @@ const GeminiLiveCall = memo(
       {isCallActive && (
         <button
           className={styles.endBtn}
+          title="Завершить звонок"
           type="button"
           onClick={handleManualDisconnect}
-          title="Завершить звонок"
         >
           <PhoneOff size={28} />
         </button>
