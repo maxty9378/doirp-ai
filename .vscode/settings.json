@@ -97,5 +97,6 @@
     "**/src/server/routers/edge/*.ts": "${filename} • edge",
     "**/src/locales/default/*.ts": "${filename} • locale",
     "**/index.*": "${dirname}/${filename}.${extname}"
-  }
+  },
+  "claudeCodeChat.permissions.yoloMode": false
 }
