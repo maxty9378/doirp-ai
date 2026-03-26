@@ -128,7 +128,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
           },
         });
 
-        // РЎСЂР°Р·Сѓ РїРѕРґСЃС‚Р°РІР»СЏРµРј РєРѕРЅС„РёРі РІ store, С‡С‚РѕР±С‹ С‡Р°С‚ РЅРµ РїРѕРєР°Р·С‹РІР°Р» РїСѓСЃС‚РѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РґРѕ РѕС‚РІРµС‚Р° API.
+        // Сразу подставляем конфиг в store, чтобы чат не показывал пустое состояние до ответа API.
         getAgentStoreState().internal_dispatchAgentMap(sessionId, {
           id: sessionId,
           systemRole: preset.systemRole,
@@ -145,7 +145,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
         navigate(SESSION_CHAT_URL(sessionId, false));
       } catch (error) {
         console.error('Failed to start hard negotiations agent:', error);
-        message.error('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ С‚СЂРµРЅР°Р¶С‘СЂ');
+        message.error('Не удалось запустить тренажёр');
       } finally {
         setHardNegotiationsLoadingKey(null);
       }
@@ -171,7 +171,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
         navigate(`/voice-call?agentId=${FIELD_FIGHTER_AGENT_ID}`);
       } catch (error) {
         console.error('Failed to start training agent:', error);
-        message.error('РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РїСѓСЃС‚РёС‚СЊ С‚СЂРµРЅР°Р¶С‘СЂ');
+        message.error('Не удалось запустить тренажёр');
       } finally {
         setActivePresetKey(null);
       }
@@ -183,7 +183,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
     async (file?: File | null) => {
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        message.error('РќСѓР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ С„Р°Р№Р» РёР·РѕР±СЂР°Р¶РµРЅРёСЏ');
+        message.error('Нужно выбрать файл изображения');
         return;
       }
 
@@ -203,13 +203,13 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
 
         if (!res.ok) {
           const payload = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р±Р°РЅРЅРµСЂ');
+          throw new Error(payload.error || 'Не удалось сохранить баннер');
         }
 
         emitTrainingBannerUpdated(uploadedUrl);
-        message.success('Р‘Р°РЅРЅРµСЂ СѓСЃРїРµС€РЅРѕ РѕР±РЅРѕРІР»С‘РЅ');
+        message.success('Баннер успешно обновлён');
       } catch (error) {
-        const errorText = error instanceof Error ? error.message : 'РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё Р±Р°РЅРЅРµСЂР°';
+        const errorText = error instanceof Error ? error.message : 'Ошибка загрузки баннера';
         message.error(errorText);
       } finally {
         setIsBannerUploading(false);
@@ -223,7 +223,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
     async (file?: File | null) => {
       if (!file) return;
       if (!file.type.startsWith('image/')) {
-        message.error('РќСѓР¶РЅРѕ РІС‹Р±СЂР°С‚СЊ С„Р°Р№Р» РёР·РѕР±СЂР°Р¶РµРЅРёСЏ');
+        message.error('Нужно выбрать файл изображения');
         return;
       }
 
@@ -243,13 +243,13 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
 
         if (!res.ok) {
           const payload = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРѕС…СЂР°РЅРёС‚СЊ Р±Р°РЅРЅРµСЂ');
+          throw new Error(payload.error || 'Не удалось сохранить баннер');
         }
 
         emitTrainingBannerUpdated(uploadedUrl, 'hn');
-        message.success('Р‘Р°РЅРЅРµСЂ СѓСЃРїРµС€РЅРѕ РѕР±РЅРѕРІР»С‘РЅ');
+        message.success('Баннер успешно обновлён');
       } catch (error) {
-        const errorText = error instanceof Error ? error.message : 'РћС€РёР±РєР° Р·Р°РіСЂСѓР·РєРё Р±Р°РЅРЅРµСЂР°';
+        const errorText = error instanceof Error ? error.message : 'Ошибка загрузки баннера';
         message.error(errorText);
       } finally {
         setIsHnBannerUploading(false);
@@ -279,7 +279,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
         width: isCompact ? '100%' : undefined,
       }}
     >
-    <Text>РќРµС‚ РґРѕСЃС‚СѓРїРЅС‹С… С‚СЂРµРЅР°Р¶С‘СЂРѕРІ</Text>
+      <Text>Нет доступных тренажёров</Text>
     </Flexbox>
   );
 
@@ -325,7 +325,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
       <Modal
         footer={null}
         open={hardNegotiationsModalOpen}
-        title="Р’С‹Р±РµСЂРёС‚Рµ СЂРµР¶РёРј"
+        title="Выберите режим"
         width={440}
         onCancel={() => setHardNegotiationsModalOpen(false)}
       >
@@ -379,7 +379,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
   }
 
   return (
-    <GroupBlock icon={BotIcon} title="РўСЂРµРЅР°Р¶РµСЂС‹">
+    <GroupBlock icon={BotIcon} title="Тренажёры">
       {content}
     </GroupBlock>
   );
