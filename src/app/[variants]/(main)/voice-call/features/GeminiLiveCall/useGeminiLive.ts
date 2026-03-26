@@ -1,10 +1,11 @@
 'use client';
 
+import debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useUserStore } from '@/store/user';
 import { stripEnglishReasoning } from '@/utils/stripEnglishReasoning';
-import { isLikelyEcho } from '@/utils/voiceCallEchoFilter';
+import { type VoiceCallDebugEvent, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
 
 import { AudioStreamer } from './AudioStreamer';
 
@@ -21,10 +22,10 @@ const USER_VOLUME_SCALE = 500;
 const AI_VOLUME_SCALE = 0.15;
 const VOLUME_SMOOTH = 0.25;
 const VOLUME_DECAY = 0.85;
-const USER_NOISE_MARGIN = 6;
-const USER_AUDIO_GATE_HOLD_MS = 650;
-const NOISE_FLOOR_RISE_ALPHA = 0.02;
-const NOISE_FLOOR_FALL_ALPHA = 0.15;
+const USER_AUDIO_ACTIVITY_THRESHOLD = 1.5;
+const AUDIO_STREAM_END_IDLE_MS = 1250;
+const HEALTH_LOG_INTERVAL_MS = 5000;
+const MAX_DEBUG_EVENTS = 200;
 
 export interface GeminiLiveConfig {
   apiKey: string;
@@ -100,14 +101,6 @@ export interface GeminiLiveUIConfig {
 }
 
 const PATIENCE_INITIAL = 100;
-const MUMBLE_VOLUME_THRESHOLD = 5;
-const MUMBLE_DURATION_MS = 10_000;
-const MUMBLE_COOLDOWN_MS = 30_000;
-// Чем ниже порог — тем легче «перебить» ИИ и тем меньше риск, что ИИ "не слышит" пользователя.
-// Слишком низкий порог увеличит шанс, что в микрофон попадёт эхо из динамиков.
-const BARGE_IN_VOLUME_THRESHOLD = 2.5;
-const BARGE_IN_SUSTAIN_MS = 90;
-const BARGE_IN_COOLDOWN_MS = 150;
 const DEFAULT_CONTEXT_WINDOW = 5;
 const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
 const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
@@ -116,16 +109,14 @@ const DEFAULT_SILENCE_HARD_HANGUP_MS = 300_000;
 const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слушаете?'];
 const DEFAULT_ROUND_ENDING_PROMPT =
   'Через 15 секунд наш эфир на конференции подходит к концу. Кратко подведи итог: убедил ли тебя собеседник или нет, и скажи: "зрители нашего стрима сами сделают выводы". После этого естественно завершай разговор как в реальном живом общении на мероприятии, без служебных фраз про окончание звонка.';
-const DEFAULT_SILENCE_NUDGE_TEMPLATE = 'Собеседник молчит. Скажи коротко: "{{phrase}}".';
+const DEFAULT_SILENCE_NUDGE_TEMPLATE =
+  'Если входной звук пропал, оборвался или собеседника плохо слышно, один раз коротко и нейтрально переспроси в живом разговорном тоне: "{{phrase}}". Не утверждай уверенно, что собеседник молчит, если не уверен.';
 const DEFAULT_SHORT_ANSWER_NUDGE =
   'Отвечай короче: 1-2 предложения и по сути, затем жди ответ собеседника.';
-const DEFAULT_QUIET_SPEAKER_NUDGE =
-  'Собеседник говорит очень тихо и неуверенно. Сделай ему жесткое замечание.';
 const DEFAULT_AUTO_SUCCESS_PROMPT =
   'Маркетолог блестяще справился с напором, сохранил лицо бренда и не оставил места для манипуляций. Признай поражение иронично, например: "Ладно, вы хорошо подготовились к эфиру... Но мы ещё проверим ваши слова. На этом всё, возвращаемся в студию!" и естественно заверши диалог в стиле прямого эфира.';
 const MONOLOGUE_DURATION_MS = 15_000;
 const MONOLOGUE_VOLUME_THRESHOLD = 10;
-const AMBIENT_AUDIO_URL = '/audio/ambient-store.mp3?v=20260302';
 
 /** Очищает служебные теги в тексте от модели */
 function cleanAiText(text: string, options?: { stripEnglishReasoning?: boolean }): string {
@@ -150,17 +141,10 @@ export interface VoiceCallCheckpoint {
   label: string;
 }
 
-const USER_ECHO_COOLDOWN_MS = 900;
-const USER_AUDIO_ACTIVITY_THRESHOLD = 5;
-const USER_AUDIO_ACTIVITY_WINDOW_MS = 2500;
 const USER_UTTERANCE_BREAK_MS = 2500;
 
-const getLastAiText = (items: TranscriptEntry[], fallback = '') => {
-  for (let i = items.length - 1; i >= 0; i--) {
-    if (items[i]?.role === 'ai') return items[i]?.text || fallback;
-  }
-  return fallback;
-};
+const log = debug('lobe-client:voice-call:live');
+const audioLog = debug('lobe-client:voice-call:audio');
 
 const mergeLiveTranscriptionText = (prev: string, next: string) => {
   const a = prev.trim();
@@ -363,10 +347,22 @@ export function useGeminiLive({
     userLabel: 'Вы',
   });
 
+  const debugEventsRef = useRef<VoiceCallDebugEvent[]>([]);
   const statusRef = useRef(status);
+  const syncDebugSnapshot = useCallback(() => {
+    if (typeof window === 'undefined') return;
+
+    window.__voiceCallDebug = {
+      agentId,
+      events: [...debugEventsRef.current],
+      status: statusRef.current,
+    };
+  }, [agentId]);
+
   useEffect(() => {
     statusRef.current = status;
-  }, [status]);
+    syncDebugSnapshot();
+  }, [status, syncDebugSnapshot]);
 
   const checkpointsRef = useRef<VoiceCallCheckpoint[]>([]);
   useEffect(() => {
@@ -389,30 +385,28 @@ export function useGeminiLive({
   const userVolumeTargetRef = useRef(0);
   const userVolumeCurrentRef = useRef(0);
   const aiVolumeCurrentRef = useRef(0);
-  const noiseFloorRef = useRef(0);
-  const userGateActiveUntilRef = useRef(0);
   const freqDataRef = useRef<Uint8Array | null>(null);
-  const lastBargeInAtRef = useRef(0);
-  const bargeInLoudSinceRef = useRef(0);
-  const skipEchoCooldownOnceRef = useRef(false);
 
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const currentAiTurnTextRef = useRef('');
   const currentAiTurnMetaTextRef = useRef('');
   const lastUserSpeechRef = useRef<number>(0);
   const lastUserAudioActiveAtRef = useRef<number>(0);
-  const blockUserTranscriptionUntilRef = useRef<number>(0);
-  const lastAiTextForEchoRef = useRef<string>('');
-  const ambientRef = useRef<HTMLAudioElement | null>(null);
+  const lastInputTranscriptionAtRef = useRef<number>(0);
+  const lastOutputTranscriptionAtRef = useRef<number>(0);
+  const lastServerMessageAtRef = useRef<number>(0);
+  const lastWorkletMessageAtRef = useRef<number>(0);
+  const lastAudioChunkSentAtRef = useRef<number>(0);
+  const lastAudioStreamEndAtRef = useRef<number>(0);
+  const audioChunkSentCountRef = useRef(0);
+  const audioStreamEndedRef = useRef(false);
+  const lastHealthLogAtRef = useRef(0);
 
   const connectionLockRef = useRef(false);
   const isCallActive = status === 'connecting' || status === 'ready';
 
-  const lowVolumeSinceRef = useRef<number>(0);
-  const mumbleCooldownRef = useRef<number>(0);
   const lastBotEndRef = useRef<number>(0);
   const monologueTriggeredRef = useRef(false);
-  const silenceSinceRef = useRef<number>(0);
   const silenceCooldownRef = useRef<number>(0);
   const silenceNudgeCountRef = useRef(0);
   const disconnectRef = useRef<() => void>(() => {});
@@ -430,23 +424,27 @@ export function useGeminiLive({
     speakerNameRef.current = speakerName?.trim() || '';
   }, [speakerName]);
 
+  const pushDebugEvent = useCallback(
+    (type: string, data?: Record<string, unknown>) => {
+      const event: VoiceCallDebugEvent = {
+        at: new Date().toISOString(),
+        data,
+        type,
+      };
+
+      debugEventsRef.current = [...debugEventsRef.current.slice(-(MAX_DEBUG_EVENTS - 1)), event];
+      syncDebugSnapshot();
+      log('%s %O', type, data ?? {});
+    },
+    [syncDebugSnapshot],
+  );
+
   const cleanupMedia = () => {
     try {
-      const ambient = ambientRef.current;
-      if (ambient) {
-        try {
-          ambient.pause();
-        } catch {}
-        try {
-          ambient.currentTime = 0;
-        } catch {}
-      }
-    } catch {}
-    ambientRef.current = null;
-
-    try {
       streamerRef.current?.stop();
-    } catch {}
+    } catch {
+      // ignore cleanup errors
+    }
     streamerRef.current = null;
     analyserRef.current = null;
     freqDataRef.current = null;
@@ -455,14 +453,20 @@ export function useGeminiLive({
       try {
         try {
           workletNodeRef.current.port.onmessage = null;
-        } catch {}
+        } catch {
+          // ignore cleanup errors
+        }
         workletNodeRef.current.disconnect();
-      } catch {}
+      } catch {
+        // ignore cleanup errors
+      }
     }
     if (sourceRef.current) {
       try {
         sourceRef.current.disconnect();
-      } catch {}
+      } catch {
+        // ignore cleanup errors
+      }
     }
     workletNodeRef.current = null;
 
@@ -471,9 +475,13 @@ export function useGeminiLive({
         streamRef.current.getTracks().forEach((t) => {
           try {
             t.stop();
-          } catch {}
+          } catch {
+            // ignore track stop errors
+          }
         });
-      } catch {}
+      } catch {
+        // ignore cleanup errors
+      }
       streamRef.current = null;
     }
 
@@ -486,7 +494,9 @@ export function useGeminiLive({
           wsRef.current.close();
         }
       }
-    } catch {}
+    } catch {
+      // ignore cleanup errors
+    }
     wsRef.current = null;
 
     if (audioContextRef.current) {
@@ -494,7 +504,9 @@ export function useGeminiLive({
         if (audioContextRef.current.state !== 'closed') {
           audioContextRef.current.close().catch(() => {});
         }
-      } catch {}
+      } catch {
+        // ignore cleanup errors
+      }
       audioContextRef.current = null;
     }
     if (playContextRef.current) {
@@ -502,7 +514,9 @@ export function useGeminiLive({
         if (playContextRef.current.state !== 'closed') {
           playContextRef.current.close().catch(() => {});
         }
-      } catch {}
+      } catch {
+        // ignore cleanup errors
+      }
       playContextRef.current = null;
     }
 
@@ -512,13 +526,20 @@ export function useGeminiLive({
     userVolumeTargetRef.current = 0;
     userVolumeCurrentRef.current = 0;
     aiVolumeCurrentRef.current = 0;
-    noiseFloorRef.current = 0;
-    userGateActiveUntilRef.current = 0;
     connectionLockRef.current = false;
     hangupScheduledRef.current = false;
     autoFinishTriggeredRef.current = false;
     aiSpeakingSinceRef.current = 0;
     deductedSessionRef.current = false;
+    lastInputTranscriptionAtRef.current = 0;
+    lastOutputTranscriptionAtRef.current = 0;
+    lastServerMessageAtRef.current = 0;
+    lastWorkletMessageAtRef.current = 0;
+    lastAudioChunkSentAtRef.current = 0;
+    lastAudioStreamEndAtRef.current = 0;
+    audioChunkSentCountRef.current = 0;
+    audioStreamEndedRef.current = false;
+    lastHealthLogAtRef.current = 0;
   };
 
   const playTone = useCallback((freq: number, duration: number, startTime: number) => {
@@ -561,17 +582,40 @@ export function useGeminiLive({
   const sendClientText = useCallback((text: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    pushDebugEvent('client-text', { text: text.slice(0, 200) });
     ws.send(
       JSON.stringify({
         clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true },
       }),
     );
-  }, []);
+  }, [pushDebugEvent]);
+
+  const sendAudioStreamEnd = useCallback(
+    (reason: string) => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !isSetupCompleteRef.current) return;
+      if (audioStreamEndedRef.current) return;
+
+      audioStreamEndedRef.current = true;
+      lastAudioStreamEndAtRef.current = Date.now();
+      pushDebugEvent('audio-stream-end', { reason });
+
+      ws.send(
+        JSON.stringify({
+          realtimeInput: {
+            audioStreamEnd: true,
+          },
+        }),
+      );
+    },
+    [pushDebugEvent],
+  );
 
   const finalizeCall = useCallback(
     (reason: Exclude<HangUpReason, null>, message: string, delayMs = 1200, markAsError = true) => {
       if (hangupScheduledRef.current) return;
       hangupScheduledRef.current = true;
+      pushDebugEvent('finalize-call', { delayMs, markAsError, message, reason });
       setHangUpReason(reason);
       setHangUpByAi(true);
       if (markAsError) {
@@ -583,7 +627,7 @@ export function useGeminiLive({
         disconnectRef.current();
       }, delayMs);
     },
-    [reportError],
+    [pushDebugEvent, reportError],
   );
 
   const maybeAutoFinish = useCallback(
@@ -709,13 +753,20 @@ export function useGeminiLive({
       silenceNudgeCountRef.current = 0;
       lastUserSpeechRef.current = 0;
       lastUserAudioActiveAtRef.current = 0;
-      blockUserTranscriptionUntilRef.current = 0;
-      lastAiTextForEchoRef.current = '';
-      lastBargeInAtRef.current = 0;
-      bargeInLoudSinceRef.current = 0;
-      skipEchoCooldownOnceRef.current = false;
+      lastInputTranscriptionAtRef.current = 0;
+      lastOutputTranscriptionAtRef.current = 0;
+      lastServerMessageAtRef.current = 0;
+      lastWorkletMessageAtRef.current = 0;
+      lastAudioChunkSentAtRef.current = 0;
+      lastAudioStreamEndAtRef.current = 0;
+      audioChunkSentCountRef.current = 0;
+      audioStreamEndedRef.current = false;
+      lastHealthLogAtRef.current = 0;
       firstAiTurnCompleteRef.current = false;
       deductedSessionRef.current = false;
+      debugEventsRef.current = [];
+      syncDebugSnapshot();
+      pushDebugEvent('connect-start', { agentId });
 
       // Ensure any previous stream is stopped before requesting a new one
       if (streamRef.current) {
@@ -727,14 +778,36 @@ export function useGeminiLive({
       console.log('[GeminiLive] Requesting microphone...');
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
+          autoGainControl: false,
+          channelCount: 1,
+          echoCancellation: false,
+          noiseSuppression: false,
         },
       });
       streamRef.current = stream;
       // eslint-disable-next-line no-console
       console.log('[GeminiLive] Microphone acquired');
+      const [track] = stream.getAudioTracks();
+      if (track) {
+        pushDebugEvent('microphone-acquired', {
+          constraints: {
+            autoGainControl: false,
+            channelCount: 1,
+            echoCancellation: false,
+            noiseSuppression: false,
+          },
+          settings: track.getSettings(),
+        });
+        track.onended = () => pushDebugEvent('microphone-track-ended');
+        track.onmute = () => {
+          pushDebugEvent('microphone-track-muted');
+          sendAudioStreamEnd('track-muted');
+        };
+        track.onunmute = () => {
+          audioStreamEndedRef.current = false;
+          pushDebugEvent('microphone-track-unmuted');
+        };
+      }
 
       const Ctx =
         window.AudioContext ||
@@ -748,13 +821,7 @@ export function useGeminiLive({
         const streamer = new AudioStreamer(playContext);
         streamer.onPlayStateChange = (playing) => {
           isPlayingRef.current = playing;
-          if (!playing) {
-            if (skipEchoCooldownOnceRef.current) {
-              skipEchoCooldownOnceRef.current = false;
-            } else {
-              blockUserTranscriptionUntilRef.current = Date.now() + USER_ECHO_COOLDOWN_MS;
-            }
-          }
+          pushDebugEvent('playback-state', { playing });
         };
         streamerRef.current = streamer;
         analyserRef.current = streamer.analyser;
@@ -768,24 +835,7 @@ export function useGeminiLive({
       console.log('[GeminiLive] AudioContexts created/resumed');
       if (playContextRef.current.state === 'suspended') await playContextRef.current.resume();
       if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
-
-      try {
-        if (!ambientRef.current) {
-          const ambient = new Audio(AMBIENT_AUDIO_URL);
-          ambient.loop = true;
-          ambient.volume = 0.15;
-          ambient.preload = 'auto';
-          ambientRef.current = ambient;
-          ambient.play().catch(() => {
-            const retry = () => {
-              ambient.play().catch(() => {});
-            };
-            window.addEventListener('pointerdown', retry, { once: true });
-          });
-        } else {
-          ambientRef.current.play().catch(() => {});
-        }
-      } catch {}
+      pushDebugEvent('ambient-audio-disabled');
 
       const baseUrl = config.geminiWsUrl || GEMINI_LIVE_WS;
       const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(config.apiKey)}`;
@@ -801,7 +851,6 @@ export function useGeminiLive({
         const storeText = spokenText || (rawTurnText ? cleanAiText(rawTurnText) : '');
         if (storeText) {
           transcriptRef.current.push({ role: 'ai', text: storeText });
-          lastAiTextForEchoRef.current = storeText;
         }
         if (!firstAiTurnCompleteRef.current && (storeText || streamerRef.current?.isPlaying)) {
           firstAiTurnCompleteRef.current = true;
@@ -813,6 +862,7 @@ export function useGeminiLive({
       const appendAiSpokenTranscription = (text: unknown) => {
         const next = typeof text === 'string' ? text.trim() : '';
         if (!next) return;
+        lastOutputTranscriptionAtRef.current = Date.now();
         if (!firstAiTurnCompleteRef.current) {
           firstAiTurnCompleteRef.current = true;
         }
@@ -820,6 +870,7 @@ export function useGeminiLive({
           currentAiTurnTextRef.current,
           next,
         );
+        pushDebugEvent('ai-output-transcription', { text: next.slice(0, 160) });
       };
 
       const upsertUserTranscriptFromGemini = (text: unknown) => {
@@ -827,30 +878,7 @@ export function useGeminiLive({
         if (!inputText) return;
 
         const now = Date.now();
-        const userVol = userVolumeCurrentRef.current;
-        const hasRecentUserAudio =
-          now - lastUserAudioActiveAtRef.current <= USER_AUDIO_ACTIVITY_WINDOW_MS;
-        const dynamicThreshold = Math.max(
-          USER_AUDIO_ACTIVITY_THRESHOLD,
-          noiseFloorRef.current + USER_NOISE_MARGIN,
-        );
-
-        // Фильтр «галлюцинаций» ASR при тишине и защиты от подслушанного голоса ИИ.
-        // Если ИИ говорит, но пользователь не пытается перебить (громкость ниже порога) — игнорируем inputTranscription.
-        // Если ИИ молчит, но микрофон по уровню "в тишине" — тоже игнорируем.
-        if (isPlayingRef.current) {
-          if (userVol < BARGE_IN_VOLUME_THRESHOLD && !hasRecentUserAudio) return;
-        } else {
-          if (userVol < dynamicThreshold && !hasRecentUserAudio) return;
-        }
-
-        const lastAiText =
-          lastAiTextForEchoRef.current ||
-          getLastAiText(transcriptRef.current, currentAiTurnTextRef.current);
-        const likelyEcho = !!lastAiText && isLikelyEcho(inputText, lastAiText);
-
-        if (likelyEcho && (isPlayingRef.current || now < blockUserTranscriptionUntilRef.current))
-          return;
+        lastInputTranscriptionAtRef.current = now;
 
         const lastEntry = transcriptRef.current.at(-1);
         const startNewUtterance =
@@ -865,6 +893,10 @@ export function useGeminiLive({
         lastUserSpeechRef.current = now;
         lastUserAudioActiveAtRef.current = now;
         lastBotEndRef.current = 0;
+        pushDebugEvent('user-input-transcription', {
+          isPlaying: isPlayingRef.current,
+          text: inputText.slice(0, 160),
+        });
       };
 
       const sendStartTrigger = () => {
@@ -886,6 +918,7 @@ export function useGeminiLive({
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           // eslint-disable-next-line no-console
           console.log('[GeminiLive] Sending start trigger...');
+          pushDebugEvent('start-trigger', { text: startText.slice(0, 200) });
           wsRef.current.send(
             JSON.stringify({
               clientContent: {
@@ -905,6 +938,7 @@ export function useGeminiLive({
       ws.onopen = () => {
         // eslint-disable-next-line no-console
         console.log('[GeminiLive] WebSocket OPENED! Sending setupMsg...');
+        pushDebugEvent('ws-open');
         const extraSpeakerLine = speakerNameRef.current
           ? `\n- На вопросы сейчас отвечает сотрудник: ${speakerNameRef.current}. Обращайся к нему по имени.`
           : '';
@@ -920,6 +954,19 @@ export function useGeminiLive({
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: config.voiceName || voiceName } },
               },
             },
+            contextWindowCompression: {
+              slidingWindow: {},
+            },
+            realtimeInputConfig: {
+              automaticActivityDetection: {
+                disabled: false,
+                endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+                prefixPaddingMs: 80,
+                silenceDurationMs: 400,
+                startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+              },
+            },
+            sessionResumption: {},
             outputAudioTranscription: {},
             inputAudioTranscription: {},
           },
@@ -933,6 +980,7 @@ export function useGeminiLive({
 
       ws.onmessage = async (event: MessageEvent) => {
         try {
+          lastServerMessageAtRef.current = Date.now();
           const raw =
             typeof event.data === 'string'
               ? event.data
@@ -940,9 +988,19 @@ export function useGeminiLive({
                   ? event.data.text()
                   : new TextDecoder().decode(event.data as ArrayBuffer));
           const data = JSON.parse(raw);
+          if (data.goAway) {
+            pushDebugEvent('server-go-away', data.goAway as Record<string, unknown>);
+          }
+          if (data.sessionResumptionUpdate) {
+            pushDebugEvent(
+              'server-session-resumption',
+              data.sessionResumptionUpdate as Record<string, unknown>,
+            );
+          }
 
           if (data.error?.message) {
             console.error('[GeminiLive] Error from server:', data.error.message);
+            pushDebugEvent('server-error', { message: data.error.message });
             if (isSetupCompleteRef.current && transcriptRef.current.length > 0) {
               finalizeCall('ai', 'Соединение прервано сервером ИИ.', 1500, false);
             } else {
@@ -954,6 +1012,7 @@ export function useGeminiLive({
           if (data.setupComplete) {
             // eslint-disable-next-line no-console
             console.log('[GeminiLive] Received setupComplete! Connection is ready.');
+            pushDebugEvent('setup-complete');
             isSetupCompleteRef.current = true;
             setStatus('ready');
             playConnectionTone();
@@ -971,9 +1030,14 @@ export function useGeminiLive({
 
           const serverContent = data.serverContent;
           if (!serverContent) return;
+          if (serverContent.generationComplete) {
+            pushDebugEvent('generation-complete');
+          }
 
           if (serverContent.interrupted) {
+            pushDebugEvent('server-interrupted');
             flushInterruptedAiTurn();
+            streamerRef.current?.stop();
             return;
           }
 
@@ -1041,7 +1105,6 @@ export function useGeminiLive({
 
             if (storeText) {
               transcriptRef.current.push({ role: 'ai', text: storeText });
-              lastAiTextForEchoRef.current = storeText;
             }
             currentAiTurnTextRef.current = '';
             currentAiTurnMetaTextRef.current = '';
@@ -1057,12 +1120,14 @@ export function useGeminiLive({
 
       ws.onerror = (e) => {
         console.error('[GeminiLive] WebSocket error:', e);
+        pushDebugEvent('ws-error');
         reportError('Ошибка WebSocket. Проверьте интернет.');
       };
       ws.onclose = (event) => {
         console.warn(
           `[GeminiLive] WebSocket closed with code: ${event.code}, reason: ${event.reason}`,
         );
+        pushDebugEvent('ws-close', { code: event.code, reason: event.reason || '' });
         wsRef.current = null;
         if (!isSetupCompleteRef.current) {
           connectionLockRef.current = false;
@@ -1108,76 +1173,34 @@ export function useGeminiLive({
         const now = Date.now();
         const scaledVolume = Math.min(100, volume * USER_VOLUME_SCALE);
         userVolumeTargetRef.current = scaledVolume;
-
-        if (!isPlayingRef.current) {
-          const floor = noiseFloorRef.current;
-          if (floor === 0) {
-            noiseFloorRef.current = scaledVolume;
-          } else if (scaledVolume < floor) {
-            noiseFloorRef.current = floor + (scaledVolume - floor) * NOISE_FLOOR_FALL_ALPHA;
-          } else {
-            noiseFloorRef.current = floor + (scaledVolume - floor) * NOISE_FLOOR_RISE_ALPHA;
-          }
-        }
-
-        const dynamicThreshold = Math.max(
-          USER_AUDIO_ACTIVITY_THRESHOLD,
-          noiseFloorRef.current + USER_NOISE_MARGIN,
-        );
-
-        const isAiSpeakingNow = isPlayingRef.current;
-        if (isAiSpeakingNow) {
-          if (scaledVolume >= BARGE_IN_VOLUME_THRESHOLD) {
-            // Пользователь пытается говорить поверх ИИ — фиксируем «аудио-активность»,
-            // чтобы входящие inputTranscription не считались галлюцинацией при речи ИИ.
-            if (firstAiTurnCompleteRef.current) {
-              lastUserAudioActiveAtRef.current = now;
-            }
-            if (bargeInLoudSinceRef.current === 0) bargeInLoudSinceRef.current = now;
-
-            const loudFor = now - bargeInLoudSinceRef.current;
-            const canBargeIn = now - lastBargeInAtRef.current >= BARGE_IN_COOLDOWN_MS;
-            if (loudFor >= BARGE_IN_SUSTAIN_MS && canBargeIn) {
-              lastBargeInAtRef.current = now;
-              bargeInLoudSinceRef.current = 0;
-              lastUserAudioActiveAtRef.current = now;
-              blockUserTranscriptionUntilRef.current = 0;
-              skipEchoCooldownOnceRef.current = true;
-              flushInterruptedAiTurn();
-              streamerRef.current?.stop();
-            }
-          } else {
-            bargeInLoudSinceRef.current = 0;
-          }
-        } else {
-          bargeInLoudSinceRef.current = 0;
-          // Маркер «пользователь реально говорит»: используем как фильтр от ASR-галлюцинаций при тишине.
-          if (scaledVolume >= dynamicThreshold) {
-            lastUserAudioActiveAtRef.current = now;
-            userGateActiveUntilRef.current = now + USER_AUDIO_GATE_HOLD_MS;
-          }
+        lastWorkletMessageAtRef.current = now;
+        if (scaledVolume >= USER_AUDIO_ACTIVITY_THRESHOLD) {
+          lastUserAudioActiveAtRef.current = now;
         }
 
         const wsState = wsRef.current;
         if (!wsState || wsState.readyState !== WebSocket.OPEN || !isSetupCompleteRef.current)
           return;
-        // Пока ИИ не закончил первую реплику, не отправляем аудио с микрофона,
-        // чтобы избежать реакции на фон/шум в начале разговора.
-        if (!firstAiTurnCompleteRef.current) return;
-
-        // Во время речи ИИ отправляем звук только если пользователь действительно пытается перебить (громкость выше порога).
-        // Это даёт barge-in (ИИ прекращает речь и начинает слушать), но не шлёт постоянный шум/эхо при монологе.
-        if (isPlayingRef.current && scaledVolume < BARGE_IN_VOLUME_THRESHOLD) return;
-
-        if (
-          !isPlayingRef.current &&
-          scaledVolume < dynamicThreshold &&
-          now > userGateActiveUntilRef.current
-        )
-          return;
 
         const bytes = new Uint8Array(buffer);
         const dataB64 = bytesToBase64(bytes);
+        audioStreamEndedRef.current = false;
+        lastAudioChunkSentAtRef.current = now;
+        audioChunkSentCountRef.current += 1;
+        if (audioChunkSentCountRef.current % 150 === 0) {
+          audioLog('audio-chunk %O', {
+            aiPlaying: isPlayingRef.current,
+            chunksSent: audioChunkSentCountRef.current,
+            inputLagMs: lastInputTranscriptionAtRef.current
+              ? now - lastInputTranscriptionAtRef.current
+              : null,
+            outputLagMs: lastOutputTranscriptionAtRef.current
+              ? now - lastOutputTranscriptionAtRef.current
+              : null,
+            volume: Math.round(scaledVolume * 100) / 100,
+            wsState: wsState.readyState,
+          });
+        }
         wsState.send(
           JSON.stringify({
             realtimeInput: {
@@ -1202,9 +1225,13 @@ export function useGeminiLive({
     playConnectionTone,
     finalizeCall,
     maybeAutoFinish,
+    pushDebugEvent,
+    sendAudioStreamEnd,
+    syncDebugSnapshot,
   ]);
 
   const disconnect = useCallback(() => {
+    pushDebugEvent('disconnect');
     // Захватываем незаконченную реплику ИИ, если она есть
     const rawPendingAiText =
       `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
@@ -1220,21 +1247,14 @@ export function useGeminiLive({
 
     transcriptRef.current = [];
     lastUserAudioActiveAtRef.current = 0;
-    blockUserTranscriptionUntilRef.current = 0;
-    lastAiTextForEchoRef.current = '';
-    lastBargeInAtRef.current = 0;
-    bargeInLoudSinceRef.current = 0;
-    skipEchoCooldownOnceRef.current = false;
-
-    try {
-      const ambient = ambientRef.current;
-      if (ambient) {
-        ambient.pause();
-        try {
-          ambient.currentTime = 0;
-        } catch {}
-      }
-    } catch {}
+    lastInputTranscriptionAtRef.current = 0;
+    lastOutputTranscriptionAtRef.current = 0;
+    lastServerMessageAtRef.current = 0;
+    lastWorkletMessageAtRef.current = 0;
+    lastAudioChunkSentAtRef.current = 0;
+    lastAudioStreamEndAtRef.current = 0;
+    audioChunkSentCountRef.current = 0;
+    audioStreamEndedRef.current = false;
 
     playDisconnectTone();
 
@@ -1257,26 +1277,18 @@ export function useGeminiLive({
     setCheckpoints(nextCheckpoints);
     checkpointsRef.current = nextCheckpoints;
     setHangUpReason(null);
-  }, [playDisconnectTone, onCallEnd]);
+  }, [playDisconnectTone, onCallEnd, pushDebugEvent]);
 
   const clearError = useCallback(() => {
     connectionLockRef.current = false;
     setStatus('idle');
     setErrorMessage(null);
-  }, []);
+    pushDebugEvent('clear-error');
+  }, [pushDebugEvent]);
 
   useEffect(() => {
     disconnectRef.current = disconnect;
   }, [disconnect]);
-  useEffect(() => {
-    if (status === 'connecting' || status === 'ready') return;
-    const ambient = ambientRef.current;
-    if (!ambient) return;
-    try {
-      ambient.pause();
-      ambient.currentTime = 0;
-    } catch {}
-  }, [status]);
 
   useEffect(
     () => () => {
@@ -1289,7 +1301,6 @@ export function useGeminiLive({
     if (status !== 'ready') return;
 
     const id = setInterval(() => {
-      const vol = userVolumeCurrentRef.current;
       const now = Date.now();
       const silenceAfterMs = uiConfigRef.current.silenceNudgeAfterMs;
       const silenceCooldownMs = uiConfigRef.current.silenceNudgeCooldownMs;
@@ -1311,6 +1322,13 @@ export function useGeminiLive({
         }
       }
 
+      if (
+        lastWorkletMessageAtRef.current > 0 &&
+        now - lastWorkletMessageAtRef.current >= AUDIO_STREAM_END_IDLE_MS
+      ) {
+        sendAudioStreamEnd('worklet-idle');
+      }
+
       // Логика раунда по времени: за 15 секунд до конца просим ИИ подвести итоги,
       // по истечении времени — завершаем интервью.
       if (silenceHardHangupMs && roundStartRef.current) {
@@ -1328,13 +1346,6 @@ export function useGeminiLive({
         }
       }
 
-      // Короткий «буфер» после завершения речи ИИ: не считаем шум/эхо голосом пользователя.
-      if (!isPlayingRef.current && now < blockUserTranscriptionUntilRef.current) {
-        lowVolumeSinceRef.current = 0;
-        if (silenceSinceRef.current === 0) silenceSinceRef.current = now;
-        return;
-      }
-
       if (isPlayingRef.current) {
         if (aiVolumeCurrentRef.current >= MONOLOGUE_VOLUME_THRESHOLD) {
           if (aiSpeakingSinceRef.current === 0) aiSpeakingSinceRef.current = now;
@@ -1342,88 +1353,87 @@ export function useGeminiLive({
           const monologueDuration = now - aiSpeakingSinceRef.current;
           if (monologueDuration >= MONOLOGUE_DURATION_MS && !monologueTriggeredRef.current) {
             monologueTriggeredRef.current = true;
-            streamerRef.current?.stop();
+            pushDebugEvent('monologue-nudge', { monologueDuration });
             sendClientText(uiConfigRef.current.shortAnswerNudge ?? DEFAULT_SHORT_ANSWER_NUDGE);
           }
         }
 
-        lowVolumeSinceRef.current = 0;
-        silenceSinceRef.current = 0;
         silenceNudgeCountRef.current = 0;
-        return;
-      }
-
-      if (aiSpeakingSinceRef.current > 0) {
+      } else if (aiSpeakingSinceRef.current > 0) {
         aiSpeakingSinceRef.current = 0;
         lastBotEndRef.current = now;
         monologueTriggeredRef.current = false;
       }
 
-      if (vol < 3) {
-        lowVolumeSinceRef.current = 0;
-        if (silenceSinceRef.current === 0) {
-          silenceSinceRef.current = now;
-        }
+      const lastBotEnd = lastBotEndRef.current;
+      const userSpokeAfterBot = lastUserSpeechRef.current > lastBotEnd;
+      const roundStart = roundStartRef.current;
 
-        const lastBotEnd = lastBotEndRef.current;
-        const userSpokeAfterBot = lastUserSpeechRef.current > lastBotEnd;
-        const roundStart = roundStartRef.current;
+      if (
+        lastBotEnd > 0 &&
+        !userSpokeAfterBot &&
+        now - lastBotEnd >= silenceAfterMs &&
+        now >= silenceCooldownRef.current
+      ) {
+        const phrase =
+          silencePhrases[Math.floor(Math.random() * silencePhrases.length)] ||
+          DEFAULT_SILENCE_NUDGE_PHRASES[0];
+        const template = uiConfigRef.current.silenceNudgeTemplate ?? DEFAULT_SILENCE_NUDGE_TEMPLATE;
+        pushDebugEvent('silence-nudge', {
+          phrase,
+          sinceLastBotEndMs: now - lastBotEnd,
+          sinceLastUserSpeechMs: lastUserSpeechRef.current ? now - lastUserSpeechRef.current : null,
+        });
+        sendClientText(template.replaceAll('{{phrase}}', phrase));
+        silenceCooldownRef.current = now + silenceCooldownMs;
+        silenceNudgeCountRef.current += 1;
+      } else if (
+        !firstAiTurnCompleteRef.current &&
+        roundStart != null &&
+        now - roundStart >= silenceAfterMs &&
+        now >= silenceCooldownRef.current
+      ) {
+        const phrase =
+          silencePhrases[Math.floor(Math.random() * silencePhrases.length)] ||
+          DEFAULT_SILENCE_NUDGE_PHRASES[0];
+        const template = uiConfigRef.current.silenceNudgeTemplate ?? DEFAULT_SILENCE_NUDGE_TEMPLATE;
+        pushDebugEvent('initial-silence-nudge', {
+          phrase,
+          sinceRoundStartMs: now - roundStart,
+        });
+        sendClientText(template.replaceAll('{{phrase}}', phrase));
+        silenceCooldownRef.current = now + silenceCooldownMs;
+        silenceNudgeCountRef.current += 1;
+      }
 
-        // Подсказка при паузе после того, как бот уже говорил: «собеседник молчит, скажи …»
-        if (
-          lastBotEnd > 0 &&
-          !userSpokeAfterBot &&
-          now - lastBotEnd >= silenceAfterMs &&
-          now >= silenceCooldownRef.current
-        ) {
-          const phrase =
-            silencePhrases[Math.floor(Math.random() * silencePhrases.length)] ||
-            DEFAULT_SILENCE_NUDGE_PHRASES[0];
-          const template =
-            uiConfigRef.current.silenceNudgeTemplate ?? DEFAULT_SILENCE_NUDGE_TEMPLATE;
-          sendClientText(template.replaceAll('{{phrase}}', phrase));
-          silenceCooldownRef.current = now + silenceCooldownMs;
-          silenceNudgeCountRef.current += 1;
-        } else if (
-          // Начальная тишина: ИИ ещё не сказал первую реплику — через N секунд отправить подсказку, чтобы он заговорил.
-          !firstAiTurnCompleteRef.current &&
-          roundStart != null &&
-          now - roundStart >= silenceAfterMs &&
-          now >= silenceCooldownRef.current
-        ) {
-          const phrase =
-            silencePhrases[Math.floor(Math.random() * silencePhrases.length)] ||
-            DEFAULT_SILENCE_NUDGE_PHRASES[0];
-          const template =
-            uiConfigRef.current.silenceNudgeTemplate ?? DEFAULT_SILENCE_NUDGE_TEMPLATE;
-          sendClientText(template.replaceAll('{{phrase}}', phrase));
-          silenceCooldownRef.current = now + silenceCooldownMs;
-          silenceNudgeCountRef.current += 1;
-        }
-      } else if (vol >= 3 && vol < MUMBLE_VOLUME_THRESHOLD) {
-        silenceSinceRef.current = 0;
-        lastUserSpeechRef.current = now;
-        lastBotEndRef.current = 0;
-        if (lowVolumeSinceRef.current === 0) {
-          lowVolumeSinceRef.current = now;
-        } else if (
-          now - lowVolumeSinceRef.current >= MUMBLE_DURATION_MS &&
-          now >= mumbleCooldownRef.current
-        ) {
-          sendClientText(uiConfigRef.current.quietSpeakerNudge ?? DEFAULT_QUIET_SPEAKER_NUDGE);
-          mumbleCooldownRef.current = now + MUMBLE_COOLDOWN_MS;
-          lowVolumeSinceRef.current = 0;
-        }
-      } else {
-        lowVolumeSinceRef.current = 0;
-        silenceSinceRef.current = 0;
-        lastUserSpeechRef.current = now;
-        lastBotEndRef.current = 0;
+      if (now - lastHealthLogAtRef.current >= HEALTH_LOG_INTERVAL_MS) {
+        lastHealthLogAtRef.current = now;
+        pushDebugEvent('health', {
+          aiPlaying: isPlayingRef.current,
+          chunksSent: audioChunkSentCountRef.current,
+          sinceLastAudioChunkSentMs: lastAudioChunkSentAtRef.current
+            ? now - lastAudioChunkSentAtRef.current
+            : null,
+          sinceLastInputTranscriptionMs: lastInputTranscriptionAtRef.current
+            ? now - lastInputTranscriptionAtRef.current
+            : null,
+          sinceLastOutputTranscriptionMs: lastOutputTranscriptionAtRef.current
+            ? now - lastOutputTranscriptionAtRef.current
+            : null,
+          sinceLastServerMessageMs: lastServerMessageAtRef.current
+            ? now - lastServerMessageAtRef.current
+            : null,
+          sinceLastUserAudioMs: lastUserAudioActiveAtRef.current
+            ? now - lastUserAudioActiveAtRef.current
+            : null,
+          sinceLastUserSpeechMs: lastUserSpeechRef.current ? now - lastUserSpeechRef.current : null,
+          wsState: wsRef.current?.readyState ?? null,
+        });
       }
     }, 1000);
 
     return () => clearInterval(id);
-  }, [status, sendClientText, finalizeCall]);
+  }, [status, sendAudioStreamEnd, sendClientText, finalizeCall, pushDebugEvent]);
 
   useEffect(() => {
     if (status !== 'connecting' && status !== 'ready') return;
@@ -1451,11 +1461,6 @@ export function useGeminiLive({
         }
       }
 
-      if (ambientRef.current) {
-        const targetAmbient = isPlayingRef.current ? 0.05 : 0.15;
-        ambientRef.current.volume += (targetAmbient - ambientRef.current.volume) * 0.05;
-      }
-
       rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
@@ -1471,6 +1476,14 @@ export function useGeminiLive({
     return items;
   }, []);
 
+  const getDebugSnapshot = useCallback((): VoiceCallDebugSnapshot => {
+    return {
+      agentId,
+      events: [...debugEventsRef.current],
+      status: statusRef.current,
+    };
+  }, [agentId]);
+
   return {
     clearError,
     connect,
@@ -1485,6 +1498,7 @@ export function useGeminiLive({
     score,
     patience,
     checkpoints,
+    getDebugSnapshot,
     getTranscript,
     analyserRef,
     uiConfig,

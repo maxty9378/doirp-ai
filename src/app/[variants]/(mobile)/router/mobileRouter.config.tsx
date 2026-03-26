@@ -212,6 +212,30 @@ export const mobileRoutes: RouteConfig[] = [
         element: dynamicElement(() => import('../training'), 'Mobile > Training'),
         path: 'training',
       },
+      {
+        children: [
+          {
+            element: dynamicElement(() => import('../voice-call'), 'Mobile > Voice Call'),
+            index: true,
+          },
+          {
+            element: dynamicElement(
+              () => import('../voice-call/sessions/[id]'),
+              'Mobile > Voice Call > Session Detail',
+            ),
+            path: 'sessions/:id',
+          },
+          {
+            element: dynamicElement(
+              () => import('../voice-call/sessions'),
+              'Mobile > Voice Call > Sessions',
+            ),
+            path: 'sessions',
+          },
+        ],
+        errorElement: <ErrorBoundary resetPath="/training" />,
+        path: 'voice-call',
+      },
 
       ...BusinessMobileRoutesWithMainLayout,
 

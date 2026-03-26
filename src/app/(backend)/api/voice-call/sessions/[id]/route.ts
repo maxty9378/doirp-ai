@@ -1,4 +1,8 @@
-import { type VoiceCallSessionAnalysisResult, voiceCallSessions } from '@lobechat/database/schemas';
+import {
+  type VoiceCallSessionAnalysisResult,
+  type VoiceCallSessionDebugLog,
+  voiceCallSessions,
+} from '@lobechat/database/schemas';
 import { and, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
@@ -10,6 +14,41 @@ import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 import { normalizeVoiceCallTranscriptWithGemini } from '../../_normalizeTranscript';
 
 export const runtime = 'nodejs';
+
+const MAX_DEBUG_EVENTS = 300;
+
+const normalizeDebugLog = (value: unknown): VoiceCallSessionDebugLog | null => {
+  if (!value || typeof value !== 'object') return null;
+
+  const candidate = value as {
+    agentId?: unknown;
+    events?: unknown;
+    status?: unknown;
+  };
+
+  const events = Array.isArray(candidate.events)
+    ? candidate.events
+        .flatMap((event) => {
+          if (!event || typeof event !== 'object') return [];
+          const record = event as { at?: unknown; data?: unknown; type?: unknown };
+          return [{
+            at: typeof record.at === 'string' ? record.at : new Date().toISOString(),
+            data:
+              record.data && typeof record.data === 'object'
+                ? (record.data as Record<string, unknown>)
+                : undefined,
+            type: typeof record.type === 'string' ? record.type : 'unknown',
+          }];
+        })
+        .slice(-MAX_DEBUG_EVENTS)
+    : [];
+
+  return {
+    agentId: typeof candidate.agentId === 'string' ? candidate.agentId : 'unknown',
+    events,
+    status: typeof candidate.status === 'string' ? candidate.status : 'unknown',
+  };
+};
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -65,11 +104,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
     const body = (await req.json().catch(() => ({}))) as {
       analysisResult?: VoiceCallSessionAnalysisResult;
+      debugLog?: VoiceCallSessionDebugLog | null;
     };
+    const debugLog = body.debugLog === undefined ? undefined : normalizeDebugLog(body.debugLog);
 
     const [updated] = await serverDB
       .update(voiceCallSessions)
-      .set({ analysisResult: body.analysisResult ?? null })
+      .set({
+        analysisResult: body.analysisResult ?? null,
+        ...(debugLog !== undefined ? { debugLog } : {}),
+      })
       .where(and(eq(voiceCallSessions.id, id), eq(voiceCallSessions.userId, session.user.id)))
       .returning();
 

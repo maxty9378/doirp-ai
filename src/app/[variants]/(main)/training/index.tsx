@@ -17,7 +17,7 @@ const TrainingPage = memo(() => {
 
   return (
     <>
-      <PageTitle title="Тренажеры" />
+      <PageTitle title="Тренажёры" />
       <NavHeader right={<WideScreenButton />} />
       <Flexbox
         height="100%"

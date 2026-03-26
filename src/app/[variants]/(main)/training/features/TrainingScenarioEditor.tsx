@@ -1,7 +1,7 @@
 'use client';
 
 import { Flexbox, Form, type FormGroupItemType, Icon } from '@lobehub/ui';
-import { Button, Input, InputNumber, Modal as AntModal, Select, Switch, Table, Tag, message } from 'antd';
+import { Button, Input, InputNumber, message, Modal as AntModal, Select, Switch, Table, Tag } from 'antd';
 import { createStyles } from 'antd-style';
 import {
   BookOpen,
@@ -53,6 +53,50 @@ const useStyles = createStyles(({ css }) => ({
     gap: 12px;
     flex-wrap: wrap;
   `,
+  headerSection: css`
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+
+    @media (width <= 640px) {
+      flex-direction: column;
+      align-items: stretch;
+    }
+  `,
+  selector: css`
+    width: 320px;
+
+    @media (width <= 640px) {
+      width: 100%;
+    }
+  `,
+  saveBar: css`
+    @media (width <= 640px) {
+      position: sticky;
+      inset-block-end: 0;
+      z-index: 2;
+      padding: 12px 0 calc(env(safe-area-inset-bottom, 0px) + 8px);
+      background: linear-gradient(180deg, rgb(0 0 0 / 0%), var(--colorBgLayout) 28%);
+    }
+  `,
+  knowledgeCards: css`
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  `,
+  knowledgeCard: css`
+    padding: 16px;
+    border: 1px solid var(--colorBorderSecondary);
+    border-radius: 14px;
+    background: var(--colorBgContainer);
+  `,
+  knowledgeCardTitle: css`
+    margin-bottom: 6px;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--colorText);
+  `,
 }));
 
 const toTrainingBannerUrl = (path: string) => {
@@ -66,10 +110,10 @@ const toTrainingBannerUrl = (path: string) => {
 };
 
 interface KnowledgeEntry {
-  id: string;
-  productIngredient: string;
-  officialUsp: string;
   attackMyth: string;
+  id: string;
+  officialUsp: string;
+  productIngredient: string;
 }
 
 interface ScoreLevelLabels {
@@ -79,45 +123,45 @@ interface ScoreLevelLabels {
 }
 
 interface ScenarioPayload {
-  id: string;
-  key: string;
-  title: string | null;
-  description: string | null;
-  legend: string | null;
-  userRole: string | null;
-  goals: string[];
-  checkpointIds: string[];
-  systemPrompt: string | null;
   analyzePrompt: string | null;
-  debriefPrompt: string | null;
   assistantLabel: string | null;
-  userLabel: string | null;
-  voiceName: string | null;
+  autoSuccessPrompt: string | null;
   bannerUrl: string | null;
+  checkpointIds: string[];
   contextWindow: number | null;
-  sessionDurationMs: number | null;
-  silenceNudgeAfterMs: number | null;
-  silenceNudgeCooldownMs: number | null;
-  silenceHardHangupMs: number | null;
-  silenceNudgePhrases: string[];
-  showLegend: boolean | null;
+  debriefPrompt: string | null;
+  description: string | null;
   enableCheckpoints: boolean | null;
   enableScoring: boolean | null;
+  goals: string[];
+  id: string;
+  introDialogButtonLabel: string | null;
+  introDialogDescription: string | null;
+  introDialogHint: string | null;
+  introDialogPlaceholder: string | null;
+  introDialogTitle: string | null;
   isActive: boolean | null;
+  key: string;
+  legend: string | null;
+  openingInstruction: string | null;
+  quietSpeakerNudge: string | null;
+  roundEndingPrompt: string | null;
   scoreDisplayLabel: string | null;
   scoreLevelLabels: ScoreLevelLabels | null;
-  openingInstruction: string | null;
-  showIntroDialog: boolean | null;
-  introDialogTitle: string | null;
-  introDialogDescription: string | null;
-  introDialogPlaceholder: string | null;
-  introDialogHint: string | null;
-  introDialogButtonLabel: string | null;
-  roundEndingPrompt: string | null;
-  silenceNudgeTemplate: string | null;
+  sessionDurationMs: number | null;
   shortAnswerNudge: string | null;
-  quietSpeakerNudge: string | null;
-  autoSuccessPrompt: string | null;
+  showIntroDialog: boolean | null;
+  showLegend: boolean | null;
+  silenceHardHangupMs: number | null;
+  silenceNudgeAfterMs: number | null;
+  silenceNudgeCooldownMs: number | null;
+  silenceNudgePhrases: string[];
+  silenceNudgeTemplate: string | null;
+  systemPrompt: string | null;
+  title: string | null;
+  userLabel: string | null;
+  userRole: string | null;
+  voiceName: string | null;
 }
 
 interface TrainingAdminPayload {
@@ -126,15 +170,17 @@ interface TrainingAdminPayload {
 }
 
 export interface TrainingScenarioEditorProps {
-  initialKey?: string | null;
   hideSelector?: boolean;
+  initialKey?: string | null;
+  mobile?: boolean;
 }
 
 const groupIcon = (IconComp: typeof Settings, color?: string) => (
   <Icon icon={IconComp} size={18} style={{ color: color || 'var(--colorPrimary)' }} />
 );
 
-const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScenarioEditorProps) => {
+const TrainingScenarioEditor = memo<TrainingScenarioEditorProps>(
+  ({ initialKey, hideSelector, mobile = false }) => {
   const { styles } = useStyles();
   const [form] = Form.useForm();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
@@ -150,6 +196,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
   const [knowledgeModalMode, setKnowledgeModalMode] = useState<'add' | 'edit'>('add');
   const [knowledgeEditId, setKnowledgeEditId] = useState<string | null>(null);
   const [knowledgeForm] = Form.useForm();
+  const isMobileLayout = mobile;
 
   useEffect(() => {
     fetch('/api/training/scenarios?includeInactive=true', { credentials: 'include' })
@@ -565,12 +612,12 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
       {
         label: 'Окно контекста (реплик)',
         desc: 'Сколько последних реплик хранить в контексте',
-        children: <InputNumber min={1} max={20} style={{ width: 120 }} />,
+        children: <InputNumber min={1} max={20} style={{ width: isMobileLayout ? '100%' : 120 }} />,
         name: 'contextWindow',
         minWidth: undefined,
       },
     ],
-  }), []);
+  }), [isMobileLayout]);
 
   const timeGroup: FormGroupItemType = useMemo(() => ({
     icon: groupIcon(Timer, '#06b6d4'),
@@ -579,28 +626,46 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
       {
         label: 'Длительность сессии (сек)',
         desc: 'Максимальное время одной тренировочной сессии. Таймер обратного отсчёта показывается пользователю.',
-        children: <InputNumber min={30} step={30} style={{ width: 140 }} addonAfter="сек" />,
+        children: (
+          <InputNumber
+            addonAfter="сек"
+            min={30}
+            step={30}
+            style={{ width: isMobileLayout ? '100%' : 140 }}
+          />
+        ),
         name: 'sessionDurationSec',
         minWidth: undefined,
       },
       {
         label: 'Таймаут тишины (сек)',
         desc: 'Через сколько секунд полной тишины звонок завершится автоматически',
-        children: <InputNumber min={30} step={30} style={{ width: 140 }} addonAfter="сек" />,
+        children: (
+          <InputNumber
+            addonAfter="сек"
+            min={30}
+            step={30}
+            style={{ width: isMobileLayout ? '100%' : 140 }}
+          />
+        ),
         name: 'silenceHardHangupMs',
         minWidth: undefined,
       },
       {
         label: 'Подсказка при паузе через (мс)',
         desc: 'Через сколько мс после тишины прозвучит первая подсказка',
-        children: <InputNumber min={1000} step={1000} style={{ width: 140 }} />,
+        children: (
+          <InputNumber min={1000} step={1000} style={{ width: isMobileLayout ? '100%' : 140 }} />
+        ),
         name: 'silenceNudgeAfterMs',
         minWidth: undefined,
       },
       {
         label: 'Кулдаун подсказки (мс)',
         desc: 'Минимальная задержка между подсказками при тишине',
-        children: <InputNumber min={1000} step={1000} style={{ width: 140 }} />,
+        children: (
+          <InputNumber min={1000} step={1000} style={{ width: isMobileLayout ? '100%' : 140 }} />
+        ),
         name: 'silenceNudgeCooldownMs',
         minWidth: undefined,
       },
@@ -616,7 +681,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
         name: 'silenceNudgePhrases',
       },
     ],
-  }), []);
+  }), [isMobileLayout]);
 
   const scoringGroup: FormGroupItemType = useMemo(() => ({
     icon: groupIcon(Target, '#ef4444'),
@@ -813,8 +878,11 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
         }}
       />
 
-      <div className={styles.section} style={{ marginBottom: 12, maxWidth: FORM_STYLE.style?.maxWidth }}>
-        <Flexbox align="center" gap={16} horizontal justify="space-between">
+      <div
+        className={styles.section}
+        style={{ marginBottom: 12, maxWidth: isMobileLayout ? '100%' : FORM_STYLE.style?.maxWidth }}
+      >
+        <div className={styles.headerSection}>
           <div className={styles.headerRow}>
             <div className={styles.sectionTitle} style={{ marginBottom: 0, fontSize: 24 }}>
               Настройки сценария
@@ -833,13 +901,13 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
             <Select
               allowClear
               options={scenarioOptions}
+              className={styles.selector}
               placeholder="Выберите тренажёр"
-              style={{ width: 320 }}
               value={selectedKey}
               onChange={(v) => setSelectedKey(v ?? null)}
             />
           )}
-        </Flexbox>
+        </div>
       </div>
 
       {loading && (
@@ -866,9 +934,16 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
             itemsType="group"
             variant="filled"
             {...FORM_STYLE}
+            itemMinWidth={isMobileLayout ? '100%' : FORM_STYLE.itemMinWidth}
+            style={{ maxWidth: isMobileLayout ? '100%' : FORM_STYLE.style?.maxWidth, width: '100%' }}
           />
-          <Flexbox align="flex-end" style={{ marginTop: 0, maxWidth: FORM_STYLE.style?.maxWidth }}>
+          <Flexbox
+            align="flex-end"
+            className={styles.saveBar}
+            style={{ marginTop: 0, maxWidth: isMobileLayout ? '100%' : FORM_STYLE.style?.maxWidth }}
+          >
             <Button
+              block={isMobileLayout}
               icon={<Save size={16} />}
               loading={saving}
               type="primary"
@@ -879,8 +954,11 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
             </Button>
           </Flexbox>
 
-          <div className={styles.section} style={{ marginTop: 24, maxWidth: FORM_STYLE.style?.maxWidth }}>
-            <Flexbox align="center" gap={16} horizontal justify="space-between" style={{ marginBottom: 16 }}>
+          <div
+            className={styles.section}
+            style={{ marginTop: 24, maxWidth: isMobileLayout ? '100%' : FORM_STYLE.style?.maxWidth }}
+          >
+            <div className={styles.headerSection} style={{ marginBottom: 16 }}>
               <Flexbox align="center" gap={8} horizontal>
                 {groupIcon(BookOpen, '#f59e0b')}
                 <div className={styles.sectionTitle} style={{ marginBottom: 0, fontSize: 18 }}>
@@ -888,6 +966,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
                 </div>
               </Flexbox>
               <Button
+                block={isMobileLayout}
                 icon={<Plus size={14} />}
                 loading={knowledgeLoading}
                 type="primary"
@@ -895,8 +974,57 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
               >
                 Добавить
               </Button>
-            </Flexbox>
-            <Table<KnowledgeEntry>
+            </div>
+            {isMobileLayout ? (
+              <div className={styles.knowledgeCards}>
+                {payload.knowledgeEntries.map((record) => (
+                  <div key={record.id} className={styles.knowledgeCard}>
+                    <div className={styles.knowledgeCardTitle}>{record.productIngredient}</div>
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, color: 'var(--colorTextSecondary)', marginBottom: 4 }}>
+                        Официальное УТП
+                      </div>
+                      <div>{record.officialUsp}</div>
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, color: 'var(--colorTextSecondary)', marginBottom: 4 }}>
+                        Миф для атаки
+                      </div>
+                      <div>{record.attackMyth}</div>
+                    </div>
+                    <Flexbox gap={8} style={{ flexDirection: 'column' }}>
+                      <Button
+                        block
+                        icon={<Pencil size={14} />}
+                        size="small"
+                        onClick={() => openKnowledgeModal('edit', record)}
+                      >
+                        Изменить
+                      </Button>
+                      <Button
+                        block
+                        danger
+                        icon={<Trash2 size={14} />}
+                        size="small"
+                        onClick={() => {
+                          AntModal.confirm({
+                            title: 'Удалить запись?',
+                            content: `Запись «${record.productIngredient}» будет удалена.`,
+                            okText: 'Удалить',
+                            cancelText: 'Отмена',
+                            okButtonProps: { danger: true },
+                            onOk: () => handleDeleteKnowledge(record.id),
+                          });
+                        }}
+                      >
+                        Удалить
+                      </Button>
+                    </Flexbox>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Table<KnowledgeEntry>
               columns={[
                 { dataIndex: 'productIngredient', title: 'Продукт/Ингредиент', width: 220 },
                 { dataIndex: 'officialUsp', title: 'Официальное УТП' },
@@ -939,7 +1067,8 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
               pagination={false}
               rowKey="id"
               size="small"
-            />
+              />
+            )}
           </div>
         </Flexbox>
       )}
@@ -952,6 +1081,7 @@ const TrainingScenarioEditor = memo(({ initialKey, hideSelector }: TrainingScena
         confirmLoading={knowledgeLoading}
         okText={knowledgeModalMode === 'add' ? 'Добавить' : 'Сохранить'}
         cancelText="Отмена"
+        width={isMobileLayout ? 'calc(100vw - 24px)' : 520}
         destroyOnClose
       >
         <Form form={knowledgeForm} layout="vertical" style={{ marginTop: 16 }}>

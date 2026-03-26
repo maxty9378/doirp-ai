@@ -113,6 +113,16 @@ export interface VoiceCallSessionAnalysisResult {
   summary: string;
 }
 
+export interface VoiceCallSessionDebugLog {
+  agentId: string;
+  events: Array<{
+    at: string;
+    data?: Record<string, unknown>;
+    type: string;
+  }>;
+  status: string;
+}
+
 export const voiceCallSessions = pgTable(
   'voice_call_sessions',
   {
@@ -127,6 +137,7 @@ export const voiceCallSessions = pgTable(
     speakerName: text('speaker_name'),
     transcript: jsonb('transcript').$type<Array<{ role: 'ai' | 'user'; text: string }>>().notNull(),
     analysisResult: jsonb('analysis_result').$type<VoiceCallSessionAnalysisResult>(),
+    debugLog: jsonb('debug_log').$type<VoiceCallSessionDebugLog>(),
     score: integer('score'),
     hangUpReason: text('hang_up_reason'),
     durationSeconds: integer('duration_seconds'),

@@ -4,20 +4,20 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
+import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
 import {
   GFD_STRESS_TRAINING_KEY,
   GFD_STRESS_TRAINING_KNOWLEDGE,
   GFD_STRESS_TRAINING_SCENARIO,
 } from '@/config/training/gfdStressScenario';
-import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
+import { serverDB } from '@/database/server';
 import { getLLMConfig } from '@/envs/llm';
+import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import {
   buildTrainingKnowledgeContext,
   getTrainingScenarioWithKnowledge,
   type TrainingScenarioWithKnowledge,
 } from '@/server/services/training';
-import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
-import { serverDB } from '@/database/server';
 
 const TP_PRICE_AGENT_ID = 'training-tp-price-objection';
 const DEFAULT_CONTEXT_WINDOW = 5;
@@ -64,6 +64,11 @@ const LIVE_BEHAVIOR_RULES = [
   'Финал диалога должен звучать как естественное завершение живой беседы на конференции, без служебных фраз про «кладу трубку».',
   'Если собеседник переходит на оскорбления или хамство, ответь жестко, предупреди о последствиях и заверши разговор.',
   'Каждая реплика короткая: 1-2 предложения, только прямая речь персонажа.',
+].join('\n');
+const LIVE_AUDIO_BEHAVIOR_RULES = [
+  'Если речь собеседника оборвалась, часть слов пропала или звук был неразборчив, сначала нейтрально попроси повторить или уточнить последнюю мысль.',
+  'Не утверждай уверенно, что собеседник молчит, пока не переспросишь его хотя бы один раз.',
+  'Если звук временно пропал, реагируй как в реальном разговоре: коротко уточни, слышно ли собеседника, и затем вернись к интервью.',
 ].join('\n');
 
 const buildTpPriceVoiceSystem = (preset: {
@@ -168,7 +173,6 @@ export async function GET(request: Request) {
       sessionUser.username ||
       sessionUser.email;
     const userFullName = (rawFullName && String(rawFullName).trim()) || 'Менеджер';
-    const userFirstName = userFullName.split(' ')[0] || userFullName;
     const baseSystemInstruction = isTpPrice && preset ? buildTpPriceVoiceSystem(preset) : preset?.systemRole ?? '';
     const knowledgeContext = trainingScenario
       ? buildTrainingKnowledgeContext(trainingScenario.knowledgeEntries)
@@ -186,7 +190,11 @@ export async function GET(request: Request) {
         : '- В диалоге обращайся к собеседнику вежливо на «вы», без упоминания имени из аккаунта, если явно не указано другое имя.',
     ];
 
-    const systemInstruction = [baseWithScenario, userContextLines.join('\n')].join('\n\n');
+    const systemInstruction = [
+      baseWithScenario,
+      LIVE_AUDIO_BEHAVIOR_RULES,
+      userContextLines.join('\n'),
+    ].join('\n\n');
     const requestedVoice = trainingScenario?.scenario.voiceName || DEFAULT_LIVE_VOICE;
     const voiceName = LIVE_VOICES.has(requestedVoice) ? requestedVoice : DEFAULT_LIVE_VOICE;
 
@@ -267,4 +275,3 @@ export async function GET(request: Request) {
 }
 
 export const runtime = 'nodejs';
-

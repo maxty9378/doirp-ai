@@ -71,6 +71,7 @@ const syncLocalSessions = async (local: LocalVoiceCallSession[]) => {
           scenarioId: session.scenarioId,
           transcript: session.transcript,
           analysisResult: session.analysisResult ?? null,
+          debugLog: session.debugLog ?? null,
           durationSeconds: session.durationSeconds,
           speakerName: session.speakerName,
           score: session.score ?? null,

@@ -3,7 +3,15 @@
 import { Flexbox, Text } from '@lobehub/ui';
 import { Progress } from 'antd';
 import { createStaticStyles } from 'antd-style';
-import { Activity, Award, FileText, Lightbulb, MessageSquare, Target, TrendingUp } from 'lucide-react';
+import {
+  Activity,
+  Award,
+  FileText,
+  Lightbulb,
+  MessageSquare,
+  Target,
+  TrendingUp,
+} from 'lucide-react';
 import { memo, useState } from 'react';
 
 import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
@@ -18,9 +26,9 @@ export interface PostCallReportData {
   improvements: string[];
   overallScore: number;
   phraseFeedback: Array<{
-    userPhrase: string;
-    suggestedPhrase: string;
     advice: string;
+    suggestedPhrase: string;
+    userPhrase: string;
   }>;
   recommendedAction?: string;
   strengths: string[];
@@ -37,6 +45,7 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     grid-template-columns: 1fr;
     gap: 24px;
     margin-bottom: 28px;
+
     @media (min-width: 900px) {
       grid-template-columns: 280px 1fr;
       align-items: start;
@@ -46,21 +55,21 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     margin-bottom: 20px;
   `,
   sectionTitle: css`
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 10px;
     font-size: 13px;
     font-weight: 600;
     color: ${cssVar.colorTextSecondary};
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    margin-bottom: 10px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
   `,
   scoreBig: css`
+    margin-bottom: 4px;
     font-size: 48px;
     font-weight: 700;
     line-height: 1;
-    margin-bottom: 4px;
   `,
   scoreLabel: css`
     font-size: 14px;
@@ -71,20 +80,35 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     align-items: center;
     gap: 12px;
     margin-bottom: 10px;
+
+    @media (width <= 640px) {
+      flex-wrap: wrap;
+      gap: 8px;
+    }
   `,
   competencyName: css`
     flex: 0 0 200px;
     font-size: 13px;
     color: ${cssVar.colorText};
+
+    @media (width <= 640px) {
+      flex: 1 1 100%;
+    }
   `,
   competencyBar: css`
     flex: 1;
     max-width: 280px;
+
+    @media (width <= 640px) {
+      max-width: none;
+      width: 100%;
+    }
   `,
   summaryText: css`
     font-size: 14px;
     line-height: 1.6;
     color: ${cssVar.colorText};
+    word-break: break-word;
   `,
   list: css`
     padding-left: 18px;
@@ -97,34 +121,35 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     margin-bottom: 6px;
   `,
   phraseCard: css`
+    padding: 14px;
+    margin-bottom: 12px;
     background: ${cssVar.colorBgContainer};
     border: 1px solid ${cssVar.colorBorderSecondary};
     border-radius: 12px;
-    padding: 14px;
-    margin-bottom: 12px;
   `,
   phraseLabel: css`
+    margin-bottom: 4px;
     font-size: 11px;
     font-weight: 600;
     color: ${cssVar.colorTextTertiary};
     text-transform: uppercase;
-    margin-bottom: 4px;
   `,
   phraseText: css`
+    margin-bottom: 10px;
     font-size: 14px;
     color: ${cssVar.colorText};
-    margin-bottom: 10px;
+    word-break: break-word;
   `,
   suggestedWrap: css`
-    border-left: 3px solid ${cssVar.colorPrimary};
     padding-left: 10px;
     margin-top: 8px;
+    border-left: 3px solid ${cssVar.colorPrimary};
   `,
   adviceText: css`
-    font-size: 12px;
-    color: ${cssVar.colorTextSecondary};
-    font-style: italic;
     margin-top: 6px;
+    font-size: 12px;
+    font-style: italic;
+    color: ${cssVar.colorTextSecondary};
   `,
   behaviorGrid: css`
     display: grid;
@@ -133,49 +158,56 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     margin-top: 12px;
   `,
   behaviorCard: css`
+    padding: 16px;
     background: ${cssVar.colorBgElevated};
     border: 1px solid ${cssVar.colorBorder};
     border-radius: 12px;
-    padding: 16px;
   `,
   behaviorTitle: css`
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-bottom: 8px;
     font-size: 12px;
     font-weight: 600;
     color: ${cssVar.colorTextSecondary};
     text-transform: uppercase;
-    margin-bottom: 8px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
   `,
   behaviorText: css`
     font-size: 14px;
-    color: ${cssVar.colorText};
     line-height: 1.5;
+    color: ${cssVar.colorText};
+    word-break: break-word;
   `,
   transcriptCard: css`
+    max-height: 500px;
+    padding: 16px;
+    margin-top: 12px;
+    overflow-y: auto;
     background: ${cssVar.colorBgElevated};
     border: 1px solid ${cssVar.colorBorderSecondary};
     border-radius: 12px;
-    padding: 16px;
-    margin-top: 12px;
-    max-height: 500px;
-    overflow-y: auto;
+
+    @media (width <= 640px) {
+      max-height: 360px;
+      padding: 12px;
+    }
   `,
   transcriptMsg: css`
     margin-bottom: 12px;
     font-size: 14px;
     line-height: 1.5;
+    word-break: break-word;
   `,
   roleAi: css`
+    margin-bottom: 2px;
     font-weight: 600;
     color: ${cssVar.colorInfoText};
-    margin-bottom: 2px;
   `,
   roleUser: css`
+    margin-bottom: 2px;
     font-weight: 600;
     color: ${cssVar.colorSuccessText};
-    margin-bottom: 2px;
   `,
 }));
 
@@ -208,7 +240,12 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
             </div>
             <div className={styles.scoreLabel}>
               Оценка за диалог
-              {speakerName && <><br /><span style={{ fontWeight: 600 }}>Спикер:</span> {speakerName}</>}
+              {speakerName && (
+                <>
+                  <br />
+                  <span style={{ fontWeight: 600 }}>Спикер:</span> {speakerName}
+                </>
+              )}
             </div>
           </div>
 
@@ -219,13 +256,15 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
                 Компетенции
               </div>
               {data.competencies.map((c) => (
-                <div className={styles.competencyRow} key={c.name}>
+                <div key={c.name} className={styles.competencyRow}>
                   <span className={styles.competencyName}>{c.name}</span>
                   <div className={styles.competencyBar}>
                     <Progress
                       percent={Math.min(100, Math.max(0, c.score))}
                       size="small"
-                      strokeColor={c.score >= 60 ? '#22c55e' : c.score >= 40 ? '#eab308' : '#ef4444'}
+                      strokeColor={
+                        c.score >= 60 ? '#22c55e' : c.score >= 40 ? '#eab308' : '#ef4444'
+                      }
                     />
                   </div>
                   <Text style={{ fontSize: 12, minWidth: 32 }} type="secondary">
@@ -256,7 +295,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
           </div>
           <ul className={styles.list}>
             {data.strengths.map((s, i) => (
-              <li className={styles.listItem} key={i}>
+              <li key={i} className={styles.listItem}>
                 {s}
               </li>
             ))}
@@ -269,7 +308,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
           <div className={styles.sectionTitle}>Области для улучшения</div>
           <ul className={styles.list}>
             {data.improvements.map((s, i) => (
-              <li className={styles.listItem} key={i}>
+              <li key={i} className={styles.listItem}>
                 {s}
               </li>
             ))}
@@ -283,7 +322,15 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
             <Lightbulb size={16} />
             Рекомендация тренера
           </div>
-          <div className={styles.summaryText} style={{ fontStyle: 'italic', background: 'var(--colorFillTertiary)', padding: 12, borderRadius: 8 }}>
+          <div
+            className={styles.summaryText}
+            style={{
+              padding: 12,
+              fontStyle: 'italic',
+              background: 'var(--colorFillTertiary)',
+              borderRadius: 8,
+            }}
+          >
             {data.recommendedAction}
           </div>
         </div>
@@ -311,7 +358,9 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
             {data.behavioralMetrics.repetitionAndRudeness && (
               <div className={styles.behaviorCard}>
                 <div className={styles.behaviorTitle}>Этика и повторяемость</div>
-                <div className={styles.behaviorText}>{data.behavioralMetrics.repetitionAndRudeness}</div>
+                <div className={styles.behaviorText}>
+                  {data.behavioralMetrics.repetitionAndRudeness}
+                </div>
               </div>
             )}
           </div>
@@ -323,7 +372,7 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
           <div className={styles.sectionTitle}>Построчный разбор реплик</div>
           <Flexbox gap={8} style={{ flexDirection: 'column' }}>
             {data.phraseFeedback.map((p, i) => (
-              <div className={styles.phraseCard} key={i}>
+              <div key={i} className={styles.phraseCard}>
                 <div className={styles.phraseLabel}>Вы сказали</div>
                 <div className={styles.phraseText}>{p.userPhrase}</div>
                 <div className={styles.phraseLabel}>Предлагаемый вариант</div>
@@ -339,17 +388,21 @@ const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerNam
 
       {normalizedTranscript.length > 0 && (
         <div className={styles.section}>
-          <div className={styles.sectionTitle} style={{ cursor: 'pointer', color: 'var(--colorPrimary)' }} onClick={() => setShowTranscript(!showTranscript)}>
+          <div
+            className={styles.sectionTitle}
+            style={{ cursor: 'pointer', color: 'var(--colorPrimary)' }}
+            onClick={() => setShowTranscript(!showTranscript)}
+          >
             <FileText size={16} />
             {showTranscript ? 'Скрыть полную транскрипцию' : 'Посмотреть полную транскрипцию'}
           </div>
-          
+
           {showTranscript && (
             <div className={styles.transcriptCard}>
               {normalizedTranscript.map((msg, i) => (
-                <div className={styles.transcriptMsg} key={i}>
+                <div key={i} className={styles.transcriptMsg}>
                   <div className={msg.role === 'ai' ? styles.roleAi : styles.roleUser}>
-                    {msg.role === 'ai' ? 'ИИ-агент:' : (speakerName || 'Вы') + ':'}
+                    {msg.role === 'ai' ? 'ИИ-агент:' : `${speakerName || 'Вы'}:`}
                   </div>
                   <div>{msg.text}</div>
                 </div>

@@ -122,7 +122,7 @@ const normalizeUserTranscriptText = (text: string) => {
   };
 
   const joinPattern =
-    /\b([а-яё]{2,4})\s+([а-яё]{2,8})(?:\s+([а-яё]{2,4}))?(?:\s+([а-яё]{2,4}))?\b/giu;
+    /\b(\p{scx=Cyrl}{2,4})\s+(\p{scx=Cyrl}{2,8})(?:\s+(\p{scx=Cyrl}{2,4}))?(?:\s+(\p{scx=Cyrl}{2,4}))?\b/giu;
 
   for (let iteration = 0; iteration < 3; iteration++) {
     normalized = normalized.replaceAll(joinPattern, (match, p1, p2, p3, p4) => {
@@ -261,6 +261,7 @@ export const dropLikelyEchoUserEntriesAgainstAiCorpus = <T extends VoiceCallTran
 
 export const mergeAdjacentTranscriptEntries = <T extends VoiceCallTranscriptEntry>(
   entries: T[],
+  options?: { mergeUser?: boolean },
 ): T[] => {
   if (entries.length < 2) return entries;
 
@@ -268,7 +269,8 @@ export const mergeAdjacentTranscriptEntries = <T extends VoiceCallTranscriptEntr
 
   for (const entry of entries) {
     const last = merged.at(-1);
-    if (!last || last.role !== entry.role) {
+    const shouldKeepSeparateUserEntry = entry.role === 'user' && options?.mergeUser === false;
+    if (!last || last.role !== entry.role || shouldKeepSeparateUserEntry) {
       merged.push({ ...entry });
       continue;
     }
@@ -293,15 +295,21 @@ export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
     .filter((e) => e.text.length > 0) as T[];
 
   if (trimmed.length === 0) return trimmed;
-  const merged = mergeAdjacentTranscriptEntries(trimmed);
-  const noAdjacentEcho = dropLikelyEchoUserEntries(merged);
-  if (options?.mode !== 'analysis') return noAdjacentEcho;
+  const noAdjacentEcho = dropLikelyEchoUserEntries(trimmed);
+  const withoutNoise =
+    options?.mode === 'analysis'
+      ? (noAdjacentEcho.filter((e) =>
+          e.role === 'user' ? !looksLikeNoisyUserFragment(e.text) : true,
+        ) as T[])
+      : noAdjacentEcho;
+  const merged = mergeAdjacentTranscriptEntries(withoutNoise, {
+    mergeUser: options?.mode !== 'analysis',
+  });
+  if (options?.mode !== 'analysis') return merged;
 
-  const noEcho = dropLikelyEchoUserEntriesAgainstAiCorpus(noAdjacentEcho);
+  const noEcho = dropLikelyEchoUserEntriesAgainstAiCorpus(merged);
 
   // Для анализа дополнительно выкидываем «шумовые» короткие обрывки речи пользователя,
   // чтобы LLM не превращал их в phraseFeedback.
-  return noEcho.filter((e) =>
-    e.role === 'user' ? !looksLikeNoisyUserFragment(e.text) : true,
-  ) as T[];
+  return noEcho;
 };

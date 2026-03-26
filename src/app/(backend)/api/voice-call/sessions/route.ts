@@ -1,4 +1,8 @@
-import { type VoiceCallSessionAnalysisResult, voiceCallSessions } from '@lobechat/database/schemas';
+import {
+  type VoiceCallSessionAnalysisResult,
+  type VoiceCallSessionDebugLog,
+  voiceCallSessions,
+} from '@lobechat/database/schemas';
 import { desc, eq } from 'drizzle-orm';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
@@ -11,8 +15,42 @@ import { normalizeVoiceCallTranscriptWithGemini } from '../_normalizeTranscript'
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
+const MAX_DEBUG_EVENTS = 300;
 
 export const runtime = 'nodejs';
+
+const normalizeDebugLog = (value: unknown): VoiceCallSessionDebugLog | null => {
+  if (!value || typeof value !== 'object') return null;
+
+  const candidate = value as {
+    agentId?: unknown;
+    events?: unknown;
+    status?: unknown;
+  };
+
+  const events = Array.isArray(candidate.events)
+    ? candidate.events
+        .flatMap((event) => {
+          if (!event || typeof event !== 'object') return [];
+          const record = event as { at?: unknown; data?: unknown; type?: unknown };
+          return [{
+            at: typeof record.at === 'string' ? record.at : new Date().toISOString(),
+            data:
+              record.data && typeof record.data === 'object'
+                ? (record.data as Record<string, unknown>)
+                : undefined,
+            type: typeof record.type === 'string' ? record.type : 'unknown',
+          }];
+        })
+        .slice(-MAX_DEBUG_EVENTS)
+    : [];
+
+  return {
+    agentId: typeof candidate.agentId === 'string' ? candidate.agentId : 'unknown',
+    events,
+    status: typeof candidate.status === 'string' ? candidate.status : 'unknown',
+  };
+};
 
 export async function GET(req: Request) {
   try {
@@ -89,6 +127,7 @@ export async function POST(req: Request) {
       durationSeconds?: number;
       score?: number;
       speakerName?: string;
+      debugLog?: VoiceCallSessionDebugLog | null;
     };
 
     const scenarioId =
@@ -97,21 +136,25 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'scenarioId or agentId is required' }, { status: 400 });
     }
 
+    const debugLog = normalizeDebugLog(body.debugLog);
     const transcript = Array.isArray(body.transcript) ? body.transcript : [];
-    if (transcript.length === 0) {
+    if (transcript.length === 0 && (!debugLog || debugLog.events.length === 0)) {
       return NextResponse.json(
-        { error: 'transcript is required (non-empty array)' },
+        { error: 'transcript is required unless debugLog contains captured events' },
         { status: 400 },
       );
     }
 
-    const sanitizedTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
-    const cleanedTranscript = await normalizeVoiceCallTranscriptWithGemini(sanitizedTranscript);
-    if (cleanedTranscript.length === 0) {
-      return NextResponse.json(
-        { error: 'transcript is required (non-empty array after cleanup)' },
-        { status: 400 },
-      );
+    let cleanedTranscript: Array<{ role: 'ai' | 'user'; text: string }> = [];
+    if (transcript.length > 0) {
+      const sanitizedTranscript = sanitizeVoiceCallTranscript(transcript, { mode: 'store' });
+      cleanedTranscript = await normalizeVoiceCallTranscriptWithGemini(sanitizedTranscript);
+      if (cleanedTranscript.length === 0 && (!debugLog || debugLog.events.length === 0)) {
+        return NextResponse.json(
+          { error: 'transcript is required (non-empty array after cleanup)' },
+          { status: 400 },
+        );
+      }
     }
 
     const [created] = await serverDB
@@ -121,6 +164,7 @@ export async function POST(req: Request) {
         scenarioId,
         transcript: cleanedTranscript,
         analysisResult: body.analysisResult ?? null,
+        debugLog,
         score: typeof body.score === 'number' ? body.score : null,
         speakerName: typeof body.speakerName === 'string' ? body.speakerName : null,
         hangUpReason: typeof body.hangUpReason === 'string' ? body.hangUpReason : null,

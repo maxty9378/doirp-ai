@@ -1,6 +1,9 @@
+import { type VoiceCallDebugSnapshot } from './voiceCallDebug';
+
 export interface LocalVoiceCallSession {
   analysisResult: any | null;
   createdAt: string;
+  debugLog?: VoiceCallDebugSnapshot | null;
   durationSeconds?: number;
   hangUpReason?: string;
   id: string;

@@ -12,9 +12,13 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     max-width: 720px;
     margin: 0 auto;
     padding: 24px 16px;
+
+    @media (width <= 640px) {
+      padding: 8px 0 16px;
+    }
   `,
   title: css`
-    margin: 0 0 8px 0;
+    margin: 0 0 8px;
     font-size: 22px;
     font-weight: 700;
     color: ${cssVar.colorText};
@@ -23,12 +27,12 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     width: 100%;
     padding: 16px;
     margin-bottom: 16px;
-    border: 1px solid ${cssVar.colorBorderSecondary};
-    border-radius: 14px;
-    background: ${cssVar.colorFillQuaternary};
     font-size: 14px;
     line-height: 1.6;
     color: ${cssVar.colorText};
+    background: ${cssVar.colorFillQuaternary};
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 14px;
   `,
   cardTitle: css`
     display: flex;
@@ -56,18 +60,31 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     flex-wrap: wrap;
     gap: 12px;
     margin-top: 24px;
+
+    @media (width <= 640px) {
+      flex-direction: column;
+    }
   `,
   btnPrimary: css`
     min-width: 200px;
+
+    @media (width <= 640px) {
+      width: 100%;
+    }
   `,
   btnSecondary: css`
     min-width: 160px;
+
+    @media (width <= 640px) {
+      width: 100%;
+    }
   `,
 }));
 
 export interface TrainingLegendScreenProps {
   goals?: string[];
   legend: string;
+  mobile?: boolean;
   onEdit?: () => void;
   onStart: () => void;
   title?: string | null;
@@ -101,11 +118,11 @@ const TrainingLegendScreen = memo<TrainingLegendScreenProps>(
           </div>
         )}
         <div className={styles.actions}>
-          <Button className={styles.btnPrimary} onClick={onStart} size="large" type="primary">
+          <Button className={styles.btnPrimary} size="large" type="primary" onClick={onStart}>
             Начать
           </Button>
           {onEdit && (
-            <Button className={styles.btnSecondary} onClick={onEdit} size="large">
+            <Button className={styles.btnSecondary} size="large" onClick={onEdit}>
               Редактировать
             </Button>
           )}

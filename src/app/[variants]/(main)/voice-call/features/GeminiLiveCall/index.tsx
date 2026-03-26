@@ -16,6 +16,7 @@ import { VOICE_AGENT_TITLES } from '@/config/voiceAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
+import { getVoiceCallDebugSnapshot, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
 import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 import { LOCAL_SESSION_PREFIX, saveLocalVoiceCallSession } from '@/utils/voiceCallLocalSessions';
 
@@ -38,6 +39,11 @@ const styles = createStaticStyles(({ css }) => ({
 
     transition: box-shadow 0.5s ease;
 
+    @media (width <= 640px) {
+      padding: 12px;
+      padding-block-end: calc(env(safe-area-inset-bottom, 0px) + 84px);
+    }
+
     @media (width >= 640px) {
       padding-block-end: 16px;
     }
@@ -58,6 +64,11 @@ const styles = createStaticStyles(({ css }) => ({
     background: none;
     &:hover {
       color: var(--color-text);
+    }
+
+    @media (width <= 640px) {
+      inset-block-start: 12px;
+      inset-inline-start: 12px;
     }
   `,
   hangUpBanner: css`
@@ -283,6 +294,12 @@ const styles = createStaticStyles(({ css }) => ({
     &:hover {
       transform: translateX(-50%) scale(1.08);
     }
+
+    @media (width <= 640px) {
+      inset-block-end: calc(env(safe-area-inset-bottom, 0px) + 20px);
+      width: 68px;
+      height: 68px;
+    }
   `,
   nameDialogMask: css`
     position: fixed;
@@ -309,6 +326,10 @@ const styles = createStaticStyles(({ css }) => ({
       padding-inline: 20px;
       border-radius: ${cssVar.borderRadiusLG};
       background: ${cssVar.colorBgContainer};
+    }
+
+    @media (width <= 640px) {
+      max-width: calc(100vw - 24px);
     }
   `,
   nameDialogHeader: css`
@@ -397,6 +418,12 @@ const styles = createStaticStyles(({ css }) => ({
     margin-block-start: 18px;
     padding-block-start: 12px;
     border-block-start: 1px solid var(--color-split);
+
+    @media (width <= 640px) {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 12px;
+    }
   `,
   nameDialogMeta: css`
     max-width: 60%;
@@ -735,6 +762,7 @@ export interface VoiceCallEndPayload {
     };
     phraseFeedback: Array<{ userPhrase: string; suggestedPhrase: string; advice: string }>;
   };
+  debugLog?: VoiceCallDebugSnapshot | null;
   error?: string;
   sessionId?: string;
   speakerName?: string;
@@ -749,6 +777,7 @@ export interface GeminiLiveCallProps {
   agentId: string;
   autoConnect?: boolean;
   embedded?: boolean;
+  layoutMode?: 'desktop' | 'mobile';
   onEnd?: (payload: VoiceCallEndPayload) => void;
   /** Выход с экрана звонка (кнопка в модалке ошибки). */
   onExit?: () => void;
@@ -759,8 +788,9 @@ const CONNECTION_ERROR_DESC =
   'Не удалось установить соединение с голосовым сервисом. Проверьте подключение к интернету, отключите или настройте VPN, антивирус и прокси. Убедитесь, что сервис Google доступен в вашем регионе.';
 
 const GeminiLiveCall = memo(
-  ({ agentId, autoConnect, embedded, onEnd, onExit }: GeminiLiveCallProps) => {
+  ({ agentId, autoConnect, embedded, layoutMode = 'desktop', onEnd, onExit }: GeminiLiveCallProps) => {
     const navigate = useNavigate();
+    const isMobileLayout = layoutMode === 'mobile';
 
     const [nickName, username, displayUserName] = useUserStore((s) => [
       userProfileSelectors.nickName(s),
@@ -787,6 +817,7 @@ const GeminiLiveCall = memo(
       async (transcript: TranscriptEntry[]): Promise<VoiceCallEndPayload> => {
         let analysisResult: VoiceCallEndPayload['analysisResult'] | undefined;
         let analyzeError: string | undefined;
+        const debugLog = getVoiceCallDebugSnapshot();
         const durationSec = callStartAtRef.current
           ? Math.floor((Date.now() - callStartAtRef.current) / 1000)
           : 0;
@@ -855,6 +886,7 @@ const GeminiLiveCall = memo(
               scenarioId: agentId,
               transcript: transcriptToStore,
               analysisResult: analysisResult ?? null,
+              debugLog,
               durationSeconds: durationSec,
               speakerName,
               score: analysisResult?.overallScore ?? null,
@@ -878,6 +910,7 @@ const GeminiLiveCall = memo(
             scenarioId: agentId,
             transcript: transcriptToStore,
             analysisResult: analysisResult ?? null,
+            debugLog,
             score: analysisResult?.overallScore ?? null,
             hangUpReason: hangUpReasonRef.current ?? undefined,
             durationSeconds: durationSec,
@@ -891,12 +924,77 @@ const GeminiLiveCall = memo(
         }
 
         if (analyzeError) {
-          return { transcript: transcriptToStore, error: analyzeError, sessionId, speakerName };
+          return {
+            transcript: transcriptToStore,
+            error: analyzeError,
+            sessionId,
+            speakerName,
+            debugLog,
+          };
         }
-        return { transcript: transcriptToStore, analysisResult, sessionId, speakerName };
+        return { transcript: transcriptToStore, analysisResult, sessionId, speakerName, debugLog };
       },
       [agentId, speakerName],
     );
+
+    const persistDebugOnlySession = useCallback(async () => {
+      const debugLog = getVoiceCallDebugSnapshot();
+      const durationSec = callStartAtRef.current
+        ? Math.floor((Date.now() - callStartAtRef.current) / 1000)
+        : 0;
+
+      if (!debugLog?.events?.length || durationSec <= 0) {
+        return { debugLog, sessionId: undefined as string | undefined };
+      }
+
+      let sessionId: string | undefined;
+      let saveError: string | undefined;
+      try {
+        const saveRes = await fetch('/api/voice-call/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            scenarioId: agentId,
+            transcript: [],
+            debugLog,
+            durationSeconds: durationSec,
+            speakerName,
+            hangUpReason: hangUpReasonRef.current ?? null,
+            score: null,
+            analysisResult: null,
+          }),
+          credentials: 'include',
+        });
+        if (!saveRes.ok) {
+          saveError = `HTTP ${saveRes.status}`;
+        }
+        const saveData = saveRes.ok ? await saveRes.json().catch(() => null) : null;
+        sessionId = saveData?.id as string | undefined;
+      } catch (e) {
+        saveError = e instanceof Error ? e.message : 'Network error';
+      }
+
+      if (!sessionId) {
+        const localId = createLocalSessionId();
+        saveLocalVoiceCallSession({
+          id: localId,
+          scenarioId: agentId,
+          transcript: [],
+          analysisResult: null,
+          debugLog,
+          score: null,
+          hangUpReason: hangUpReasonRef.current ?? undefined,
+          durationSeconds: durationSec,
+          speakerName,
+          createdAt: new Date().toISOString(),
+          localOnly: true,
+          saveError,
+        });
+        sessionId = localId;
+      }
+
+      return { debugLog, sessionId };
+    }, [agentId, speakerName]);
 
     const handleConfirmSpeaker = () => {
       const trimmed = speakerName.trim();
@@ -912,25 +1010,30 @@ const GeminiLiveCall = memo(
         setAllowAutoConnect(false);
 
         if (transcript.length === 0) {
+          const { debugLog, sessionId } = await persistDebugOnlySession();
           if (manualFailRef.current) {
             const durationSec = callStartAtRef.current
               ? Math.floor((Date.now() - callStartAtRef.current) / 1000)
               : 0;
             if (durationSec > 30) {
               setPendingManualPayload({
+                debugLog,
+                sessionId,
                 transcript: [],
                 error: `Транскрипция не была получена от сервера. Попробуйте ещё раз.`,
               });
             } else {
               setPendingManualPayload({
+                debugLog,
+                sessionId,
                 transcript: [],
                 error: `Разговор завершился слишком быстро (${durationSec} сек.) для анализа.`,
               });
             }
             return;
           }
-          if (onEnd) onEnd({ transcript: [] });
-          else navigate('/');
+          if (onEnd) onEnd({ transcript: [], debugLog, sessionId });
+          else navigate(isMobileLayout ? '/training' : '/');
           return;
         }
 
@@ -941,7 +1044,11 @@ const GeminiLiveCall = memo(
             setPendingManualPayload(payload);
           } catch (e) {
             const errorMessage = e instanceof Error ? e.message : 'Ошибка анализа';
-            setPendingManualPayload({ transcript, error: errorMessage });
+            setPendingManualPayload({
+              transcript,
+              error: errorMessage,
+              debugLog: getVoiceCallDebugSnapshot(),
+            });
           } finally {
             setIsBackgroundAnalyzing(false);
           }
@@ -952,16 +1059,16 @@ const GeminiLiveCall = memo(
         try {
           const payload = await analyzeTranscript(transcript);
           if (onEnd) onEnd(payload);
-          else navigate('/');
+          else navigate(isMobileLayout ? '/training' : '/');
         } catch (e) {
           const errorMessage = e instanceof Error ? e.message : 'Ошибка анализа';
-          if (onEnd) onEnd({ transcript, error: errorMessage });
-          else navigate('/');
+          if (onEnd) onEnd({ transcript, error: errorMessage, debugLog: getVoiceCallDebugSnapshot() });
+          else navigate(isMobileLayout ? '/training' : '/');
         } finally {
           setIsAnalyzing(false);
         }
       },
-      [analyzeTranscript, onEnd, navigate],
+      [analyzeTranscript, isMobileLayout, onEnd, navigate, persistDebugOnlySession],
     );
 
     const {
@@ -1039,7 +1146,7 @@ const GeminiLiveCall = memo(
             ? 'Тренировка завершена из-за долгой паузы.'
             : 'Интервью завершено.';
 
-    // Старт соединения после ввода имени и закрытия попапа
+    // Старт соединения после ввода имени и закрытия попапа.
     useEffect(() => {
       if (
         !showNameDialog &&
@@ -1099,7 +1206,7 @@ const GeminiLiveCall = memo(
           'Сбор логов...',
           'Анализ токсичности...',
           'Оценка мимики...',
-          'Финальный отчет...',
+          'Финальный отчёт...',
         ];
         let i = 0;
         setAnalysisText(phases[0]);
@@ -1124,7 +1231,7 @@ const GeminiLiveCall = memo(
             <div className={styles.failedOverlay} />
             <div className={styles.failedCenter}>
               <div className={styles.failedText}>
-                <h1 className={styles.failedTitle}>СЛИЛСЯ</h1>
+                <h1 className={styles.failedTitle}>УШЁЛ ПО-АНГЛИЙСКИ</h1>
                 <div className={styles.failedDesc}>
                   ИНТЕРВЬЮ ПРЕРВАНО.
                   <br />
@@ -1283,7 +1390,7 @@ const GeminiLiveCall = memo(
           </div>
         )}
 
-        {!embedded && (
+        {!embedded && !isMobileLayout && (
           <button className={styles.back} type="button" onClick={() => navigate('/')}>
             ← Выход
           </button>
@@ -1301,12 +1408,12 @@ const GeminiLiveCall = memo(
           centered
           open={status === 'error' && !!errorMessage}
           title={CONNECTION_ERROR_TITLE}
-          width={440}
+          width={isMobileLayout ? 'calc(100vw - 24px)' : 440}
           footer={
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: '1fr 1fr',
+                gridTemplateColumns: isMobileLayout ? '1fr' : '1fr 1fr',
                 gap: 12,
                 width: '100%',
               }}
