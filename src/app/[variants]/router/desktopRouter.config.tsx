@@ -380,6 +380,14 @@ export const desktopRoutes: RouteConfig[] = [
 
       // Voice call (Gemini Live) routes
       {
+        element: dynamicElement(
+          () => import('../(main)/voice-call/beta'),
+          'Desktop > Voice Call > Beta Console',
+        ),
+        errorElement: <ErrorBoundary resetPath="/voice-call/beta" />,
+        path: 'voice-call/beta',
+      },
+      {
         children: [
           {
             element: dynamicElement(() => import('../(main)/voice-call'), 'Desktop > Voice Call'),

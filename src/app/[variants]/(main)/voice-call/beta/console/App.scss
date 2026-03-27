@@ -1,0 +1,124 @@
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:FILL@1&family=Space+Mono:wght@400;700&display=swap');
+
+.voice-call-beta-page {
+  --text: white;
+  --gray-200: #b4b8bb;
+  --gray-300: #80868b;
+  --gray-500: #5f6368;
+  --gray-600: #444444;
+  --gray-700: #202020;
+  --gray-800: #171717;
+  --gray-900: #111111;
+  --gray-1000: #0a0a0a;
+  --border-stroke: #444444;
+  --accent-blue: rgb(161 228 242);
+  --accent-blue-active-bg: #001233;
+  --accent-blue-active: #98beff;
+  --accent-blue-headers: #448dff;
+  --accent-green: rgb(168 218 181);
+  --midnight-blue: rgb(0 18 51);
+  --blue-30: #99beff;
+  --accent-red: #ff4600;
+  --background: var(--gray-900);
+  --color: var(--text);
+  --neutral-00: #000;
+  --neutral-5: #181a1b;
+  --neutral-10: #1c1f21;
+  --neutral-15: #232729;
+  --neutral-20: #2a2f31;
+  --neutral-30: #404547;
+  --neutral-50: #707577;
+  --neutral-60: #888d8f;
+  --neutral-80: #c3c6c7;
+  --neutral-90: #e1e2e3;
+  --green-500: #0d9c53;
+  --green-700: #025022;
+  --blue-400: #80c1ff;
+  --blue-500: #1f94ff;
+  --blue-800: #0f3557;
+  --red-400: #ff9c7a;
+  --red-500: #ff4600;
+  --red-600: #e03c00;
+  --red-700: #bd3000;
+
+  overflow: hidden;
+  width: 100%;
+  height: 100%;
+  font-family: 'Space Mono', monospace;
+  color: var(--text);
+  background: var(--neutral-30);
+  scrollbar-color: var(--gray-600) var(--gray-900);
+  scrollbar-width: thin;
+
+  .material-symbols-outlined {
+    &.filled {
+      font-variation-settings:
+        'FILL' 1,
+        'wght' 400,
+        'GRAD' 0,
+        'opsz' 24;
+    }
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .streaming-console {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    color: var(--gray-300);
+    background: var(--neutral-15);
+
+    a,
+    a:visited,
+    a:active {
+      color: var(--gray-300);
+    }
+
+    .disabled {
+      pointer-events: none;
+
+      > * {
+        pointer-events: none;
+      }
+    }
+
+    main {
+      position: relative;
+      display: flex;
+      flex-grow: 1;
+      flex-direction: column;
+      gap: 1rem;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      max-width: 100%;
+    }
+
+    .main-app-area {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 0;
+    }
+
+    .function-call {
+      position: absolute;
+      top: 0;
+      width: 100%;
+      height: 50%;
+      overflow-y: auto;
+    }
+  }
+
+  .stream {
+    flex-grow: 1;
+    max-width: 90%;
+    max-height: fit-content;
+    border-radius: 32px;
+  }
+}

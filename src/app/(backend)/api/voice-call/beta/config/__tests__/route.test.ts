@@ -1,0 +1,87 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { GET } from '../route';
+
+const mockGetSession = vi.fn();
+vi.mock('@/auth', () => ({
+  auth: {
+    api: {
+      getSession: (...args: unknown[]) => mockGetSession(...args),
+    },
+  },
+}));
+
+vi.mock('next/headers', () => ({
+  headers: vi.fn().mockResolvedValue(new Headers()),
+}));
+
+const mockGetLLMConfig = vi.fn();
+vi.mock('@/envs/llm', () => ({
+  getLLMConfig: () => mockGetLLMConfig(),
+}));
+
+const mockApiKeyManagerPick = vi.fn();
+vi.mock('@/server/modules/ModelRuntime/apiKeyManager', () => ({
+  default: {
+    pick: (key: unknown) => mockApiKeyManagerPick(key),
+  },
+}));
+
+describe('GET /api/voice-call/beta/config', () => {
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+
+    mockGetSession.mockResolvedValue({
+      user: { id: 'user_001' },
+    });
+    mockGetLLMConfig.mockReturnValue({ GOOGLE_API_KEY: 'test-key' });
+    mockApiKeyManagerPick.mockReturnValue('test-key');
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns 401 when session has no user', async () => {
+    mockGetSession.mockResolvedValueOnce(null);
+
+    const res = await GET();
+
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 503 when GOOGLE_API_KEY is not configured', async () => {
+    mockGetLLMConfig.mockReturnValueOnce({});
+    mockApiKeyManagerPick.mockReturnValueOnce(null);
+
+    const res = await GET();
+
+    expect(res.status).toBe(503);
+  });
+
+  it('returns direct-mode payload without proxyBaseUrl', async () => {
+    const res = await GET();
+    const body = (await res.json()) as {
+      apiKey: string;
+      defaultModel: string;
+      defaultVoice: string;
+      proxyBaseUrl: string | null;
+    };
+
+    expect(res.status).toBe(200);
+    expect(body.apiKey).toBe('test-key');
+    expect(body.defaultModel).toBe('models/gemini-2.0-flash-exp');
+    expect(body.defaultVoice).toBe('Aoede');
+    expect(body.proxyBaseUrl).toBeNull();
+  });
+
+  it('returns proxy-mode payload with normalized proxyBaseUrl', async () => {
+    vi.stubEnv('VOICE_CALL_WS_PROXY_URL', 'wss://voice-proxy.example.com/voice-call-ws');
+
+    const res = await GET();
+    const body = (await res.json()) as { proxyBaseUrl: string | null };
+
+    expect(res.status).toBe(200);
+    expect(body.proxyBaseUrl).toBe('https://voice-proxy.example.com/voice-call-ws');
+  });
+});

@@ -60,16 +60,16 @@ async function loadProxyUrlsFromDb(): Promise<string[]> {
       .where(eq(voiceCallProxies.enabled, 1))
       .orderBy(asc(voiceCallProxies.priority), desc(voiceCallProxies.createdAt));
 
-    return rows
-      .map((r) => (typeof r.url === 'string' ? r.url.trim() : ''))
-      .filter(Boolean);
+    return rows.map((r) => (typeof r.url === 'string' ? r.url.trim() : '')).filter(Boolean);
   } catch {
     // DB может быть не настроена (например, запуск на VPS без DATABASE_URL) — тогда используем fallback
     return [];
   }
 }
 
-function getProxyAgentForUrl(url: string): InstanceType<typeof HttpsProxyAgent> | InstanceType<typeof SocksProxyAgent> | undefined {
+function getProxyAgentForUrl(
+  url: string,
+): InstanceType<typeof HttpsProxyAgent> | InstanceType<typeof SocksProxyAgent> | undefined {
   if (!url?.trim()) return undefined;
   const u = url.trim();
   if (u.startsWith('socks')) return new SocksProxyAgent(u);
@@ -78,7 +78,11 @@ function getProxyAgentForUrl(url: string): InstanceType<typeof HttpsProxyAgent> 
 
 function isRetriableCloseReason(reason: string): boolean {
   const r = reason.toLowerCase();
-  return /location|region|not supported|restricted|country|geo/i.test(r) || r.includes('403') || r.length === 0;
+  return (
+    /location|region|not supported|restricted|country|geo/i.test(r) ||
+    r.includes('403') ||
+    r.length === 0
+  );
 }
 
 const server = http.createServer((_req, res) => {
@@ -86,7 +90,7 @@ const server = http.createServer((_req, res) => {
   res.end('Voice call WebSocket proxy. Connect via WebSocket with ?key=YOUR_GOOGLE_API_KEY');
 });
 
-const wss = new WebSocketServer({ server, path: '/' });
+const wss = new WebSocketServer({ server });
 
 const getDataByteLength = (data: Buffer | ArrayBuffer | Buffer[]): number => {
   if (Buffer.isBuffer(data)) return data.length;
@@ -111,7 +115,9 @@ wss.on('connection', (clientWs, req) => {
     const up = currentUpstreamRef.current;
     if (up?.readyState === WebSocket.OPEN) {
       const bytes = getDataByteLength(data);
-      console.log(`[voice-call-ws-proxy] client -> upstream (${bytes} bytes, isBinary=${isBinary})`);
+      console.log(
+        `[voice-call-ws-proxy] client -> upstream (${bytes} bytes, isBinary=${isBinary})`,
+      );
       up.send(data, { binary: isBinary });
     } else {
       clientToUpstreamBuffer.push({ data, isBinary });
@@ -138,7 +144,9 @@ wss.on('connection', (clientWs, req) => {
     const proxyUrlToUse = PROXY_URLS[proxyIndex];
     const agent = getProxyAgentForUrl(proxyUrlToUse);
     const masked = proxyUrlToUse.replace(/:[^:@]+@/, ':****@');
-    console.log(`[voice-call-ws-proxy] Trying upstream via proxy ${proxyIndex + 1}/${PROXY_URLS.length}: ${masked}`);
+    console.log(
+      `[voice-call-ws-proxy] Trying upstream via proxy ${proxyIndex + 1}/${PROXY_URLS.length}: ${masked}`,
+    );
 
     const upstream = new WebSocket(upstreamUrl, {
       agent,
@@ -150,7 +158,9 @@ wss.on('connection', (clientWs, req) => {
       console.log(`[voice-call-ws-proxy] Upstream connected (proxy ${proxyIndex + 1})`);
       for (const { data, isBinary } of clientToUpstreamBuffer) {
         const bytes = getDataByteLength(data);
-        console.log(`[voice-call-ws-proxy] client -> upstream buffered (${bytes} bytes, isBinary=${isBinary})`);
+        console.log(
+          `[voice-call-ws-proxy] client -> upstream buffered (${bytes} bytes, isBinary=${isBinary})`,
+        );
         if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary });
       }
       // Не очищаем буфер, чтобы при закрытии по location error и переходе на следующий прокси
@@ -159,13 +169,19 @@ wss.on('connection', (clientWs, req) => {
 
     upstream.on('message', (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
       const bytes = getDataByteLength(data);
-      console.log(`[voice-call-ws-proxy] upstream -> client (${bytes} bytes, isBinary=${isBinary})`);
+      console.log(
+        `[voice-call-ws-proxy] upstream -> client (${bytes} bytes, isBinary=${isBinary})`,
+      );
       if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data, { binary: isBinary });
     });
 
     upstream.on('close', (code: number, reason: Buffer) => {
       const reasonStr = reason?.toString?.() || '';
-      console.log(`[voice-call-ws-proxy] Upstream closed (proxy ${proxyIndex + 1}):`, code, reasonStr || '(no reason)');
+      console.log(
+        `[voice-call-ws-proxy] Upstream closed (proxy ${proxyIndex + 1}):`,
+        code,
+        reasonStr || '(no reason)',
+      );
       if (currentUpstreamRef.current === upstream) currentUpstreamRef.current = null;
       upstream.removeAllListeners();
       if (clientWs.readyState !== WebSocket.OPEN) return;
