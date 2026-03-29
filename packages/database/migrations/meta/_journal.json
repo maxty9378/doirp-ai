@@ -756,6 +756,13 @@
       "when": 1774763600000,
       "tag": "0107_voice_call_stt_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1774767200000,
+      "tag": "0108_training_gfd_google_live",
+      "breakpoints": true
     }
   ],
   "version": "6"

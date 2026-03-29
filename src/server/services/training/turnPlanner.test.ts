@@ -4,6 +4,7 @@ import { planTrainingTurn } from './turnPlanner';
 
 const knowledgeEntries = [
   {
+    accessedAt: new Date(),
     attackMyth:
       'Как атаковать: Вы говорите про Zero, но там аспартам и ацесульфам. Это подмена сахара химией.',
     createdAt: new Date(),
@@ -15,6 +16,7 @@ const knowledgeEntries = [
     updatedAt: new Date(),
   },
   {
+    accessedAt: new Date(),
     attackMyth:
       'Как атаковать: В Tornado слишком много кофеина, и потребитель получает ударную дозу стимулятора.',
     createdAt: new Date(),
@@ -32,7 +34,10 @@ describe('planTrainingTurn', () => {
     const result = planTrainingTurn({
       knowledgeEntries: [...knowledgeEntries],
       transcript: [
-        { role: 'ai', text: 'Вы называете это честной коммуникацией. Тогда что у вас с Zero и аспартамом?' },
+        {
+          role: 'ai',
+          text: 'Вы называете это честной коммуникацией. Тогда что у вас с Zero и аспартамом?',
+        },
         {
           role: 'user',
           text: 'В линейке Zero нет сахара, мы используем подсластители и держим калорийность ниже.',

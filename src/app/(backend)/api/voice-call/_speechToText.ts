@@ -204,7 +204,7 @@ const uploadTempAudioToGcs = async (buffer: Buffer, mimeType: string) => {
   const response = await proxyFetch(uploadUrl, {
     body: buffer,
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': mimeType,
     },
     method: 'POST',
@@ -259,7 +259,7 @@ const startLongRunningRecognize = async (gcsUri: string) => {
       },
     }),
     headers: {
-      Authorization: `Bearer ${accessToken}`,
+      'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     method: 'POST',
@@ -317,14 +317,17 @@ const extractSpeechSegments = (
   return results
     .flatMap((result) => {
       const alternative = result.alternatives?.[0];
-      const text = alternative?.transcript?.trim();
+      if (!alternative) return [];
+      const text = alternative.transcript?.trim();
       if (!text) return [];
 
-      return [{
-        confidence: alternative.confidence,
-        endTimeMs: parseDurationToMs(result.resultEndTime),
-        text,
-      }];
+      return [
+        {
+          confidence: alternative.confidence,
+          endTimeMs: parseDurationToMs(result.resultEndTime),
+          text,
+        },
+      ];
     })
     .filter((segment) => segment.text.length > 0);
 };
@@ -349,7 +352,10 @@ export const transcribeVoiceCallAudioWithGoogle = async (
 
     return {
       segments,
-      transcriptText: segments.map((segment) => segment.text).join(' ').trim(),
+      transcriptText: segments
+        .map((segment) => segment.text)
+        .join(' ')
+        .trim(),
     };
   } finally {
     await deleteTempAudioFromGcs(uploaded.bucket, uploaded.objectName);

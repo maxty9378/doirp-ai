@@ -3,6 +3,12 @@
 import debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import {
+  DEFAULT_VOICE_CALL_AGENT_ID,
+  DEFAULT_VOICE_CALL_LIVE_MODEL,
+  GEMINI_31_FLASH_LIVE_MODEL,
+  GFD_GOOGLE_LIVE_VOICE_AGENT_ID,
+} from '@/const/voiceCall';
 import { useUserStore } from '@/store/user';
 import { stripEnglishReasoning } from '@/utils/stripEnglishReasoning';
 import { type VoiceCallDebugEvent, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
@@ -11,8 +17,6 @@ import { AudioStreamer } from './AudioStreamer';
 
 const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-const DEFAULT_VOICE_CALL_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
-const GFD_STRESS_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const PCM_IN_SAMPLE_RATE = 16_000;
 const PCM_OUT_SAMPLE_RATE = 24_000;
 
@@ -27,7 +31,7 @@ const _MAX_SESSION_RESUME_ATTEMPTS = 3;
 const DEFAULT_TURN_PLANNER_TOOL_NAME = 'get_training_turn_context';
 
 const resolveVoiceCallLiveModel = (agentId: string) => {
-  if (agentId === 'training-gfd-stress') return GFD_STRESS_LIVE_MODEL;
+  if (agentId === GFD_GOOGLE_LIVE_VOICE_AGENT_ID) return GEMINI_31_FLASH_LIVE_MODEL;
 
   return DEFAULT_VOICE_CALL_LIVE_MODEL;
 };
@@ -44,7 +48,6 @@ export interface GeminiLiveConfig {
   enableTurnPlanner?: boolean;
   /** URL WebSocket-прокси (когда задан VOICE_CALL_WS_PROXY_URL), иначе клиент подключается к Google напрямую */
   geminiWsUrl?: string | null;
-  liveModel?: string | null;
   /** Массив целей сценария из редактора (используем как чекпоинты в UI) */
   goals?: string[];
   introDialogButtonLabel?: string | null;
@@ -52,6 +55,7 @@ export interface GeminiLiveConfig {
   introDialogHint?: string | null;
   introDialogPlaceholder?: string | null;
   introDialogTitle?: string | null;
+  liveModel?: string | null;
   openingInstruction?: string | null;
   quietSpeakerNudge?: string | null;
   roundEndingPrompt?: string | null;
@@ -201,41 +205,49 @@ const mergeLiveTranscriptionText = (prev: string, next: string) => {
   const b = next.trim();
   if (!b) return a;
   if (!a) return b;
-  
+
   if (b.startsWith(a)) return b;
   if (a.startsWith(b)) return a;
 
-  // Если Gemini присылает корректировку (например, "я пошел" -> "Я пошёл."), 
+  // Если Gemini присылает корректировку (например, "я пошел" -> "Я пошёл."),
   // часто новые варианты очень похожи или содержат перекрытие.
-  
+
   const aLower = a.toLowerCase();
   const bLower = b.toLowerCase();
-  
+
   // Проверка полного перекрытия без учета регистра и пунктуации
   const cleanA = aLower.replaceAll(/[.,!?:;()]/g, '').replaceAll(/\s+/g, ' ');
   const cleanB = bLower.replaceAll(/[.,!?:;()]/g, '').replaceAll(/\s+/g, ' ');
-  
+
   // Если новая строка содержит старую или наоборот
   if (cleanB.startsWith(cleanA) || cleanB.includes(cleanA)) return b;
   if (cleanA.startsWith(cleanB)) return a;
-  
+
   // Проверка перекрытия конца A и начала B (suffix/prefix overlap)
   // Ищем совпадение от 15 символов или целых слов
   const wordsA = a.split(/\s+/);
   const wordsB = b.split(/\s+/);
-  
+
   // Пробуем найти пересечение по словам (от 1 слова и больше)
   let maxOverlap = 0;
   for (let i = 1; i <= Math.min(wordsA.length, wordsB.length); i++) {
-    const suffixA = wordsA.slice(-i).join(' ').toLowerCase().replaceAll(/[.,!?:;()]/g, '');
-    const prefixB = wordsB.slice(0, i).join(' ').toLowerCase().replaceAll(/[.,!?:;()]/g, '');
-    
+    const suffixA = wordsA
+      .slice(-i)
+      .join(' ')
+      .toLowerCase()
+      .replaceAll(/[.,!?:;()]/g, '');
+    const prefixB = wordsB
+      .slice(0, i)
+      .join(' ')
+      .toLowerCase()
+      .replaceAll(/[.,!?:;()]/g, '');
+
     // Сравниваем нормализованные строки. Если совпадают, фиксируем длину перекрытия
     if (suffixA && prefixB && suffixA === prefixB) {
       maxOverlap = i;
     }
   }
-  
+
   if (maxOverlap > 0) {
     const keepA = wordsA.slice(0, wordsA.length - maxOverlap).join(' ');
     return keepA ? `${keepA} ${b}` : b;
@@ -245,21 +257,25 @@ const mergeLiveTranscriptionText = (prev: string, next: string) => {
   // Например, prev: "Как тебя зовут" -> next: "А как тебя зовут?"
   // В таких случаях лучше просто вернуть next.
   // Если строка B длинная и содержит большинство слов из A:
-  const aCleanWords = wordsA.map((w) => w.toLowerCase().replaceAll(/[.,!?:;()]/g, '')).filter(Boolean);
-  const bCleanWords = wordsB.map((w) => w.toLowerCase().replaceAll(/[.,!?:;()]/g, '')).filter(Boolean);
-  
+  const aCleanWords = wordsA
+    .map((w) => w.toLowerCase().replaceAll(/[.,!?:;()]/g, ''))
+    .filter(Boolean);
+  const bCleanWords = wordsB
+    .map((w) => w.toLowerCase().replaceAll(/[.,!?:;()]/g, ''))
+    .filter(Boolean);
+
   if (aCleanWords.length > 0 && bCleanWords.length >= aCleanWords.length) {
-      let commonWords = 0;
-      for (const w of aCleanWords) {
-          if (bCleanWords.includes(w)) commonWords++;
-      }
-      // Если 80% слов из A есть в B, и B длиннее или равно, заменяем A на B (считая это коррекцией)
-      if (commonWords / aCleanWords.length >= 0.8) {
-          return b;
-      }
+    let commonWords = 0;
+    for (const w of aCleanWords) {
+      if (bCleanWords.includes(w)) commonWords++;
+    }
+    // Если 80% слов из A есть в B, и B длиннее или равно, заменяем A на B (считая это коррекцией)
+    if (commonWords / aCleanWords.length >= 0.8) {
+      return b;
+    }
   }
 
-  // Распространенная ситуация с Interim транскрипциями: 
+  // Распространенная ситуация с Interim транскрипциями:
   // prev: "как тебя"
   // next: "как тебя зовут"
   // Это покрывается cleanB.startsWith(cleanA) выше.
@@ -415,7 +431,7 @@ export interface UseGeminiLiveOptions {
 }
 
 export function useGeminiLive({
-  agentId = 'training-gfd-stress',
+  agentId = DEFAULT_VOICE_CALL_AGENT_ID,
   onCallEnd,
   onError,
   systemInstruction,
@@ -751,16 +767,19 @@ export function useGeminiLive({
     );
   }, []);
 
-  const sendClientText = useCallback((text: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    pushDebugEvent('client-text', { text: text.slice(0, 200) });
-    ws.send(
-      JSON.stringify({
-        clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true },
-      }),
-    );
-  }, [pushDebugEvent]);
+  const sendClientText = useCallback(
+    (text: string) => {
+      const ws = wsRef.current;
+      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      pushDebugEvent('client-text', { text: text.slice(0, 200) });
+      ws.send(
+        JSON.stringify({
+          clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true },
+        }),
+      );
+    },
+    [pushDebugEvent],
+  );
 
   const finalizeCall = useCallback(
     (reason: Exclude<HangUpReason, null>, message: string, delayMs = 1200, markAsError = true) => {
@@ -1153,10 +1172,7 @@ export function useGeminiLive({
               sessionResumeHandleRef.current = nextHandle;
               sessionResumeAttemptsRef.current = 0;
             }
-            pushDebugEvent(
-              'server-session-resumption',
-              update,
-            );
+            pushDebugEvent('server-session-resumption', update);
           }
 
           const toolCalls = Array.isArray(data.toolCall?.functionCalls)
@@ -1197,15 +1213,14 @@ export function useGeminiLive({
                   relevantKnowledge: [],
                   relevantKnowledgeIds: [],
                   responseMode: 'answer_then_probe',
-                  state:
-                    plannerStateRef.current ?? {
-                      currentTopic: null,
-                      evidenceUsed: [],
-                      lastKnowledgeIds: [],
-                      lastUserClaim: null,
-                      openLoops: [],
-                      pressureLevel: 1,
-                    },
+                  state: plannerStateRef.current ?? {
+                    currentTopic: null,
+                    evidenceUsed: [],
+                    lastKnowledgeIds: [],
+                    lastUserClaim: null,
+                    openLoops: [],
+                    pressureLevel: 1,
+                  },
                 },
               });
             }
@@ -1504,8 +1519,7 @@ export function useGeminiLive({
     pushDebugEvent('recording-stopped', {
       bytes:
         userAudioBlob?.size ??
-        recordedUserPcmBytesRef.current +
-          (recordedUserPcmChunksRef.current.length > 0 ? 44 : 0),
+        recordedUserPcmBytesRef.current + (recordedUserPcmChunksRef.current.length > 0 ? 44 : 0),
       mimeType: userAudioBlob?.type ?? null,
     });
     void Promise.resolve(onCallEnd?.({ transcript, userAudioBlob })).catch((error) => {

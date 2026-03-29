@@ -6,6 +6,11 @@ import {
 } from '@lobechat/database/schemas';
 import { eq } from 'drizzle-orm';
 
+import {
+  DEFAULT_VOICE_CALL_AGENT_ID,
+  GFD_GOOGLE_LIVE_VOICE_AGENT_ID,
+  resolveVoiceCallScenarioKey,
+} from '@/const/voiceCall';
 import { serverDB } from '@/database/server';
 
 export interface TrainingScenarioWithKnowledge {
@@ -13,28 +18,67 @@ export interface TrainingScenarioWithKnowledge {
   scenario: TrainingScenarioItem;
 }
 
+const buildGoogleLiveScenarioVariant = (scenario: TrainingScenarioItem): TrainingScenarioItem => ({
+  ...scenario,
+  description:
+    'Отдельная версия стресс-интервью на официальном Google Gemini Live API с live-расшифровкой речи.',
+  enableCheckpoints: false,
+  enableScoring: false,
+  key: GFD_GOOGLE_LIVE_VOICE_AGENT_ID,
+  scoreDisplayLabel: null,
+  scoreLevelLabels: null,
+  title: 'GFD: Google Live + расшифровка',
+});
+
+const withBuiltInScenarioVariants = (scenarios: TrainingScenarioItem[]): TrainingScenarioItem[] => {
+  if (scenarios.some((scenario) => scenario.key === GFD_GOOGLE_LIVE_VOICE_AGENT_ID))
+    return scenarios;
+
+  const baseIndex = scenarios.findIndex((scenario) => scenario.key === DEFAULT_VOICE_CALL_AGENT_ID);
+  if (baseIndex === -1) return scenarios;
+
+  const next = [...scenarios];
+  next.splice(baseIndex + 1, 0, buildGoogleLiveScenarioVariant(scenarios[baseIndex]));
+
+  return next;
+};
+
 export const listTrainingScenarios = async (): Promise<TrainingScenarioItem[]> => {
-  return serverDB
+  const scenarios = await serverDB
     .select()
     .from(trainingScenarios)
     .where(eq(trainingScenarios.isActive, true))
     .orderBy(trainingScenarios.createdAt);
+
+  return withBuiltInScenarioVariants(scenarios);
 };
 
 export const listAllTrainingScenarios = async (): Promise<TrainingScenarioItem[]> => {
-  return serverDB.select().from(trainingScenarios).orderBy(trainingScenarios.createdAt);
+  const scenarios = await serverDB
+    .select()
+    .from(trainingScenarios)
+    .orderBy(trainingScenarios.createdAt);
+
+  return withBuiltInScenarioVariants(scenarios);
 };
 
 export const getTrainingScenarioByKey = async (
   key: string,
 ): Promise<TrainingScenarioItem | null> => {
+  const resolvedKey = resolveVoiceCallScenarioKey(key);
   const [scenario] = await serverDB
     .select()
     .from(trainingScenarios)
-    .where(eq(trainingScenarios.key, key))
+    .where(eq(trainingScenarios.key, resolvedKey))
     .limit(1);
 
-  return scenario ?? null;
+  if (!scenario) return null;
+
+  if (key === resolvedKey) return scenario;
+
+  if (key === GFD_GOOGLE_LIVE_VOICE_AGENT_ID) return buildGoogleLiveScenarioVariant(scenario);
+
+  return scenario;
 };
 
 export const getTrainingScenarioWithKnowledge = async (

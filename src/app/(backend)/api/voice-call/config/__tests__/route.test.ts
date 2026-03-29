@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
-const GFD_STRESS_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
+const GFD_GOOGLE_LIVE_KEY = 'training-gfd-stress-google-live';
+const DEFAULT_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+const GFD_GOOGLE_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const SCORE_LABEL_GFD = 'ЭФИРНЫЙ ПРЕССИНГ';
 
 const mockGetSession = vi.fn();
@@ -120,8 +122,29 @@ describe('GET /api/voice-call/config', () => {
       liveModel?: string | null;
       scoreDisplayLabel?: string | null;
     };
-    expect(body.liveModel).toBe(GFD_STRESS_LIVE_MODEL);
+    expect(body.liveModel).toBe(DEFAULT_LIVE_MODEL);
     expect(body.scoreDisplayLabel).toBe(SCORE_LABEL_GFD);
+  });
+
+  it('returns Gemini 3.1 model for the dedicated Google Live trainer', async () => {
+    mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      scenario: {
+        contextWindow: 5,
+        goals: [],
+        systemPrompt: 'System prompt from DB',
+        voiceName: 'Kore',
+      },
+      knowledgeEntries: [],
+    });
+
+    const req = new Request(
+      `http://localhost/api/voice-call/config?agentId=${GFD_GOOGLE_LIVE_KEY}`,
+    );
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { liveModel?: string | null };
+    expect(body.liveModel).toBe(GFD_GOOGLE_LIVE_MODEL);
   });
 
   it('returns 404 when training scenario is missing in DB', async () => {

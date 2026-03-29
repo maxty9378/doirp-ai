@@ -1,9 +1,6 @@
 'use client';
 
-import type {
-  VoiceCallSttStatus,
-  VoiceCallTranscriptSource,
-} from '@lobechat/database/schemas';
+import type { VoiceCallSttStatus, VoiceCallTranscriptSource } from '@lobechat/database/schemas';
 import { Avatar, Button, Icon, Modal, Text } from '@lobehub/ui';
 import { message } from 'antd';
 import { createStaticStyles, cssVar } from 'antd-style';
@@ -18,6 +15,7 @@ import { RoundTimer } from '@/components/RoundTimer';
 import { ScoreDisplayBroadcast } from '@/components/ScoreDisplayBroadcast';
 import { VOICE_AGENT_TITLES } from '@/config/voiceAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
+import { isOfficialGoogleLiveTrainer } from '@/const/voiceCall';
 import { useUserStore } from '@/store/user';
 import { userProfileSelectors } from '@/store/user/selectors';
 import { getVoiceCallDebugSnapshot, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
@@ -29,6 +27,7 @@ import {
   type TranscriptEntry,
   useGeminiLive,
 } from './useGeminiLive';
+import { useGeminiLiveOfficial } from './useGeminiLiveOfficial';
 
 const styles = createStaticStyles(({ css }) => ({
   root: css`
@@ -70,6 +69,7 @@ const styles = createStaticStyles(({ css }) => ({
     color: var(--color-text-secondary);
 
     background: none;
+
     &:hover {
       color: var(--color-text);
     }
@@ -121,7 +121,6 @@ const styles = createStaticStyles(({ css }) => ({
     border-radius: 16px;
 
     background: rgb(15 23 42 / 92%);
-    backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
 
     @media (width <= 900px) {
@@ -299,6 +298,7 @@ const styles = createStaticStyles(({ css }) => ({
     box-shadow: 0 8px 24px rgb(239 68 68 / 40%);
 
     transition: transform 0.2s;
+
     &:hover {
       transform: translateX(-50%) scale(1.08);
     }
@@ -429,8 +429,8 @@ const styles = createStaticStyles(({ css }) => ({
 
     @media (width <= 640px) {
       flex-direction: column;
-      align-items: stretch;
       gap: 12px;
+      align-items: stretch;
     }
   `,
   nameDialogMeta: css`
@@ -858,9 +858,17 @@ const CONNECTION_ERROR_DESC =
   'Не удалось установить соединение с голосовым сервисом. Проверьте подключение к интернету, отключите или настройте VPN, антивирус и прокси. Убедитесь, что сервис Google доступен в вашем регионе.';
 
 const GeminiLiveCall = memo(
-  ({ agentId, autoConnect: _autoConnect, embedded, layoutMode = 'desktop', onEnd, onExit }: GeminiLiveCallProps) => {
+  ({
+    agentId,
+    autoConnect: _autoConnect,
+    embedded,
+    layoutMode = 'desktop',
+    onEnd,
+    onExit,
+  }: GeminiLiveCallProps) => {
     const navigate = useNavigate();
     const isMobileLayout = layoutMode === 'mobile';
+    const useOfficialLiveHook = isOfficialGoogleLiveTrainer(agentId);
 
     const [nickName, username, displayUserName] = useUserStore((s) => [
       userProfileSelectors.nickName(s),
@@ -887,7 +895,10 @@ const GeminiLiveCall = memo(
     const hangUpReasonRef = useRef<string | null>(null);
 
     const analyzeTranscript = useCallback(
-      async ({ transcript, userAudioBlob }: GeminiLiveHookEndPayload): Promise<VoiceCallEndPayload> => {
+      async ({
+        transcript,
+        userAudioBlob,
+      }: GeminiLiveHookEndPayload): Promise<VoiceCallEndPayload> => {
         let analysisResult: VoiceCallEndPayload['analysisResult'] | undefined;
         let analyzeError: string | undefined;
         let sttError: string | undefined;
@@ -954,8 +965,7 @@ const GeminiLiveCall = memo(
               }
             }
           } catch (error) {
-            sttError =
-              error instanceof Error ? error.message : 'Ошибка post-call транскрибации';
+            sttError = error instanceof Error ? error.message : 'Ошибка post-call транскрибации';
             sttStatus = 'failed';
             appendDebugEventRef.current?.('stt-failed', { error: sttError });
           }
@@ -1236,7 +1246,8 @@ const GeminiLiveCall = memo(
           else navigate(isMobileLayout ? '/training' : '/');
         } catch (e) {
           const errorMessage = e instanceof Error ? e.message : 'Ошибка анализа';
-          if (onEnd) onEnd({ transcript, error: errorMessage, debugLog: getVoiceCallDebugSnapshot() });
+          if (onEnd)
+            onEnd({ transcript, error: errorMessage, debugLog: getVoiceCallDebugSnapshot() });
           else navigate(isMobileLayout ? '/training' : '/');
         } finally {
           setIsAnalyzing(false);
@@ -1244,6 +1255,22 @@ const GeminiLiveCall = memo(
       },
       [analyzeTranscript, isMobileLayout, onEnd, navigate, persistDebugOnlySession],
     );
+
+    const legacyLive = useGeminiLive({
+      agentId,
+      onCallEnd: handleCallEnd,
+      systemInstruction: '',
+      voiceName: 'Kore',
+      speakerName,
+    });
+
+    const officialLive = useGeminiLiveOfficial({
+      agentId,
+      onCallEnd: handleCallEnd,
+      systemInstruction: '',
+      voiceName: 'Kore',
+      speakerName,
+    });
 
     const {
       appendDebugEvent,
@@ -1261,13 +1288,7 @@ const GeminiLiveCall = memo(
       score,
       uiConfig,
       getTranscript,
-    } = useGeminiLive({
-      agentId,
-      onCallEnd: handleCallEnd,
-      systemInstruction: '',
-      voiceName: 'Kore',
-      speakerName,
-    });
+    } = useOfficialLiveHook ? officialLive : legacyLive;
 
     useEffect(() => {
       appendDebugEventRef.current = appendDebugEvent;
@@ -1747,8 +1768,10 @@ const GeminiLiveCall = memo(
               <LiveChat
                 embedded
                 score={score}
-                showMessagesAfterTs={callStartAt ? callStartAt + 10000 : null}
                 transcript={liveTranscript}
+                showMessagesAfterTs={
+                  useOfficialLiveHook ? null : callStartAt ? callStartAt + 10000 : null
+                }
               />
             </div>
           </div>
