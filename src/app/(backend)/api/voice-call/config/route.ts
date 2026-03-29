@@ -16,9 +16,30 @@ const DEFAULT_CONTEXT_WINDOW = 5;
 const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
 const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 180_000;
-const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слышите?'];
+const DEFAULT_SILENCE_NUDGE_PHRASES = ['\u0410\u043b\u043b\u043e, \u0432\u044b \u043c\u0435\u043d\u044f \u0432\u043e\u043e\u0431\u0449\u0435 \u0441\u043b\u044b\u0448\u0438\u0442\u0435?'];
+const DEFAULT_VOICE_CALL_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+const GFD_STRESS_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const DEFAULT_LIVE_VOICE = 'Kore';
 const TRAINING_TURN_TOOL_NAME = 'get_training_turn_context';
+
+const UNAUTHORIZED_ERROR = 'Unauthorized';
+const TRAINING_LIMIT_ERROR =
+  '\u041b\u0438\u043c\u0438\u0442 \u0437\u0430\u043f\u0443\u0441\u043a\u043e\u0432 \u0442\u0440\u0435\u043d\u0430\u0436\u0451\u0440\u0430 \u0438\u0441\u0447\u0435\u0440\u043f\u0430\u043d. \u041e\u0431\u0440\u0430\u0442\u0438\u0442\u0435\u0441\u044c \u043a \u0430\u0434\u043c\u0438\u043d\u0438\u0441\u0442\u0440\u0430\u0442\u043e\u0440\u0443.';
+const TRAINING_NOT_FOUND_ERROR =
+  '\u0421\u0446\u0435\u043d\u0430\u0440\u0438\u0439 \u0442\u0440\u0435\u043d\u0430\u0436\u0451\u0440\u0430 \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 \u0431\u0430\u0437\u0435 \u0434\u0430\u043d\u043d\u044b\u0445.';
+const MANAGER_FALLBACK = '\u041c\u0435\u043d\u0435\u0434\u0436\u0435\u0440';
+const USER_CONTEXT_HEADER = '\u041a\u043e\u043d\u0442\u0435\u043a\u0441\u0442 \u0441\u043e\u0431\u0435\u0441\u0435\u0434\u043d\u0438\u043a\u0430:';
+const SPEAKER_NAME_TEMPLATE =
+  '- \u0412 \u044d\u0442\u043e\u0439 \u0441\u0435\u0441\u0441\u0438\u0438 \u043d\u0430 \u0432\u043e\u043f\u0440\u043e\u0441\u044b \u043e\u0442\u0432\u0435\u0447\u0430\u0435\u0442 \u0441\u043e\u0442\u0440\u0443\u0434\u043d\u0438\u043a: {{speakerName}}. \u041e\u0431\u0440\u0430\u0449\u0430\u0439\u0441\u044f \u043a \u043d\u0435\u043c\u0443 \u043f\u043e \u044d\u0442\u043e\u043c\u0443 \u0438\u043c\u0435\u043d\u0438.';
+const DEFAULT_SPEAKER_CONTEXT =
+  '- \u0415\u0441\u043b\u0438 \u043e\u0442\u0434\u0435\u043b\u044c\u043d\u043e\u0435 \u0438\u043c\u044f \u043d\u0435 \u043f\u0435\u0440\u0435\u0434\u0430\u043d\u043e, \u043e\u0431\u0440\u0430\u0449\u0430\u0439\u0441\u044f \u043a \u0441\u043e\u0431\u0435\u0441\u0435\u0434\u043d\u0438\u043a\u0443 \u0432\u0435\u0436\u043b\u0438\u0432\u043e \u043d\u0430 \u00ab\u0432\u044b\u00bb.';
+const AI_AGENT_LABEL = '\u0418\u0418-\u0430\u0433\u0435\u043d\u0442';
+const YOU_LABEL = '\u0412\u044b';
+const STORE_DIRECTOR_LABEL =
+  '\u0414\u0438\u0440\u0435\u043a\u0442\u043e\u0440 \u043c\u0430\u0433\u0430\u0437\u0438\u043d\u0430 (\u041c\u0430\u0440\u0438\u043d\u0430 \u0418\u0432\u0430\u043d\u043e\u0432\u043d\u0430)';
+const SALES_REP_LABEL =
+  '\u0412\u044b (\u0422\u043e\u0440\u0433\u043e\u0432\u044b\u0439 \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u044c)';
+const INTERNAL_SERVER_ERROR = 'Internal server error';
 
 const LIVE_VOICES = new Set([
   'Zephyr',
@@ -53,6 +74,22 @@ const LIVE_VOICES = new Set([
   'Sulafat',
 ]);
 
+const TP_PRICE_SYSTEM_LINES = [
+  '\u0422\u044b \u2014 \u041c\u0430\u0440\u0438\u043d\u0430 \u0418\u0432\u0430\u043d\u043e\u0432\u043d\u0430, \u0434\u0438\u0440\u0435\u043a\u0442\u043e\u0440 \u043c\u0430\u0433\u0430\u0437\u0438\u043d\u0430 \u00ab\u0423 \u0434\u043e\u043c\u0430\u00bb.',
+  '\u0418\u0434\u0451\u0442 \u0436\u0438\u0432\u043e\u0439 \u0440\u0430\u0437\u0433\u043e\u0432\u043e\u0440 \u0441 \u043e\u043f\u044b\u0442\u043d\u044b\u043c \u0442\u043e\u0440\u0433\u043e\u0432\u044b\u043c \u043f\u0440\u0435\u0434\u0441\u0442\u0430\u0432\u0438\u0442\u0435\u043b\u0435\u043c.',
+  '\u0413\u043e\u0432\u043e\u0440\u0438 \u0442\u043e\u043b\u044c\u043a\u043e \u043e\u0442 \u043b\u0438\u0446\u0430 \u041c\u0430\u0440\u0438\u043d\u044b \u0418\u0432\u0430\u043d\u043e\u0432\u043d\u044b.',
+  '\u041e\u0442\u0432\u0435\u0447\u0430\u0439 \u043a\u043e\u0440\u043e\u0442\u043a\u043e: 1-2 \u043f\u0440\u0435\u0434\u043b\u043e\u0436\u0435\u043d\u0438\u044f, \u043f\u043e-\u0440\u0443\u0441\u0441\u043a\u0438, \u0431\u0435\u0437 \u043c\u0435\u0442\u0430\u043a\u043e\u043c\u043c\u0435\u043d\u0442\u0430\u0440\u0438\u0435\u0432.',
+  '\u0414\u0435\u0440\u0436\u0438 \u0436\u0451\u0441\u0442\u043a\u0438\u0439 \u0442\u043e\u043d \u0438 \u0434\u0430\u0432\u0438 \u043f\u043e \u0432\u043e\u0437\u0440\u0430\u0436\u0435\u043d\u0438\u044e \u00ab\u0434\u043e\u0440\u043e\u0433\u043e\u00bb, \u043d\u043e \u0440\u0435\u0430\u0433\u0438\u0440\u0443\u0439 \u043d\u0430 \u0441\u0438\u043b\u044c\u043d\u044b\u0435 \u0430\u0440\u0433\u0443\u043c\u0435\u043d\u0442\u044b \u043e \u0434\u043e\u0445\u043e\u0434\u043d\u043e\u0441\u0442\u0438, \u0441\u0435\u0440\u0432\u0438\u0441\u0435 \u0438 \u043c\u0430\u0440\u043a\u0435\u0442\u0438\u043d\u0433\u043e\u0432\u043e\u0439 \u043f\u043e\u0434\u0434\u0435\u0440\u0436\u043a\u0435.',
+  '\u041d\u0435 \u0441\u0432\u043e\u0434\u0438 \u043f\u0435\u0440\u0435\u0433\u043e\u0432\u043e\u0440\u044b \u043a \u0441\u043a\u0438\u0434\u043a\u0435 \u043a\u0430\u043a \u043a \u0435\u0434\u0438\u043d\u0441\u0442\u0432\u0435\u043d\u043d\u043e\u043c\u0443 \u0440\u0435\u0448\u0435\u043d\u0438\u044e.',
+  '\u041f\u043e\u0441\u043b\u0435 \u043a\u0430\u0436\u0434\u043e\u0439 \u0441\u0432\u043e\u0435\u0439 \u0440\u0435\u043f\u043b\u0438\u043a\u0438 \u0434\u043e\u0431\u0430\u0432\u043b\u044f\u0439 \u0442\u0435\u0445\u043d\u0438\u0447\u0435\u0441\u043a\u0438\u0439 \u0442\u0435\u0433 \u0432 \u043a\u043e\u043d\u0446\u0435: [CURRENT_SCORE: X], \u0433\u0434\u0435 X \u2014 \u043d\u0430\u043a\u043e\u043f\u0438\u0442\u0435\u043b\u044c\u043d\u044b\u0439 \u0441\u0447\u0451\u0442.',
+];
+
+const resolveVoiceCallLiveModel = (agentId: string) => {
+  if (agentId === DEFAULT_TRAINING_AGENT_ID) return GFD_STRESS_LIVE_MODEL;
+
+  return DEFAULT_VOICE_CALL_LIVE_MODEL;
+};
+
 const buildTpPriceVoiceSystem = (preset: {
   goals?: string[];
   scenario_context?: string;
@@ -63,19 +100,13 @@ const buildTpPriceVoiceSystem = (preset: {
   const goals = preset.goals?.length ? preset.goals.map((goal) => `- ${goal}`).join('\n') : '';
 
   return [
-    'Ты — Марина Ивановна, директор магазина «У дома».',
-    'Идёт живой разговор с опытным торговым представителем.',
-    'Говори только от лица Марины Ивановны.',
-    'Отвечай коротко: 1-2 предложения, по-русски, без метакомментариев.',
-    'Держи жёсткий тон и дави по возражению «дорого», но реагируй на сильные аргументы о доходности, сервисе и маркетинговой поддержке.',
-    'Не своди переговоры к скидке как к единственному решению.',
-    'После каждой своей реплики добавляй технический тег в конце: [CURRENT_SCORE: X], где X — накопительный счёт.',
+    ...TP_PRICE_SYSTEM_LINES,
     '',
-    `Легенда:\n${scenario}`,
+    `\u041b\u0435\u0433\u0435\u043d\u0434\u0430:\n${scenario}`,
     '',
-    `Роль пользователя:\n${userRole}`,
+    `\u0420\u043e\u043b\u044c \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u044f:\n${userRole}`,
     '',
-    `Цели тренировки:\n${goals}`,
+    `\u0426\u0435\u043b\u0438 \u0442\u0440\u0435\u043d\u0438\u0440\u043e\u0432\u043a\u0438:\n${goals}`,
   ]
     .filter(Boolean)
     .join('\n');
@@ -88,7 +119,7 @@ export async function GET(request: Request) {
     });
 
     if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return NextResponse.json({ error: UNAUTHORIZED_ERROR }, { status: 401 });
     }
 
     const [accessRow] = await serverDB
@@ -109,10 +140,7 @@ export async function GET(request: Request) {
       const quota = accessRow?.trainingSessionQuota ?? 0;
       const used = accessRow?.trainingSessionsUsed ?? 0;
       if (quota <= 0 || used >= quota) {
-        return NextResponse.json(
-          { error: 'Лимит запусков тренажёра исчерпан. Обратитесь к администратору.' },
-          { status: 403 },
-        );
+        return NextResponse.json({ error: TRAINING_LIMIT_ERROR }, { status: 403 });
       }
     }
 
@@ -126,10 +154,7 @@ export async function GET(request: Request) {
     });
 
     if (agentId.startsWith('training-') && !trainingScenario && !preset) {
-      return NextResponse.json(
-        { error: 'Сценарий тренажёра не найден в базе данных.' },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: TRAINING_NOT_FOUND_ERROR }, { status: 404 });
     }
 
     const { GOOGLE_API_KEY } = getLLMConfig();
@@ -150,17 +175,18 @@ export async function GET(request: Request) {
       sessionUser.name ||
       sessionUser.username ||
       sessionUser.email;
-    const userFullName = (rawFullName && String(rawFullName).trim()) || 'Менеджер';
+    const userFullName = (rawFullName && String(rawFullName).trim()) || MANAGER_FALLBACK;
 
-    const baseSystemInstruction = isTpPrice && preset ? buildTpPriceVoiceSystem(preset) : preset?.systemRole ?? '';
+    const baseSystemInstruction =
+      isTpPrice && preset ? buildTpPriceVoiceSystem(preset) : (preset?.systemRole ?? '');
     const systemInstructionBase = trainingScenario?.scenario.systemPrompt || baseSystemInstruction;
 
     const userContextLines = [
-      'Контекст собеседника:',
-      `- Полное имя в аккаунте: ${userFullName}.`,
+      USER_CONTEXT_HEADER,
+      `- \u041f\u043e\u043b\u043d\u043e\u0435 \u0438\u043c\u044f \u0432 \u0430\u043a\u043a\u0430\u0443\u043d\u0442\u0435: ${userFullName}.`,
       speakerName
-        ? `- В этой сессии на вопросы отвечает сотрудник: ${speakerName}. Обращайся к нему по этому имени.`
-        : '- Если отдельное имя не передано, обращайся к собеседнику вежливо на «вы».',
+        ? SPEAKER_NAME_TEMPLATE.replace('{{speakerName}}', speakerName)
+        : DEFAULT_SPEAKER_CONTEXT,
     ];
 
     const systemInstruction = [systemInstructionBase, userContextLines.join('\n')]
@@ -172,10 +198,8 @@ export async function GET(request: Request) {
 
     const assistantLabel =
       trainingScenario?.scenario.assistantLabel ||
-      (isTpPrice ? 'Директор магазина (Марина Ивановна)' : 'ИИ-агент');
-    const userLabel =
-      trainingScenario?.scenario.userLabel ||
-      (isTpPrice ? 'Вы (Торговый представитель)' : 'Вы');
+      (isTpPrice ? STORE_DIRECTOR_LABEL : AI_AGENT_LABEL);
+    const userLabel = trainingScenario?.scenario.userLabel || (isTpPrice ? SALES_REP_LABEL : YOU_LABEL);
 
     const DEV_DEFAULT_VOICE_WS = 'wss://apidoirp.ru/voice-call-ws';
     const rawProxyUrl =
@@ -184,6 +208,7 @@ export async function GET(request: Request) {
         ? process.env.VOICE_CALL_WS_PROXY_DEV?.trim() || DEV_DEFAULT_VOICE_WS
         : null);
     const geminiWsUrl = rawProxyUrl ? rawProxyUrl.replace(/^http/, 'ws') : null;
+    const liveModel = resolveVoiceCallLiveModel(agentId);
 
     const payload: Record<string, unknown> = {
       apiKey,
@@ -193,6 +218,10 @@ export async function GET(request: Request) {
       enableCheckpoints: trainingScenario?.scenario.enableCheckpoints ?? isTpPrice,
       enableScoring: trainingScenario?.scenario.enableScoring ?? true,
       enableTurnPlanner: Boolean(trainingScenario),
+      sessionDurationMs:
+        trainingScenario?.scenario.sessionDurationMs ??
+        trainingScenario?.scenario.silenceHardHangupMs ??
+        DEFAULT_SILENCE_HARD_HANGUP_MS,
       silenceHardHangupMs:
         trainingScenario?.scenario.silenceHardHangupMs ?? DEFAULT_SILENCE_HARD_HANGUP_MS,
       silenceNudgeAfterMs:
@@ -204,43 +233,40 @@ export async function GET(request: Request) {
           ? trainingScenario.scenario.silenceNudgePhrases
           : DEFAULT_SILENCE_NUDGE_PHRASES,
       speakerName: speakerName || undefined,
+      liveModel,
       systemInstruction,
       turnPlannerToolName: trainingScenario ? TRAINING_TURN_TOOL_NAME : null,
       userLabel,
       userName: userFullName,
       voiceName,
-      sessionDurationMs:
-        trainingScenario?.scenario.sessionDurationMs ??
-        trainingScenario?.scenario.silenceHardHangupMs ??
-        DEFAULT_SILENCE_HARD_HANGUP_MS,
     };
 
     if (trainingScenario) {
-      payload.autoSuccessPrompt = trainingScenario.scenario.autoSuccessPrompt ?? null;
-      payload.checkpointIds = trainingScenario.scenario.checkpointIds ?? [];
-      payload.goals = trainingScenario.scenario.goals ?? [];
-      payload.introDialogButtonLabel = trainingScenario.scenario.introDialogButtonLabel ?? null;
-      payload.introDialogDescription = trainingScenario.scenario.introDialogDescription ?? null;
-      payload.introDialogHint = trainingScenario.scenario.introDialogHint ?? null;
-      payload.introDialogPlaceholder = trainingScenario.scenario.introDialogPlaceholder ?? null;
-      payload.introDialogTitle = trainingScenario.scenario.introDialogTitle ?? null;
+      payload.title = trainingScenario.scenario.title ?? null;
       payload.legend = trainingScenario.scenario.legend ?? null;
-      payload.openingInstruction = trainingScenario.scenario.openingInstruction ?? null;
-      payload.quietSpeakerNudge = trainingScenario.scenario.quietSpeakerNudge ?? null;
-      payload.roundEndingPrompt = trainingScenario.scenario.roundEndingPrompt ?? null;
+      payload.showLegend = trainingScenario.scenario.showLegend ?? true;
+      payload.goals = trainingScenario.scenario.goals ?? [];
+      payload.checkpointIds = trainingScenario.scenario.checkpointIds ?? [];
       payload.scoreDisplayLabel = trainingScenario.scenario.scoreDisplayLabel ?? null;
       payload.scoreLevelLabels = trainingScenario.scenario.scoreLevelLabels ?? null;
-      payload.shortAnswerNudge = trainingScenario.scenario.shortAnswerNudge ?? null;
+      payload.openingInstruction = trainingScenario.scenario.openingInstruction ?? null;
       payload.showIntroDialog = trainingScenario.scenario.showIntroDialog ?? true;
-      payload.showLegend = trainingScenario.scenario.showLegend ?? true;
+      payload.introDialogTitle = trainingScenario.scenario.introDialogTitle ?? null;
+      payload.introDialogDescription = trainingScenario.scenario.introDialogDescription ?? null;
+      payload.introDialogPlaceholder = trainingScenario.scenario.introDialogPlaceholder ?? null;
+      payload.introDialogHint = trainingScenario.scenario.introDialogHint ?? null;
+      payload.introDialogButtonLabel = trainingScenario.scenario.introDialogButtonLabel ?? null;
+      payload.roundEndingPrompt = trainingScenario.scenario.roundEndingPrompt ?? null;
       payload.silenceNudgeTemplate = trainingScenario.scenario.silenceNudgeTemplate ?? null;
-      payload.title = trainingScenario.scenario.title ?? null;
+      payload.shortAnswerNudge = trainingScenario.scenario.shortAnswerNudge ?? null;
+      payload.quietSpeakerNudge = trainingScenario.scenario.quietSpeakerNudge ?? null;
+      payload.autoSuccessPrompt = trainingScenario.scenario.autoSuccessPrompt ?? null;
     }
 
     return NextResponse.json(payload);
   } catch (error) {
     console.error('Voice call config error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: INTERNAL_SERVER_ERROR }, { status: 500 });
   }
 }
 

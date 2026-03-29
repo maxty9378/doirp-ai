@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
+const GFD_STRESS_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const SCORE_LABEL_GFD = 'ЭФИРНЫЙ ПРЕССИНГ';
 
 const mockGetSession = vi.fn();
@@ -115,7 +116,11 @@ describe('GET /api/voice-call/config', () => {
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { scoreDisplayLabel?: string | null };
+    const body = (await res.json()) as {
+      liveModel?: string | null;
+      scoreDisplayLabel?: string | null;
+    };
+    expect(body.liveModel).toBe(GFD_STRESS_LIVE_MODEL);
     expect(body.scoreDisplayLabel).toBe(SCORE_LABEL_GFD);
   });
 

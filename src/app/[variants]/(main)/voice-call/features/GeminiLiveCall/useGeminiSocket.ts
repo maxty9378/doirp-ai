@@ -31,7 +31,7 @@ export function useGeminiSocket(options: UseGeminiSocketOptions): GeminiSocketAp
     wsUrl,
     systemInstruction,
     voiceName,
-    liveModel = 'models/gemini-2.0-flash-exp',
+    liveModel = 'models/gemini-3.1-flash-live-preview',
     onOpen,
     onClose,
     onError,

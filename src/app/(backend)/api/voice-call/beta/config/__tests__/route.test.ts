@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GET } from '../route';
 
+const DEFAULT_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
+
 const mockGetSession = vi.fn();
 vi.mock('@/auth', () => ({
   auth: {
@@ -70,7 +72,7 @@ describe('GET /api/voice-call/beta/config', () => {
 
     expect(res.status).toBe(200);
     expect(body.apiKey).toBe('test-key');
-    expect(body.defaultModel).toBe('models/gemini-2.0-flash-exp');
+    expect(body.defaultModel).toBe(DEFAULT_LIVE_MODEL);
     expect(body.defaultVoice).toBe('Aoede');
     expect(body.proxyBaseUrl).toBeNull();
   });

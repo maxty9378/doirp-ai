@@ -11,10 +11,8 @@ import { AudioStreamer } from './AudioStreamer';
 
 const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
-
-/** Модель для Live API (голос): gemini-2.0-flash-exp не поддерживает bidiGenerateContent */
-const LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
-
+const DEFAULT_VOICE_CALL_LIVE_MODEL = 'models/gemini-2.5-flash-native-audio-preview-12-2025';
+const GFD_STRESS_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const PCM_IN_SAMPLE_RATE = 16_000;
 const PCM_OUT_SAMPLE_RATE = 24_000;
 
@@ -28,6 +26,12 @@ const MAX_DEBUG_EVENTS = 200;
 const _MAX_SESSION_RESUME_ATTEMPTS = 3;
 const DEFAULT_TURN_PLANNER_TOOL_NAME = 'get_training_turn_context';
 
+const resolveVoiceCallLiveModel = (agentId: string) => {
+  if (agentId === 'training-gfd-stress') return GFD_STRESS_LIVE_MODEL;
+
+  return DEFAULT_VOICE_CALL_LIVE_MODEL;
+};
+
 export interface GeminiLiveConfig {
   apiKey: string;
   assistantLabel?: string;
@@ -40,6 +44,7 @@ export interface GeminiLiveConfig {
   enableTurnPlanner?: boolean;
   /** URL WebSocket-прокси (когда задан VOICE_CALL_WS_PROXY_URL), иначе клиент подключается к Google напрямую */
   geminiWsUrl?: string | null;
+  liveModel?: string | null;
   /** Массив целей сценария из редактора (используем как чекпоинты в UI) */
   goals?: string[];
   introDialogButtonLabel?: string | null;
@@ -476,6 +481,7 @@ export function useGeminiLive({
   const isPlayingRef = useRef(false);
   const configFetchedRef = useRef(false);
   const configRef = useRef<GeminiLiveConfig | null>(null);
+  const liveModelFallbackAttemptedRef = useRef<string | null>(null);
   const uiConfigRef = useRef<GeminiLiveUIConfig>(uiConfig);
   const plannerStateRef = useRef<TrainingTurnPlannerState | null>(null);
   const lastAgentIdRef = useRef<string>(agentId);
@@ -838,6 +844,8 @@ export function useGeminiLive({
       const config = configRef.current as typeof configRef.current & { systemInstruction?: string };
       if (!config?.apiKey) throw new Error('Нет API-ключа Google.');
 
+      const liveModel = config.liveModel?.trim() || resolveVoiceCallLiveModel(agentId);
+
       const nextUiConfig: GeminiLiveUIConfig = {
         assistantLabel: config.assistantLabel || 'ИИ-агент',
         checkpointIds: Array.isArray(config.checkpointIds) ? config.checkpointIds : [],
@@ -914,6 +922,7 @@ export function useGeminiLive({
       debugEventsRef.current = [];
       syncDebugSnapshot();
       pushDebugEvent('connect-start', { agentId });
+      pushDebugEvent('live-model-selected', { liveModel });
       recordedUserPcmChunksRef.current = [];
       recordedUserPcmBytesRef.current = 0;
       pushDebugEvent('recording-started', {
@@ -1083,7 +1092,7 @@ export function useGeminiLive({
           (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '');
         const setupMsg: Record<string, unknown> = {
           setup: {
-            model: LIVE_MODEL,
+            model: liveModel,
             generationConfig: {
               responseModalities: ['AUDIO'],
               speechConfig: {
@@ -1336,12 +1345,12 @@ export function useGeminiLive({
         console.warn(
           `[GeminiLive] WebSocket closed with code: ${event.code}, reason: ${event.reason}`,
         );
-        pushDebugEvent('ws-close', { code: event.code, reason: event.reason || '' });
+        const reasonStr = String(event.reason || '');
+        const reasonLower = reasonStr.toLowerCase();
+        pushDebugEvent('ws-close', { code: event.code, reason: reasonStr });
         wsRef.current = null;
         if (!isSetupCompleteRef.current) {
           connectionLockRef.current = false;
-          const reasonStr = String(event.reason || '');
-          const reasonLower = reasonStr.toLowerCase();
           const isLocationBlock =
             event.code === 1007 && /location|not supported|region|country|geo/i.test(reasonLower);
           const isProdHost =
@@ -1356,6 +1365,37 @@ export function useGeminiLive({
               `Live-соединение закрыто до старта (code: ${event.code}${reasonStr ? `: ${reasonStr}` : ''}). Проверьте VPN/прокси или настройку VOICE_CALL_WS_PROXY_URL на продакшене.`,
             );
           }
+          return;
+        }
+
+        const shouldFallbackToDefaultLiveModel =
+          event.code === 1007 &&
+          /invalid argument/i.test(reasonLower) &&
+          liveModel !== DEFAULT_VOICE_CALL_LIVE_MODEL &&
+          liveModelFallbackAttemptedRef.current !== liveModel &&
+          transcriptRef.current.length === 0;
+
+        if (shouldFallbackToDefaultLiveModel) {
+          liveModelFallbackAttemptedRef.current = liveModel;
+          pushDebugEvent('live-model-fallback', {
+            code: event.code,
+            from: liveModel,
+            reason: reasonStr,
+            to: DEFAULT_VOICE_CALL_LIVE_MODEL,
+          });
+          connectionLockRef.current = false;
+          cleanupMedia();
+          if (configRef.current) {
+            configRef.current = {
+              ...configRef.current,
+              liveModel: DEFAULT_VOICE_CALL_LIVE_MODEL,
+            };
+          }
+          setStatus('idle');
+          setErrorMessage(null);
+          window.setTimeout(() => {
+            void connect();
+          }, 0);
           return;
         }
 

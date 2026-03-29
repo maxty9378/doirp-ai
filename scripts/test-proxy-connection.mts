@@ -21,7 +21,7 @@ ws.on('open', () => {
   // Эмулируем setup-сообщение от useGeminiLive.ts
   const setupMsg = {
     setup: {
-      model: 'models/gemini-2.5-flash-native-audio-latest',
+      model: 'models/gemini-3.1-flash-live-preview',
       generationConfig: {
         responseModalities: ['AUDIO'],
         speechConfig: {

@@ -6,7 +6,7 @@ import { auth } from '@/auth';
 import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 
-const DEFAULT_MODEL = 'models/gemini-2.0-flash-exp';
+const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
 const DEFAULT_VOICE = 'Aoede';
 
 const normalizeProxyBaseUrl = (url: string | null | undefined) => {

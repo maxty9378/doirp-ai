@@ -47,7 +47,7 @@ export function useLiveAPI(
   const audioStreamerRef = useRef<AudioStreamer | null>(null);
 
   const [model, setModel] = useState<string>(
-    defaults?.initialModel || 'models/gemini-2.0-flash-exp',
+    defaults?.initialModel || 'models/gemini-3.1-flash-live-preview',
   );
   const [config, setConfig] = useState<LiveConnectConfig>(defaults?.initialConfig || {});
   const [connected, setConnected] = useState(false);

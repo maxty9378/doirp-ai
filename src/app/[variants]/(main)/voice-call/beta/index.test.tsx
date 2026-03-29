@@ -3,6 +3,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 import VoiceCallBetaPage from './index';
 
+const DEFAULT_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
+
 const liveApiProviderSpy = vi.fn();
 
 vi.mock('./console/contexts/LiveAPIContext', () => ({
@@ -46,7 +48,7 @@ describe('VoiceCallBetaPage', () => {
           defaultConfig: {
             responseModalities: ['AUDIO'],
           },
-          defaultModel: 'models/gemini-2.0-flash-exp',
+          defaultModel: DEFAULT_LIVE_MODEL,
           proxyBaseUrl: 'https://voice-proxy.example.com/voice-call-ws',
         }),
         ok: true,
@@ -73,7 +75,7 @@ describe('VoiceCallBetaPage', () => {
       initialConfig: {
         responseModalities: ['AUDIO'],
       },
-      initialModel: 'models/gemini-2.0-flash-exp',
+      initialModel: DEFAULT_LIVE_MODEL,
       options: {
         apiKey: 'test-key',
         httpOptions: {
