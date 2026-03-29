@@ -5,6 +5,7 @@ import { Button } from 'antd';
 import { createStaticStyles } from 'antd-style';
 import isEqual from 'fast-deep-equal';
 import { BookOpen, CheckCircle2, Mic, Store, Target, User, Volume2 } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
@@ -16,10 +17,13 @@ import { useChatStore } from '@/store/chat';
 import { useGlobalStore } from '@/store/global';
 import { systemStatusSelectors } from '@/store/global/selectors';
 
-import GeminiLiveCall from '../../../../voice-call/features/GeminiLiveCall';
 import PostCallReport, {
   type PostCallReportData,
 } from '../../../../voice-call/features/GeminiLiveCall/PostCallReport';
+
+const GeminiLiveCall = dynamic(() => import('../../../../voice-call/features/GeminiLiveCall'), {
+  ssr: false,
+});
 
 const VOICE_CALL_AGENT_ID = 'training-tp-price-objection';
 
@@ -472,9 +476,7 @@ const VoiceCallOnboarding = memo(() => {
           />
           <div>
             <h1 className={styles.headingTitle}>{meta.title || 'Полевой боец: Дорого'}</h1>
-            <p className={styles.headingDesc}>
-              Тренировка переговоров по возражению «Дорого».
-            </p>
+            <p className={styles.headingDesc}>Тренировка переговоров по возражению «Дорого».</p>
           </div>
         </div>
 
@@ -508,8 +510,8 @@ const VoiceCallOnboarding = memo(() => {
                   <div className={styles.coverBadge}>Тренировочный сценарий</div>
                   <h2 className={styles.coverTitle}>Легенда тренировки</h2>
                   <p className={styles.coverDesc}>
-                    Жёсткие переговоры по возражению «Дорого». Ваша цель: сохранить матрицу
-                    без прямой скидки.
+                    Жёсткие переговоры по возражению «Дорого». Ваша цель: сохранить матрицу без
+                    прямой скидки.
                   </p>
                 </div>
               </div>

@@ -3,6 +3,7 @@
 import { ChatHeader } from '@lobehub/ui/mobile';
 import { Button } from 'antd';
 import { createStaticStyles } from 'antd-style';
+import dynamic from 'next/dynamic';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -14,29 +15,37 @@ import { mobileHeaderSticky } from '@/styles/mobileHeader';
 
 import VoiceCallOnboarding from '../agent/features/Conversation/AgentWelcome/VoiceCallOnboarding';
 import TrainingScenarioEditor from '../training/features/TrainingScenarioEditor';
-import GeminiLiveCall, { type VoiceCallEndPayload } from './features/GeminiLiveCall';
+import { type VoiceCallEndPayload } from './features/GeminiLiveCall';
 import PostCallReport from './features/GeminiLiveCall/PostCallReport';
 import TrainingLegendScreen from './features/TrainingLegendScreen';
+
+const GeminiLiveCall = dynamic(() => import('./features/GeminiLiveCall'), { ssr: false });
 
 const styles = createStaticStyles(({ css, cssVar }) => ({
   root: css`
     position: relative;
+
     display: flex;
     flex-direction: column;
+
     width: 100%;
     height: 100%;
     min-height: 0;
+
     background: ${cssVar.colorBgLayout};
   `,
   body: css`
     position: relative;
+
     overflow: auto;
     flex: 1;
+
     min-height: 0;
     padding: 12px;
 
     @media (width <= 640px) {
-      padding: 12px 12px calc(env(safe-area-inset-bottom, 0px) + 16px);
+      padding-block: 12px calc(env(safe-area-inset-bottom, 0px) + 16px);
+      padding-inline: 12px;
     }
   `,
   headerActions: css`
@@ -47,19 +56,22 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     display: flex;
     justify-content: flex-end;
 
-    padding: 12px 12px 8px;
+    padding-block: 12px 8px;
+    padding-inline: 12px;
   `,
   mobileHeader: css`
     flex-shrink: 0;
-    border-bottom: 1px solid ${cssVar.colorBorderSecondary};
+    border-block-end: 1px solid ${cssVar.colorBorderSecondary};
     background: ${cssVar.colorBgContainer};
   `,
   editHeader: css`
     display: flex;
+    gap: 12px;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin: 0 0 16px;
+
+    margin-block: 0 16px;
+    margin-inline: 0;
 
     @media (width <= 640px) {
       flex-direction: column;
@@ -75,28 +87,35 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     }
   `,
   infoText: css`
-    padding: 24px 16px;
+    padding-block: 24px;
+    padding-inline: 16px;
     color: ${cssVar.colorTextSecondary};
   `,
   reportScreen: css`
     position: absolute;
-    inset: 0;
     z-index: 10;
+    inset: 0;
+
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+
     width: 100%;
     height: 100%;
-    overflow: hidden;
+
     background: ${cssVar.colorBgLayout};
   `,
   reportHeader: css`
     display: flex;
     flex-shrink: 0;
+    gap: 16px;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: 16px 24px;
-    border-bottom: 1px solid ${cssVar.colorBorderSecondary};
+
+    padding-block: 16px;
+    padding-inline: 24px;
+    border-block-end: 1px solid ${cssVar.colorBorderSecondary};
+
     background: ${cssVar.colorBgContainer};
 
     @media (width <= 640px) {
@@ -117,8 +136,8 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     gap: 12px;
 
     @media (width <= 640px) {
-      width: 100%;
       flex-direction: column;
+      width: 100%;
     }
   `,
   reportScroll: css`
@@ -129,11 +148,13 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
   reportContent: css`
     width: 100%;
     max-width: 1200px;
-    margin: 0 auto;
+    margin-block: 0;
+    margin-inline: auto;
     padding: 24px;
 
     @media (width <= 640px) {
-      padding: 16px 12px calc(env(safe-area-inset-bottom, 0px) + 24px);
+      padding-block: 16px calc(env(safe-area-inset-bottom, 0px) + 24px);
+      padding-inline: 12px;
     }
   `,
 }));
@@ -283,8 +304,7 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
   );
 
   const skipToCall = () => setLegendState((s) => ({ ...s, show: false }));
-  const openEditor = () =>
-    navigate(`/voice-call?agentId=${encodeURIComponent(agentId)}&mode=edit`);
+  const openEditor = () => navigate(`/voice-call?agentId=${encodeURIComponent(agentId)}&mode=edit`);
   const openCall = () => navigate(`/voice-call?agentId=${encodeURIComponent(agentId)}`);
   const resetToCall = () => {
     setReportView('call');
@@ -307,7 +327,9 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
         <div className={styles.mobileHeader}>
           <ChatHeader
             showBackButton
-            center={<ChatHeader.Title title={<span style={{ lineHeight: 1.2 }}>{mobileTitle}</span>} />}
+            center={
+              <ChatHeader.Title title={<span style={{ lineHeight: 1.2 }}>{mobileTitle}</span>} />
+            }
             style={mobileHeaderSticky}
             onBackClick={() => {
               if (isEditMode) {
@@ -333,11 +355,7 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
                   К тренажёру
                 </Button>
               </div>
-              <TrainingScenarioEditor
-                hideSelector
-                initialKey={agentId}
-                mobile={isMobileLayout}
-              />
+              <TrainingScenarioEditor hideSelector initialKey={agentId} mobile={isMobileLayout} />
             </>
           ) : (
             <div className={styles.infoText}>Нет доступа к настройкам сценария.</div>
@@ -363,10 +381,7 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
                 <Button block={isMobileLayout} type="primary" onClick={() => navigate('/')}>
                   На главную
                 </Button>
-                <Button
-                  block={isMobileLayout}
-                  onClick={() => navigate('/voice-call/sessions')}
-                >
+                <Button block={isMobileLayout} onClick={() => navigate('/voice-call/sessions')}>
                   Мои сессии
                 </Button>
                 <Button block={isMobileLayout} onClick={resetToCall}>

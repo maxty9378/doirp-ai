@@ -14,10 +14,13 @@
  * limitations under the License.
  */
 
-import { createContext, FC, ReactNode, useContext } from 'react';
-import { useLiveAPI, UseLiveAPIResults } from '../hooks/use-live-api';
-import { LiveClientOptions } from '../types';
-import { LiveConnectConfig } from '@google/genai';
+import type { LiveConnectConfig } from '@google/genai/web';
+import type { FC, ReactNode } from 'react';
+import { createContext, use } from 'react';
+
+import type { UseLiveAPIResults } from '../hooks/use-live-api';
+import { useLiveAPI } from '../hooks/use-live-api';
+import type { LiveClientOptions } from '../types';
 
 const LiveAPIContext = createContext<UseLiveAPIResults | undefined>(undefined);
 
@@ -39,11 +42,11 @@ export const LiveAPIProvider: FC<LiveAPIProviderProps> = ({
     initialModel,
   });
 
-  return <LiveAPIContext.Provider value={liveAPI}>{children}</LiveAPIContext.Provider>;
+  return <LiveAPIContext value={liveAPI}>{children}</LiveAPIContext>;
 };
 
 export const useLiveAPIContext = () => {
-  const context = useContext(LiveAPIContext);
+  const context = use(LiveAPIContext);
   if (!context) {
     throw new Error('useLiveAPIContext must be used wihin a LiveAPIProvider');
   }

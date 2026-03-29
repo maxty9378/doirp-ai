@@ -1,6 +1,6 @@
+import { Modality } from '@google/genai/web';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { Modality } from '@google/genai';
 
 import { auth } from '@/auth';
 import { getLLMConfig } from '@/envs/llm';

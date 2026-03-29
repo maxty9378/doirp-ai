@@ -1,7 +1,8 @@
 import './settings-dialog.scss';
 
-import { FunctionDeclaration, LiveConnectConfig, Tool } from '@google/genai';
-import { ChangeEvent, FormEventHandler, useCallback, useMemo, useState } from 'react';
+import type { FunctionDeclaration, LiveConnectConfig, Tool } from '@google/genai/web';
+import type { ChangeEvent, FormEventHandler } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { useLiveAPIContext } from '../../contexts/LiveAPIContext';
 import ResponseModalitySelector from './ResponseModalitySelector';
@@ -104,7 +105,7 @@ export default function SettingsDialog() {
           </div>
 
           <h3>Системные инструкции</h3>
-          <textarea className="system" onChange={updateConfig} value={systemInstruction} />
+          <textarea className="system" value={systemInstruction} onChange={updateConfig} />
 
           <h4>Объявления функций</h4>
           <div className="function-declarations">
@@ -121,8 +122,8 @@ export default function SettingsDialog() {
                     className="fd-row-description"
                     defaultValue={fd.description}
                     key={`fd-${fd.description}`}
-                    onBlur={(e) => updateFunctionDescription(fd.name!, e.target.value)}
                     type="text"
+                    onBlur={(e) => updateFunctionDescription(fd.name!, e.target.value)}
                   />
                 </div>
               ))}

@@ -14,13 +14,14 @@
  * limitations under the License.
  */
 
+import type { LiveConnectConfig } from '@google/genai/web';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GenAILiveClient } from '../lib/genai-live-client';
-import { LiveClientOptions } from '../types';
+
 import { AudioStreamer } from '../lib/audio-streamer';
+import { GenAILiveClient } from '../lib/genai-live-client';
 import { audioContext } from '../lib/utils';
 import VolMeterWorket from '../lib/worklets/vol-meter';
-import { LiveConnectConfig } from '@google/genai';
+import type { LiveClientOptions } from '../types';
 
 interface UseLiveAPIOptions {
   initialConfig?: LiveConnectConfig;

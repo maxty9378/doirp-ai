@@ -13,10 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { useEffect, useRef, useState, memo } from 'react';
+import type { FunctionDeclaration, LiveServerToolCall } from '@google/genai/web';
+import { Modality, Type } from '@google/genai/web';
+import { memo, useEffect, useRef, useState } from 'react';
 import vegaEmbed from 'vega-embed';
+
 import { useLiveAPIContext } from '../../contexts/LiveAPIContext';
-import { FunctionDeclaration, LiveServerToolCall, Modality, Type } from '@google/genai';
 
 const declaration: FunctionDeclaration = {
   name: 'render_altair',
@@ -96,7 +98,7 @@ function AltairComponent() {
 
   useEffect(() => {
     if (embedRef.current && jsonString) {
-      console.log('jsonString', jsonString);
+      console.info('jsonString', jsonString);
       vegaEmbed(embedRef.current, JSON.parse(jsonString));
     }
   }, [embedRef, jsonString]);

@@ -1,6 +1,8 @@
 'use client';
 
-import type { LiveConnectConfig } from '@google/genai';
+import './console/App.scss';
+
+import type { LiveConnectConfig } from '@google/genai/web';
 import { Alert, Button, Icon, Text } from '@lobehub/ui';
 import { useRequest } from 'ahooks';
 import { createStyles } from 'antd-style';
@@ -10,7 +12,6 @@ import { memo, useMemo, useRef, useState } from 'react';
 import { Altair } from './console/components/altair/Altair';
 import ControlTray from './console/components/control-tray/ControlTray';
 import SidePanel from './console/components/side-panel/SidePanel';
-import './console/App.scss';
 import { LiveAPIProvider } from './console/contexts/LiveAPIContext';
 import type { LiveClientOptions } from './console/types';
 
@@ -21,6 +22,7 @@ const useStyles = createStyles(({ css, token }) => ({
     gap: 16px;
     align-items: center;
     justify-content: center;
+
     width: 100%;
     height: 100%;
     padding: 32px;
@@ -31,9 +33,11 @@ const useStyles = createStyles(({ css, token }) => ({
     gap: 16px;
     align-items: center;
     justify-content: center;
+
     width: 100%;
     height: 100%;
     padding: 32px;
+
     color: ${token.colorTextSecondary};
   `,
 }));
@@ -75,17 +79,17 @@ const BetaLiveConsoleApp = memo(() => {
             <Altair />
             <video
               autoPlay
-              className={!videoStream ? 'stream hidden' : 'stream'}
               playsInline
+              className={!videoStream ? 'stream hidden' : 'stream'}
               ref={videoRef}
             />
           </div>
 
           <ControlTray
             enableEditingSettings
-            onVideoStreamChange={setVideoStream}
             supportsVideo
             videoRef={videoRef}
+            onVideoStreamChange={setVideoStream}
           />
         </main>
       </div>
@@ -113,9 +117,9 @@ const VoiceCallBetaPage = memo(() => {
     return (
       <div className={styles.errorWrap}>
         <Alert
+          showIcon
           description={error.message}
           message="Не удалось открыть beta-консоль"
-          showIcon
           type="error"
         />
         <Button icon={<RefreshCw size={16} />} onClick={() => refresh()}>
@@ -128,7 +132,7 @@ const VoiceCallBetaPage = memo(() => {
   if (loading || !liveOptions || !data) {
     return (
       <div className={styles.loading}>
-        <Icon icon={Loader2} spin />
+        <Icon spin icon={Loader2} />
         <Text>Загружаю beta-консоль Gemini Live…</Text>
       </div>
     );

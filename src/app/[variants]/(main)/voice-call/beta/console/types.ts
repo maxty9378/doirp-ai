@@ -14,7 +14,12 @@
  * limitations under the License.
  */
 
-import { GoogleGenAIOptions, LiveClientToolResponse, LiveServerMessage, Part } from '@google/genai';
+import type {
+  GoogleGenAIOptions,
+  LiveClientToolResponse,
+  LiveServerMessage,
+  Part,
+} from '@google/genai/web';
 
 /**
  * the options to initiate the client, ensure apiKey is required

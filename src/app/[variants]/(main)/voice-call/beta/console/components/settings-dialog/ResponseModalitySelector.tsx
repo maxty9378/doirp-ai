@@ -1,4 +1,4 @@
-import { Modality } from '@google/genai';
+import { Modality } from '@google/genai/web';
 import { useCallback, useState } from 'react';
 import Select from 'react-select';
 
@@ -33,13 +33,6 @@ export default function ResponseModalitySelector() {
         classNamePrefix="react-select"
         defaultValue={selectedOption}
         id="response-modality-selector"
-        onChange={(option) => {
-          setSelectedOption(option);
-
-          if (option && (option.value === 'audio' || option.value === 'text')) {
-            updateConfig(option.value);
-          }
-        }}
         options={responseOptions}
         styles={{
           control: (baseStyles) => ({
@@ -58,6 +51,13 @@ export default function ResponseModalitySelector() {
                 ? 'var(--neutral-20)'
                 : undefined,
           }),
+        }}
+        onChange={(option) => {
+          setSelectedOption(option);
+
+          if (option && (option.value === 'audio' || option.value === 'text')) {
+            updateConfig(option.value);
+          }
         }}
       />
     </div>

@@ -1,20 +1,21 @@
 import './logger.scss';
 
-import {
+import type {
   Content,
   LiveClientToolResponse,
   LiveServerContent,
   LiveServerToolCall,
   LiveServerToolCallCancellation,
   Part,
-} from '@google/genai';
-import { memo, ReactNode } from 'react';
+} from '@google/genai/web';
+import type { ReactNode } from 'react';
+import { memo } from 'react';
 import SyntaxHighlighter from 'react-syntax-highlighter';
 import { vs2015 as dark } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 
 import { cx } from '../../lib/cx';
 import { useLoggerStore } from '../../lib/store-logger';
-import { ClientContentLog as ClientContentLogType, StreamingLog } from '../../types';
+import type { ClientContentLog as ClientContentLogType, StreamingLog } from '../../types';
 
 const formatTime = (date: Date) => date.toLocaleTimeString().slice(0, -3);
 
@@ -220,7 +221,7 @@ export default function Logger({ filter = 'none' }: LoggerProps) {
     <div className="logger">
       <ul className="logger-list">
         {logs.filter(filterFn).map((log, index) => (
-          <LogEntry key={index} log={log} MessageComponent={component(log)} />
+          <LogEntry MessageComponent={component(log)} key={index} log={log} />
         ))}
       </ul>
     </div>
