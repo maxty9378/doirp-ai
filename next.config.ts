@@ -1,6 +1,7 @@
 import { defineConfig } from './src/libs/next/config/define-config';
 
-const isVercel = !!process.env.VERCEL_ENV;
+// VERCEL_ENV is usually set, but VERCEL=1 is always present on Vercel builders.
+const isVercel = process.env.VERCEL === '1' || !!process.env.VERCEL_ENV;
 
 const nextConfig = defineConfig({
   // Vercel serverless: keep unzipped function size under 250 MB
@@ -12,8 +13,10 @@ const nextConfig = defineConfig({
           'node_modules/.pnpm/@napi-rs+canvas-*-musl*',
           'node_modules/.pnpm/@img+sharp-libvips-*musl*',
           'node_modules/ffmpeg-static/**',
-          'node_modules/.pnpm/ffmpeg-static*/**',
-          
+          'node_modules/.pnpm/ffmpeg-static@*/**',
+          'node_modules/.pnpm/**/node_modules/ffmpeg-static/**',
+          '**/ffmpeg-static/**',
+
           // Other platform binaries (Vercel is Linux x64 glibc)
           'node_modules/.pnpm/@napi-rs+canvas-*-win32*',
           'node_modules/.pnpm/@napi-rs+canvas-*-darwin*',
@@ -25,11 +28,26 @@ const nextConfig = defineConfig({
 
           // Heavy libraries that should not be in runtime bundle
           'node_modules/.pnpm/onnxruntime-node@*/**',
+          'node_modules/onnxruntime-node/**',
+          '**/node_modules/onnxruntime-node/**',
+          '**/onnxruntime-node/**',
+          'node_modules/.pnpm/@huggingface+transformers@*/**',
+          'node_modules/@huggingface/transformers/**',
+          // promptfoo (dev/eval only in this repo) pulls huge optional deps (transformers, playwright SWC, etc.)
+          'node_modules/.pnpm/promptfoo@*/**',
+          'node_modules/promptfoo/**',
+          'node_modules/.pnpm/better-sqlite3@*/**',
+          'node_modules/.pnpm/@swc+core-darwin-arm64@*/**',
+          'node_modules/.pnpm/@swc+core-darwin-x64@*/**',
+          'node_modules/.pnpm/@swc+core-win32-x64-msvc@*/**',
+          'node_modules/.pnpm/@rollup+rollup-darwin-arm64@*/**',
+          'node_modules/.pnpm/@rollup+rollup-darwin-x64@*/**',
+          'node_modules/.pnpm/@rollup+rollup-win32-x64-msvc@*/**',
           'node_modules/.pnpm/playwright*/**',
           'node_modules/.pnpm/@playwright*/**',
           'node_modules/.pnpm/electron*/**',
           'node_modules/.pnpm/puppeteer*/**',
-          
+
           // Build/Test/Dev tooling
           'node_modules/typescript*/**',
           'node_modules/eslint*/**',
@@ -40,10 +58,10 @@ const nextConfig = defineConfig({
           'node_modules/.pnpm/prettier*/**',
           'node_modules/.pnpm/vitest*/**',
           'node_modules/.pnpm/knip*/**',
-          
+
           // Build cache (not needed at runtime)
           '.next/cache/**',
-          
+
           // Test files in dependencies
           'node_modules/**/__tests__/**',
           'node_modules/**/*.test.js',
@@ -54,11 +72,12 @@ const nextConfig = defineConfig({
         ],
       }
     : undefined,
-  // Include ffmpeg binary only for video webhook processing
+  // ffmpeg-static only for routes that exec ffmpeg (exclude above strips it from other functions)
   // refs: https://github.com/vercel-labs/ffmpeg-on-vercel
   outputFileTracingIncludes: isVercel
     ? {
-        '/api/webhooks/video/*': ['./node_modules/ffmpeg-static/ffmpeg'],
+        '/api/webhooks/video/[provider]': ['./node_modules/ffmpeg-static/ffmpeg'],
+        '/webapi/tts/google': ['./node_modules/ffmpeg-static/ffmpeg'],
       }
     : undefined,
   webpack: (webpackConfig, context) => {
