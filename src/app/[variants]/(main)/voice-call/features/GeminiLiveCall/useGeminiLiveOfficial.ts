@@ -7,7 +7,7 @@ import {
   Modality,
   type Session,
   Type,
-} from '@google/genai';
+} from '@google/genai/web';
 import debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
