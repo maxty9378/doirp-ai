@@ -1,4 +1,3 @@
-import { Modality } from '@google/genai/web';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
@@ -51,7 +50,7 @@ export async function GET() {
     return NextResponse.json({
       apiKey,
       defaultConfig: {
-        responseModalities: [Modality.AUDIO],
+        responseModalities: ['AUDIO'],
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {

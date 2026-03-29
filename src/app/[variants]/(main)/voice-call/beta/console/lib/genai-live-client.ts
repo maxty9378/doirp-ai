@@ -14,9 +14,8 @@
  * limitations under the License.
  */
 
-import {
+import type {
   Content,
-  GoogleGenAI,
   LiveCallbacks,
   LiveClientToolResponse,
   LiveConnectConfig,
@@ -25,11 +24,13 @@ import {
   LiveServerToolCall,
   LiveServerToolCallCancellation,
   Part,
-  Session,
-} from "@google/genai";
-
+  Session} from '@google/genai/web';
+import {
+  GoogleGenAI
+} from '@google/genai/web';
 import { EventEmitter } from "eventemitter3";
-import { LiveClientOptions, StreamingLog } from "../types";
+
+import type { LiveClientOptions, StreamingLog } from "../types";
 import { base64ToArrayBuffer } from "./utils";
 
 const difference = <T>(source: T[], exclude: T[]) =>
@@ -238,7 +239,7 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
         this.log(`server.content`, message);
       }
     } else {
-      console.log("received unmatched message", message);
+      console.info('received unmatched message', message);
     }
   }
 

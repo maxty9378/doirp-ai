@@ -7,13 +7,21 @@ import { Alert, Button, Icon, Text } from '@lobehub/ui';
 import { useRequest } from 'ahooks';
 import { createStyles } from 'antd-style';
 import { Loader2, RefreshCw } from 'lucide-react';
+import dynamic from 'next/dynamic';
 import { memo, useMemo, useRef, useState } from 'react';
 
-import { Altair } from './console/components/altair/Altair';
-import ControlTray from './console/components/control-tray/ControlTray';
-import SidePanel from './console/components/side-panel/SidePanel';
 import { LiveAPIProvider } from './console/contexts/LiveAPIContext';
 import type { LiveClientOptions } from './console/types';
+
+const Altair = dynamic(() => import('./console/components/altair/Altair').then((m) => m.Altair), {
+  ssr: false,
+});
+const ControlTray = dynamic(() => import('./console/components/control-tray/ControlTray'), {
+  ssr: false,
+});
+const SidePanel = dynamic(() => import('./console/components/side-panel/SidePanel'), {
+  ssr: false,
+});
 
 const useStyles = createStyles(({ css, token }) => ({
   errorWrap: css`
