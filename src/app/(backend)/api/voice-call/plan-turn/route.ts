@@ -46,10 +46,19 @@ export async function POST(request: Request) {
     // Для первого хода интервью транскрипт может быть пустым — это не ошибка.
     // Просто вернём результат на основе пустой истории.
 
+    let dbLoadFailed = false;
     const trainingScenario = await getTrainingScenarioWithKnowledge(agentId).catch((dbError) => {
+      dbLoadFailed = true;
       console.warn('[voice-call/plan-turn] Training scenario from DB failed:', dbError);
       return null;
     });
+
+    if (dbLoadFailed) {
+      return NextResponse.json(
+        { error: 'Сервис планирования хода временно недоступен. Попробуйте ещё раз.' },
+        { status: 503 },
+      );
+    }
 
     if (!trainingScenario) {
       return NextResponse.json(

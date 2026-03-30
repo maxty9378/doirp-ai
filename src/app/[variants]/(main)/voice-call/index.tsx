@@ -5,7 +5,7 @@ import { Button } from 'antd';
 import { createStaticStyles } from 'antd-style';
 import dynamic from 'next/dynamic';
 import { memo, useCallback, useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 import WideScreenButton from '@/features/WideScreenContainer/WideScreenButton';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
@@ -170,6 +170,10 @@ export interface VoiceCallPageProps {
   layoutMode?: 'desktop' | 'mobile';
 }
 
+interface VoiceCallRouteState {
+  trainerAvatarUrl?: string | null;
+}
+
 const LEGEND_CACHE_PREFIX = 'voice-call-config:';
 
 const getCachedConfig = (agentId: string): VoiceCallConfigPayload | null => {
@@ -194,6 +198,7 @@ const setCachedConfig = (agentId: string, payload: VoiceCallConfigPayload) => {
 
 export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' }) => {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const isLogin = useUserStore(authSelectors.isLogin);
   const isLoaded = useUserStore(authSelectors.isLoaded);
@@ -201,6 +206,8 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
   const isFieldFighter = agentId === 'training-tp-price-objection';
   const isAdmin = useIsAdmin();
   const mode = searchParams.get('mode') || 'call';
+  const trainerAvatarUrl =
+    (location.state as VoiceCallRouteState | null)?.trainerAvatarUrl?.trim() || null;
   const isEditMode = mode === 'edit';
   const isMobileLayout = layoutMode === 'mobile';
 
@@ -444,6 +451,7 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
             <GeminiLiveCall
               agentId={agentId}
               layoutMode={layoutMode}
+              trainerAvatarUrl={trainerAvatarUrl}
               onEnd={handleCallEnd}
               onExit={() => (isMobileLayout ? backToTraining() : navigate(-1))}
             />

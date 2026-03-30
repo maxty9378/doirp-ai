@@ -99,10 +99,12 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
   }, []);
 
   const openVoiceScenario = useCallback(
-    (key: string) => {
+    (key: string, avatarUrl?: string | null) => {
       if (voiceScenarioStartingKey) return;
       setVoiceScenarioStartingKey(key);
-      navigate(`/voice-call?agentId=${encodeURIComponent(key)}`);
+      navigate(`/voice-call?agentId=${encodeURIComponent(key)}`, {
+        state: { trainerAvatarUrl: avatarUrl || null },
+      });
       setVoiceScenarioStartingKey(null);
     },
     [navigate, voiceScenarioStartingKey],
@@ -267,7 +269,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
       key={scenario.key}
       loading={voiceScenarioStartingKey === scenario.key}
       scenario={scenario}
-      onClick={() => openVoiceScenario(scenario.key)}
+      onClick={() => openVoiceScenario(scenario.key, scenario.avatarUrl)}
     />
   ));
 

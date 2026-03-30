@@ -427,6 +427,7 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 
 export interface UseGeminiLiveOptions {
   agentId?: string;
+  interviewDurationMs?: number;
   onCallEnd?: (payload: GeminiLiveCallEndPayload) => void | Promise<void>;
   onError?: (message: string) => void;
   speakerName?: string;
@@ -436,6 +437,7 @@ export interface UseGeminiLiveOptions {
 
 export function useGeminiLive({
   agentId = DEFAULT_VOICE_CALL_AGENT_ID,
+  interviewDurationMs,
   onCallEnd,
   onError,
   systemInstruction,
@@ -860,6 +862,9 @@ export function useGeminiLive({
         const speaker = speakerName?.trim();
         const query = new URLSearchParams({ agentId });
         if (speaker) query.set('speakerName', speaker);
+        if (interviewDurationMs && Number.isFinite(interviewDurationMs)) {
+          query.set('durationMs', String(interviewDurationMs));
+        }
         const res = await fetch(`/api/voice-call/config?${query.toString()}`, {
           credentials: 'include',
         });

@@ -55,6 +55,21 @@ const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(mi
 const buildRoundEndingPrompt = (rawPrompt: string) =>
   `${rawPrompt.trim()}\n\nВажно: если ты сейчас произносишь предыдущую реплику, ПРЕРВИСЬ и сразу начни финальную фразу. Скажи итог одним связным ответом и после этого замолчи.`;
 
+const buildSilenceNudgeText = (
+  template: string | null | undefined,
+  fallbackPhrase: string,
+  silenceSeconds: number,
+) => {
+  const phrase = fallbackPhrase.trim();
+  const cleanedTemplate = template?.trim();
+  if (!cleanedTemplate) return phrase;
+
+  return cleanedTemplate
+    .replaceAll('{{phrase}}', phrase)
+    .replaceAll('{{silenceSeconds}}', String(silenceSeconds))
+    .trim();
+};
+
 const base64ToBytes = (base64: string) => {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
@@ -299,6 +314,7 @@ const resolveVoiceConnectErrorMessage = (error: unknown) => {
 
 export function useGeminiLiveOfficial({
   agentId = DEFAULT_VOICE_CALL_AGENT_ID,
+  interviewDurationMs,
   onCallEnd,
   onError,
   systemInstruction,
@@ -346,6 +362,8 @@ export function useGeminiLiveOfficial({
   const recordedUserPcmChunksRef = useRef<Uint8Array[]>([]);
   const recordedUserPcmBytesRef = useRef(0);
   const lastUserSpeechRef = useRef(0);
+  const lastSilenceNudgeAtRef = useRef(0);
+  const silenceNudgeCountRef = useRef(0);
   const speakerNameRef = useRef(speakerName?.trim() || '');
   const checkpointsRef = useRef<VoiceCallCheckpoint[]>([]);
   const connectionLockRef = useRef(false);
@@ -559,6 +577,8 @@ export function useGeminiLiveOfficial({
     plannerStateRef.current = null;
     recordedUserPcmChunksRef.current = [];
     recordedUserPcmBytesRef.current = 0;
+    lastSilenceNudgeAtRef.current = 0;
+    silenceNudgeCountRef.current = 0;
     roundStartRef.current = null;
     roundVerdictTriggeredRef.current = false;
     awaitingFinalAiTurnRef.current = false;
@@ -611,6 +631,9 @@ export function useGeminiLiveOfficial({
       if (configCacheKeyRef.current !== configCacheKey || !configRef.current) {
         const query = new URLSearchParams({ agentId });
         if (trimmedName) query.set('speakerName', trimmedName);
+        if (interviewDurationMs && Number.isFinite(interviewDurationMs)) {
+          query.set('durationMs', String(interviewDurationMs));
+        }
         const res = await fetch(`/api/voice-call/config?${query.toString()}`, {
           credentials: 'include',
         });
@@ -642,6 +665,8 @@ export function useGeminiLiveOfficial({
       currentAiTurnMetaTextRef.current = '';
       recordedUserPcmChunksRef.current = [];
       recordedUserPcmBytesRef.current = 0;
+      lastSilenceNudgeAtRef.current = 0;
+      silenceNudgeCountRef.current = 0;
       roundStartRef.current = null;
       roundVerdictTriggeredRef.current = false;
       awaitingFinalAiTurnRef.current = false;
@@ -779,6 +804,7 @@ export function useGeminiLiveOfficial({
         }
 
         lastUserSpeechRef.current = now;
+        silenceNudgeCountRef.current = 0;
         pushDebugEvent('user-input-transcription', { text: inputText.slice(0, 160) });
       };
 
@@ -1029,6 +1055,7 @@ export function useGeminiLiveOfficial({
     }
   }, [
     agentId,
+    interviewDurationMs,
     cleanupMedia,
     finalizeCall,
     maybeAutoFinish,
@@ -1047,6 +1074,11 @@ export function useGeminiLiveOfficial({
     const id = window.setInterval(() => {
       const now = Date.now();
       const silenceHardHangupMs = uiConfigRef.current.silenceHardHangupMs;
+      const silenceNudgeAfterMs = uiConfigRef.current.silenceNudgeAfterMs;
+      const silenceNudgeCooldownMs = uiConfigRef.current.silenceNudgeCooldownMs;
+      const silencePhrases = uiConfigRef.current.silenceNudgePhrases?.length
+        ? uiConfigRef.current.silenceNudgePhrases
+        : DEFAULT_SILENCE_NUDGE_PHRASES;
 
       if (roundStartRef.current && !deductedSessionRef.current) {
         const elapsed = now - roundStartRef.current;
@@ -1088,6 +1120,41 @@ export function useGeminiLiveOfficial({
         }
 
         finalizeCall('success', 'Время интервью истекло. Эфир завершён.', 1200, false);
+      }
+
+      // Фразы при тишине из БД (silenceNudgePhrases/silenceNudgeTemplate).
+      const hasTranscript = transcriptRef.current.length > 0;
+      const isFinalWindow = roundVerdictTriggeredRef.current || remaining <= 15_000;
+      if (
+        !hangupScheduledRef.current &&
+        !awaitingFinalAiTurnRef.current &&
+        !isFinalWindow &&
+        hasTranscript &&
+        silenceNudgeAfterMs > 0
+      ) {
+        const silenceSince = lastUserSpeechRef.current || roundStartRef.current || now;
+        const silenceDuration = now - silenceSince;
+        const canNudgeBySilence = silenceDuration >= silenceNudgeAfterMs;
+        const canNudgeByCooldown =
+          !lastSilenceNudgeAtRef.current ||
+          now - lastSilenceNudgeAtRef.current >= silenceNudgeCooldownMs;
+
+        if (canNudgeBySilence && canNudgeByCooldown) {
+          const phrase = silencePhrases[silenceNudgeCountRef.current % silencePhrases.length];
+          const nudgeText = buildSilenceNudgeText(
+            uiConfigRef.current.silenceNudgeTemplate,
+            phrase,
+            Math.floor(silenceDuration / 1000),
+          );
+
+          sendRealtimeText(nudgeText);
+          silenceNudgeCountRef.current += 1;
+          lastSilenceNudgeAtRef.current = now;
+          pushDebugEvent('silence-nudge-sent', {
+            nudgeText: nudgeText.slice(0, 200),
+            silenceDurationMs: silenceDuration,
+          });
+        }
       }
     }, 1000);
 

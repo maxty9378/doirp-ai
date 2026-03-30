@@ -7,6 +7,7 @@ import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 
 const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
 const DEFAULT_VOICE = 'Aoede';
+const PUBLIC_VOICE_PROXY_WS = 'wss://apidoirp.ru/voice-call-ws';
 
 const normalizeProxyBaseUrl = (url: string | null | undefined) => {
   if (!url?.trim()) return null;
@@ -20,6 +21,25 @@ const normalizeProxyBaseUrl = (url: string | null | undefined) => {
     return parsed.toString().replace(/\/$/, '');
   } catch {
     return null;
+  }
+};
+
+const normalizeVoiceProxyUrl = (url: string | null | undefined) => {
+  if (!url?.trim()) return null;
+
+  try {
+    const parsed = new URL(url.trim());
+    const path = parsed.pathname.replace(/\/+$/, '');
+    const isAuthProtectedProxy =
+      parsed.hostname === 'doirp-ai.vercel.app' && path === '/voice-call-ws';
+
+    if (isAuthProtectedProxy) {
+      return PUBLIC_VOICE_PROXY_WS;
+    }
+
+    return parsed.toString();
+  } catch {
+    return url.trim();
   }
 };
 
@@ -43,11 +63,14 @@ export async function GET() {
       );
     }
 
-    const DEV_DEFAULT_VOICE_WS = 'ws://localhost:3011';
+    const DEV_DEFAULT_VOICE_WS = PUBLIC_VOICE_PROXY_WS;
+    const explicitProxyUrl = process.env.VOICE_CALL_WS_PROXY_URL?.trim() || null;
     const rawProxyUrl =
-      process.env.VOICE_CALL_WS_PROXY_URL?.trim() ||
       (process.env.NODE_ENV === 'development'
-        ? process.env.VOICE_CALL_WS_PROXY_DEV?.trim() || DEV_DEFAULT_VOICE_WS
+        ? normalizeVoiceProxyUrl(explicitProxyUrl)
+        : explicitProxyUrl) ||
+      (process.env.NODE_ENV === 'development'
+        ? normalizeVoiceProxyUrl(process.env.VOICE_CALL_WS_PROXY_DEV) || DEV_DEFAULT_VOICE_WS
         : null);
 
     return NextResponse.json({

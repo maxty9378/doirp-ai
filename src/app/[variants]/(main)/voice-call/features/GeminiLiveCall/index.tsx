@@ -1,8 +1,7 @@
 'use client';
 
 import type { VoiceCallSttStatus, VoiceCallTranscriptSource } from '@lobechat/database/schemas';
-import { Avatar, Button, Icon, Modal, Text } from '@lobehub/ui';
-import { message } from 'antd';
+import { Button, Icon, Modal, Text } from '@lobehub/ui';
 import { createStaticStyles, cssVar } from 'antd-style';
 import { Mic, PhoneOff } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
@@ -393,6 +392,46 @@ const styles = createStaticStyles(({ css }) => ({
     line-height: 1.4;
     color: var(--color-text-tertiary);
   `,
+  nameDialogDurationWrap: css`
+    margin-block-start: 16px;
+  `,
+  nameDialogDurationGrid: css`
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+
+    @media (width <= 640px) {
+      grid-template-columns: 1fr;
+    }
+  `,
+  nameDialogDurationBtn: css`
+    cursor: pointer;
+
+    padding-block: 8px;
+    padding-inline: 10px;
+    border: 1px solid rgb(148 163 184 / 30%);
+    border-radius: 10px;
+
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+
+    background: rgb(255 255 255 / 4%);
+
+    transition: all 0.16s ease;
+
+    &:hover {
+      border-color: rgb(16 185 129 / 45%);
+      color: var(--color-text);
+      background: rgb(16 185 129 / 10%);
+    }
+  `,
+  nameDialogDurationBtnActive: css`
+    border-color: rgb(16 185 129 / 80%);
+    color: #d1fae5;
+    background: rgb(16 185 129 / 18%);
+    box-shadow: inset 0 0 0 1px rgb(16 185 129 / 45%);
+  `,
   nameDialogFooter: css`
     display: flex;
     align-items: center;
@@ -730,6 +769,12 @@ const statusLabels: Record<string, string> = {
   ready: 'Идёт диалог',
 };
 
+const INTERVIEW_DURATION_OPTIONS = [
+  { label: '2 минуты', valueMs: 2 * 60_000 },
+  { label: '5 минут', valueMs: 5 * 60_000 },
+  { label: '10 минут', valueMs: 10 * 60_000 },
+] as const;
+
 export interface VoiceCallEndPayload {
   analysisResult?: {
     overallScore: number;
@@ -826,6 +871,7 @@ export interface GeminiLiveCallProps {
   onEnd?: (payload: VoiceCallEndPayload) => void;
   /** Выход с экрана звонка (кнопка в модалке ошибки). */
   onExit?: () => void;
+  trainerAvatarUrl?: string | null;
 }
 
 const CONNECTION_ERROR_TITLE = 'Ошибка подключения';
@@ -840,6 +886,7 @@ const GeminiLiveCall = memo(
     layoutMode = 'desktop',
     onEnd,
     onExit,
+    trainerAvatarUrl,
   }: GeminiLiveCallProps) => {
     const navigate = useNavigate();
     const isMobileLayout = layoutMode === 'mobile';
@@ -854,6 +901,7 @@ const GeminiLiveCall = memo(
 
     const [allowAutoConnect, setAllowAutoConnect] = useState(true);
     const [speakerName, setSpeakerName] = useState<string>('');
+    const [interviewDurationMs, setInterviewDurationMs] = useState<number>(5 * 60_000);
     const [showNameDialog, setShowNameDialog] = useState<boolean>(true);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [manualFail, setManualFail] = useState(false);
@@ -1060,9 +1108,6 @@ const GeminiLiveCall = memo(
 
         if (sttStatus !== 'succeeded' && sttError) {
           appendDebugEventRef.current?.('stt-fallback', { error: sttError });
-          message.warning(
-            'Не удалось получить улучшенную post-call транскрибацию. Сохранена резервная версия интервью.',
-          );
         }
 
         if (analyzeError) {
@@ -1232,6 +1277,7 @@ const GeminiLiveCall = memo(
 
     const legacyLive = useGeminiLive({
       agentId,
+      interviewDurationMs,
       onCallEnd: handleCallEnd,
       systemInstruction: '',
       voiceName: 'Sulafat',
@@ -1240,6 +1286,7 @@ const GeminiLiveCall = memo(
 
     const officialLive = useGeminiLiveOfficial({
       agentId,
+      interviewDurationMs,
       onCallEnd: handleCallEnd,
       systemInstruction: '',
       voiceName: 'Sulafat',
@@ -1275,8 +1322,15 @@ const GeminiLiveCall = memo(
       hangUpReasonRef.current = hangUpReason ?? null;
     }, [hangUpReason]);
 
+    const [avatarUrl, setAvatarUrl] = useState(
+      trainerAvatarUrl?.trim() || `/api/voice-call/trainer-avatar/${agentId}`,
+    );
     const [callStartAt, setCallStartAt] = useState<number | null>(null);
     const callStartAtRef = useRef<number | null>(null);
+
+    useEffect(() => {
+      setAvatarUrl(trainerAvatarUrl?.trim() || `/api/voice-call/trainer-avatar/${agentId}`);
+    }, [agentId, trainerAvatarUrl]);
 
     // Если в сценарии диалог представления отключён — скрываем его и подставляем имя автоматически.
     useEffect(() => {
@@ -1465,6 +1519,22 @@ const GeminiLiveCall = memo(
                   </div>
                 </div>
 
+                <div className={styles.nameDialogDurationWrap}>
+                  <div className={styles.nameDialogLabel}>Длительность интервью</div>
+                  <div className={styles.nameDialogDurationGrid}>
+                    {INTERVIEW_DURATION_OPTIONS.map((option) => (
+                      <button
+                        className={`${styles.nameDialogDurationBtn} ${interviewDurationMs === option.valueMs ? styles.nameDialogDurationBtnActive : ''}`}
+                        key={option.valueMs}
+                        type="button"
+                        onClick={() => setInterviewDurationMs(option.valueMs)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 <div className={styles.nameDialogFooter}>
                   {profileName && (
                     <button
@@ -1559,7 +1629,23 @@ const GeminiLiveCall = memo(
                 transform: `scale(${1 + aiVolume / 200})`,
               }}
             >
-              <Avatar avatar={DEFAULT_AVATAR} size={64} style={{ background: 'transparent' }} />
+              <img
+                alt="Аватар тренажёра"
+                src={avatarUrl}
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  objectFit: 'contain',
+                  objectPosition: 'center',
+                  background: 'transparent',
+                }}
+                onError={() => {
+                  if (avatarUrl !== DEFAULT_AVATAR) {
+                    setAvatarUrl(DEFAULT_AVATAR);
+                  }
+                }}
+              />
             </div>
             <Text className={styles.name}>
               {uiConfig.assistantLabel || VOICE_AGENT_TITLES[agentId] || 'ИИ-агент'}
@@ -1639,7 +1725,7 @@ const GeminiLiveCall = memo(
             <div className={styles.bbDivider} />
 
             {/* Центральная колонка: таймер */}
-            <div className={styles.bbCenter} style={{ justifyContent: 'center' }}>
+            <div className={styles.bbCenter} style={{ justifyContent: 'flex-start' }}>
               <div className={styles.bbTimerBox}>
                 <RoundTimer
                   callStartAt={callStartAt}
