@@ -598,11 +598,47 @@ const TrainingScenarioEditor = memo<TrainingScenarioEditorProps>(
                 allowClear
                 placeholder="Выберите голос"
                 options={[
-                  { label: 'Puck', value: 'Puck' },
-                  { label: 'Charon', value: 'Charon' },
-                  { label: 'Kore', value: 'Kore' },
-                  { label: 'Fenrir', value: 'Fenrir' },
-                  { label: 'Aoede', value: 'Aoede' },
+                  {
+                    label: '🎓 Лекторы и эксперты',
+                    options: [
+                      { label: 'Charon (Informative)', value: 'Charon' },
+                      { label: 'Rasalgethi (Informative)', value: 'Rasalgethi' },
+                      { label: 'Sadaltager (Knowledgeable)', value: 'Sadaltager' },
+                      { label: 'Gacrux (Mature)', value: 'Gacrux' },
+                      { label: 'Schedar (Even)', value: 'Schedar' },
+                    ],
+                  },
+                  {
+                    label: '💡 Менторы и кураторы',
+                    options: [
+                      { label: 'Sulafat (Warm) — Default', value: 'Sulafat' },
+                      { label: 'Vindemiatrix (Gentle)', value: 'Vindemiatrix' },
+                      { label: 'Achird (Friendly)', value: 'Achird' },
+                      { label: 'Aoede (Breezy)', value: 'Aoede' },
+                      { label: 'Callirrhoe (Easy-going)', value: 'Callirrhoe' },
+                    ],
+                  },
+                  {
+                    label: '🚀 Мотиваторы и геймификация',
+                    options: [
+                      { label: 'Puck (Upbeat)', value: 'Puck' },
+                      { label: 'Zephyr (Bright)', value: 'Zephyr' },
+                      { label: 'Fenrir (Excitable)', value: 'Fenrir' },
+                      { label: 'Autonoe (Bright)', value: 'Autonoe' },
+                      { label: 'Leda (Youthful)', value: 'Leda' },
+                    ],
+                  },
+                  {
+                    label: '📋 Экзаменаторы и строгие инструкции',
+                    options: [
+                      { label: 'Kore (Firm)', value: 'Kore' },
+                      { label: 'Orus (Firm)', value: 'Orus' },
+                      { label: 'Alnilam (Firm)', value: 'Alnilam' },
+                      { label: 'Iapetus (Clear)', value: 'Iapetus' },
+                      { label: 'Despina (Smooth)', value: 'Despina' },
+                      { label: 'Algieba (Smooth)', value: 'Algieba' },
+                    ],
+                  },
                 ]}
               />
             ),

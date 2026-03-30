@@ -45,7 +45,7 @@ const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще с�
 const DEFAULT_TURN_PLANNER_TOOL_NAME = 'get_training_turn_context';
 const DEFAULT_ASSISTANT_LABEL = 'ИИ-агент';
 const DEFAULT_USER_LABEL = 'Вы';
-const DEFAULT_VOICE_NAME = 'Kore';
+const DEFAULT_VOICE_NAME = 'Sulafat';
 
 const log = debug('lobe-client:voice-call:live-official');
 

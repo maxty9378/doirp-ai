@@ -83,7 +83,7 @@ describe('GET /api/voice-call/config', () => {
       scenario: {
         systemPrompt: 'System prompt from DB',
         scoreDisplayLabel: SCORE_LABEL_GFD,
-        voiceName: 'Kore',
+        voiceName: 'Sulafat',
         contextWindow: 5,
         goals: [],
       },
@@ -109,7 +109,7 @@ describe('GET /api/voice-call/config', () => {
         systemPrompt: 'System prompt from DB',
         title: 'GFD: Стресс-интервью',
         userLabel: 'Вы (Маркетолог GFD)',
-        voiceName: 'Kore',
+        voiceName: 'Sulafat',
       },
       knowledgeEntries: [],
     });
@@ -132,7 +132,7 @@ describe('GET /api/voice-call/config', () => {
         contextWindow: 5,
         goals: [],
         systemPrompt: 'System prompt from DB',
-        voiceName: 'Kore',
+        voiceName: 'Sulafat',
       },
       knowledgeEntries: [],
     });

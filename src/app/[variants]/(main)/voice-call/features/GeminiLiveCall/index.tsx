@@ -1234,7 +1234,7 @@ const GeminiLiveCall = memo(
       agentId,
       onCallEnd: handleCallEnd,
       systemInstruction: '',
-      voiceName: 'Kore',
+      voiceName: 'Sulafat',
       speakerName,
     });
 
@@ -1242,7 +1242,7 @@ const GeminiLiveCall = memo(
       agentId,
       onCallEnd: handleCallEnd,
       systemInstruction: '',
-      voiceName: 'Kore',
+      voiceName: 'Sulafat',
       speakerName,
     });
 
