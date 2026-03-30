@@ -1,4 +1,4 @@
-#!/usr/bin/env bun
+﻿#!/usr/bin/env bun
 /**
  * WebSocket-прокси для голосового звонка (Gemini Live).
  * Принимает подключения от браузера и проксирует их к Google через HTTPS_PROXY или SOCKS.
@@ -171,13 +171,13 @@ wss.on('connection', (clientWs, req) => {
     upstream.on('open', () => {
       currentUpstreamRef.current = upstream;
       console.log(`[voice-call-ws-proxy] Upstream connected (proxy ${proxyIndex + 1})`);
-      for (const { data, isBinary } of clientToUpstreamBuffer) {
+      setTimeout(() => { for (const { data, isBinary } of clientToUpstreamBuffer) {
         const bytes = getDataByteLength(data);
         console.log(
           `[voice-call-ws-proxy] client -> upstream buffered (${bytes} bytes, isBinary=${isBinary})`,
         );
         if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary });
-      }
+      } }, 50);
       // Не очищаем буфер, чтобы при закрытии по location error и переходе на следующий прокси
       // первоначальное сообщение (setupMsg) отправлялось заново.
     });
