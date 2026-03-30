@@ -266,6 +266,37 @@ const buildProxyBaseUrl = (url: string | null | undefined) => {
   }
 };
 
+const resolveVoiceConnectErrorMessage = (error: unknown) => {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  const normalized = raw.toLowerCase();
+
+  if (
+    normalized.includes('notallowederror') ||
+    normalized.includes('permission denied') ||
+    normalized.includes('permissiondismissederror')
+  ) {
+    return 'Доступ к микрофону запрещён. Разрешите доступ в браузере и попробуйте снова.';
+  }
+
+  if (normalized.includes('notfounderror') || normalized.includes('devicesnotfounderror')) {
+    return 'Микрофон не найден. Подключите микрофон и попробуйте снова.';
+  }
+
+  if (
+    normalized.includes('notreadableerror') ||
+    normalized.includes('trackstarterror') ||
+    normalized.includes('device is in use')
+  ) {
+    return 'Не удалось открыть микрофон: устройство занято другим приложением.';
+  }
+
+  if (normalized.includes('securityerror')) {
+    return 'Браузер заблокировал доступ к микрофону по соображениям безопасности.';
+  }
+
+  return raw || 'Не удалось подключиться';
+};
+
 export function useGeminiLiveOfficial({
   agentId = DEFAULT_VOICE_CALL_AGENT_ID,
   onCallEnd,
@@ -655,9 +686,8 @@ export function useGeminiLiveOfficial({
         (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '');
 
       const liveConfig: LiveConnectConfig = {
-        inputAudioTranscription: {
-          languageCodes: ['ru-RU'],
-        },
+        // Gemini API не поддерживает languageCodes в этом поле.
+        inputAudioTranscription: {},
         outputAudioTranscription: {},
         responseModalities: [Modality.AUDIO],
         speechConfig: {
@@ -689,6 +719,7 @@ export function useGeminiLiveOfficial({
       }
 
       const proxyBaseUrl = buildProxyBaseUrl(config.geminiWsUrl);
+
       const client = new GoogleGenAI({
         apiKey: config.apiKey,
         httpOptions: {
@@ -982,8 +1013,19 @@ export function useGeminiLiveOfficial({
       }
     } catch (error) {
       connectionLockRef.current = false;
+      if (sessionRef.current) {
+        try {
+          sessionRef.current.close();
+        } catch {
+          // ignore close errors
+        } finally {
+          sessionRef.current = null;
+        }
+      }
       cleanupMedia();
-      reportError(error instanceof Error ? error.message : 'Не удалось подключиться');
+      const message = resolveVoiceConnectErrorMessage(error);
+      console.error('[GeminiLiveOfficial] connect failed:', error);
+      reportError(message);
     }
   }, [
     agentId,

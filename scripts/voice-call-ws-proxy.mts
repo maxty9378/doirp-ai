@@ -52,6 +52,18 @@ const fallbackUrls = FALLBACK_PROXY_LIST.map(parseProxyEntry).filter(Boolean);
 /** Список URL прокси для перебора (при отказе Google по региону пробуем следующий) */
 let PROXY_URLS: string[] = envProxy?.trim() ? [envProxy.trim(), ...fallbackUrls] : fallbackUrls;
 
+function mergeUniqueProxyUrls(urls: Array<string | null | undefined>): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+  for (const item of urls) {
+    const normalized = typeof item === 'string' ? item.trim() : '';
+    if (!normalized || seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push(normalized);
+  }
+  return result;
+}
+
 async function loadProxyUrlsFromDb(): Promise<string[]> {
   try {
     const rows = await serverDB
@@ -76,10 +88,12 @@ function getProxyAgentForUrl(
   return new HttpsProxyAgent(u);
 }
 
-function isRetriableCloseReason(reason: string): boolean {
+function isRetriableCloseReason(reason: string, code: number): boolean {
   const r = reason.toLowerCase();
   return (
+    code === 1006 ||
     /location|region|not supported|restricted|country|geo/i.test(r) ||
+    /connection ended|connection closed|econnreset|socket hang up|network/i.test(r) ||
     r.includes('403') ||
     r.length === 0
   );
@@ -106,6 +120,7 @@ wss.on('connection', (clientWs, req) => {
     clientWs.close(4000, 'Missing key');
     return;
   }
+
 
   const upstreamUrl = `${GEMINI_LIVE_WS}?key=${encodeURIComponent(key)}`;
   const clientToUpstreamBuffer: { data: Buffer | ArrayBuffer | Buffer[]; isBinary: boolean }[] = [];
@@ -182,10 +197,11 @@ wss.on('connection', (clientWs, req) => {
         code,
         reasonStr || '(no reason)',
       );
+      const shouldRetry = isRetriableCloseReason(reasonStr, code) && proxyIndex + 1 < PROXY_URLS.length;
       if (currentUpstreamRef.current === upstream) currentUpstreamRef.current = null;
       upstream.removeAllListeners();
       if (clientWs.readyState !== WebSocket.OPEN) return;
-      if (isRetriableCloseReason(reasonStr) && proxyIndex + 1 < PROXY_URLS.length) {
+      if (shouldRetry) {
         tryUpstream(proxyIndex + 1);
       } else {
         clientWs.close(code, reasonStr || undefined);
@@ -217,16 +233,14 @@ server.listen(PORT, '0.0.0.0', () => {
           `[voice-call-ws-proxy] Using ${PROXY_URLS.length} proxy/proxies (will try next on location error)`,
         );
       else console.warn('[voice-call-ws-proxy] No proxies set — upstream will connect directly');
-      return;
+    } else {
+      const dedupedDb = Array.from(new Set(dbUrls));
+      // Важно: при наличии прокси из БД даём им приоритет перед env/fallback.
+      const merged = mergeUniqueProxyUrls([...dedupedDb, envProxy?.trim(), ...fallbackUrls]);
+      PROXY_URLS = merged;
+      console.log(
+        `[voice-call-ws-proxy] Loaded ${dedupedDb.length} proxy/proxies from DB (total: ${PROXY_URLS.length})`,
+      );
     }
-
-    const dedupedDb = Array.from(new Set(dbUrls));
-    const merged = envProxy?.trim()
-      ? [envProxy.trim(), ...dedupedDb, ...fallbackUrls]
-      : [...dedupedDb, ...fallbackUrls];
-    PROXY_URLS = merged;
-    console.log(
-      `[voice-call-ws-proxy] Loaded ${dedupedDb.length} proxy/proxies from DB (total: ${PROXY_URLS.length})`,
-    );
   });
 });

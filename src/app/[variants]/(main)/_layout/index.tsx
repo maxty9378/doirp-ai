@@ -38,6 +38,22 @@ import { styles } from './style';
 const FeedbackModal = lazy(() => import('@/components/FeedbackModal'));
 
 const CloudBanner = dynamic(() => import('@/features/AlertBanner/CloudBanner'));
+const CHUNK_RELOAD_FLAG = '__lobe_chunk_reload_once__';
+
+const shouldRecoverFromChunkError = (reason: unknown) => {
+  const text =
+    reason instanceof Error
+      ? reason.message
+      : typeof reason === 'string'
+        ? reason
+        : JSON.stringify(reason ?? '');
+  const lowered = text.toLowerCase();
+  return (
+    lowered.includes('chunkloaderror') ||
+    lowered.includes('failed to load chunk') ||
+    (lowered.includes('/_next/static/chunks') && lowered.includes('failed'))
+  );
+};
 
 const Layout: FC = () => {
   const { isPWA } = usePlatform();
@@ -67,6 +83,21 @@ const Layout: FC = () => {
       navigate('/training', { replace: true });
     }
   }, [isLoaded, isLogin, isTrainingOnly, navigate, pathname]);
+
+  useEffect(() => {
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      if (!shouldRecoverFromChunkError(event.reason)) return;
+      if (sessionStorage.getItem(CHUNK_RELOAD_FLAG) === '1') return;
+
+      sessionStorage.setItem(CHUNK_RELOAD_FLAG, '1');
+      window.location.reload();
+    };
+
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    return () => {
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+    };
+  }, [pathname]);
 
   return (
     <HotkeysProvider initiallyActiveScopes={[HotkeyScopeEnum.Global]}>

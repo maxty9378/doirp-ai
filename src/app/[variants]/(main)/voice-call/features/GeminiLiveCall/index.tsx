@@ -1544,7 +1544,7 @@ const GeminiLiveCall = memo(
               lineHeight: 1.6,
             }}
           >
-            {CONNECTION_ERROR_DESC}
+            {errorMessage || CONNECTION_ERROR_DESC}
           </p>
         </Modal>
 

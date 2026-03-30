@@ -215,6 +215,7 @@ export async function GET(request: Request) {
         ? process.env.VOICE_CALL_WS_PROXY_DEV?.trim() || DEV_DEFAULT_VOICE_WS
         : null);
     const geminiWsUrl = rawProxyUrl ? rawProxyUrl.replace(/^http/, 'ws') : null;
+
     const liveModel = resolveVoiceCallLiveModel(agentId);
 
     const payload: Record<string, unknown> = {
