@@ -428,8 +428,8 @@ const styles = createStaticStyles(({ css }) => ({
   `,
   nameDialogDurationBtnActive: css`
     border-color: rgb(16 185 129 / 80%);
-    color: #d1fae5;
-    background: rgb(16 185 129 / 18%);
+    color: #065f46;
+    background: rgb(16 185 129 / 22%);
     box-shadow: inset 0 0 0 1px rgb(16 185 129 / 45%);
   `,
   nameDialogFooter: css`
