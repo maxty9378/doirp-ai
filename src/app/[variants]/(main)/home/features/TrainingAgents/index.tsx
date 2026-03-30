@@ -1,20 +1,16 @@
-﻿'use client';
+'use client';
 
 import { SESSION_CHAT_URL } from '@lobechat/const';
-import { ActionIcon, Avatar, Block, Flexbox, Text } from '@lobehub/ui';
-import { Dropdown, Modal, message } from 'antd';
+import { Avatar, Block, Flexbox, Text } from '@lobehub/ui';
+import { message, Modal } from 'antd';
 import { cssVar } from 'antd-style';
-import { BotIcon, MoreVertical, Upload } from 'lucide-react';
+import { BotIcon } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import GroupBlock from '@/app/[variants]/(main)/home/features/components/GroupBlock';
 import ScrollShadowWithButton from '@/app/[variants]/(main)/home/features/components/ScrollShadowWithButton';
-import {
-  HARD_NEGOTIATIONS_PRESETS,
-  INITIAL_TRAINING_AGENT_PRESETS,
-  type InitialTrainingAgentPreset,
-} from '@/config/initialAgents';
+import { HARD_NEGOTIATIONS_PRESETS, type InitialTrainingAgentPreset } from '@/config/initialAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -25,10 +21,7 @@ import { getAgentStoreState } from '@/store/agent';
 import { useSessionStore } from '@/store/session';
 
 import { compressImageForBanner } from './compressBannerImage';
-import TrainingAgentItem from './Item';
-import TrainingScenarioCard, {
-  type TrainingScenarioFromApi,
-} from './TrainingScenarioCard';
+import TrainingScenarioCard, { type TrainingScenarioFromApi } from './TrainingScenarioCard';
 
 interface TrainingAgentsProps {
   compact?: boolean;
@@ -79,12 +72,21 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
       .then((data) => {
         if (!cancelled && Array.isArray(data?.scenarios)) {
           setVoiceScenarios(
-            data.scenarios.map((s: { key: string; title: string; description?: string; bannerUrl?: string }) => ({
-              key: s.key,
-              title: s.title,
-              description: s.description ?? null,
-              bannerUrl: s.bannerUrl ?? null,
-            })),
+            data.scenarios.map(
+              (s: {
+                key: string;
+                title: string;
+                description?: string;
+                bannerUrl?: string;
+                avatarUrl?: string;
+              }) => ({
+                key: s.key,
+                title: s.title,
+                description: s.description ?? null,
+                bannerUrl: s.bannerUrl ?? null,
+                avatarUrl: s.avatarUrl ?? null,
+              }),
+            ),
           );
         }
       })
@@ -385,4 +387,3 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
   );
 });
 export default TrainingAgents;
-

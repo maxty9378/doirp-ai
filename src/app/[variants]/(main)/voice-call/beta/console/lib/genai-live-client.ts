@@ -74,6 +74,7 @@ export interface LiveClientEventTypes {
  */
 export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
   protected client: GoogleGenAI;
+  protected options: LiveClientOptions;
 
   private _status: "connected" | "disconnected" | "connecting" = "disconnected";
   public get status() {
@@ -98,6 +99,7 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
 
   constructor(options: LiveClientOptions) {
     super();
+    this.options = options;
     this.client = new GoogleGenAI(options);
     this.send = this.send.bind(this);
     this.onopen = this.onopen.bind(this);
@@ -131,6 +133,23 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
       onclose: this.onclose,
     };
 
+    const OriginalWebSocket = window.WebSocket;
+    const proxyBaseUrl = this.options.httpOptions?.baseUrl;
+    const apiKey = this.options.apiKey;
+
+    if (proxyBaseUrl && proxyBaseUrl.includes('apidoirp.ru')) {
+      const proxyWsUrl = proxyBaseUrl.replace(/^http/, 'ws');
+      (window as any).WebSocket = class extends OriginalWebSocket {
+        constructor(url: string | URL, protocols?: string | string[]) {
+          let finalUrl = url.toString();
+          if (finalUrl.includes('BidiGenerateContent')) {
+            finalUrl = `${proxyWsUrl}${proxyWsUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(apiKey)}`;
+          }
+          super(finalUrl, protocols);
+        }
+      };
+    }
+
     try {
       this._session = await this.client.live.connect({
         model,
@@ -141,6 +160,8 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
       console.error("Error connecting to GenAI Live:", e);
       this._status = "disconnected";
       return false;
+    } finally {
+      window.WebSocket = OriginalWebSocket;
     }
 
     this._status = "connected";

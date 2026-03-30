@@ -327,10 +327,10 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
         <div className={styles.mobileHeader}>
           <ChatHeader
             showBackButton
+            style={mobileHeaderSticky}
             center={
               <ChatHeader.Title title={<span style={{ lineHeight: 1.2 }}>{mobileTitle}</span>} />
             }
-            style={mobileHeaderSticky}
             onBackClick={() => {
               if (isEditMode) {
                 openCall();
@@ -342,6 +342,14 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
         </div>
       ) : (
         <div className={styles.headerActions}>
+          <Button
+            size="small"
+            style={{ marginRight: 'auto' }}
+            type="text"
+            onClick={() => navigate(isMobileLayout ? '/training' : '/')}
+          >
+            ← Выход
+          </Button>
           <WideScreenButton />
         </div>
       )}

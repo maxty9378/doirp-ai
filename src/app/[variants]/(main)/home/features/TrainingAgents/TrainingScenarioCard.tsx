@@ -1,15 +1,16 @@
 'use client';
 
-import { Block, Flexbox, Text } from '@lobehub/ui';
+import { Avatar, Block, Flexbox, Text } from '@lobehub/ui';
 import { cssVar } from 'antd-style';
 import { memo } from 'react';
 
 const TRAINING_CARD_WIDTH = 380;
 const TRAINING_CARD_MIN_HEIGHT = 320;
-const VOICE_TRAINER_ICON = '/images/voice-call/trainer-ai-mic.svg';
+const DEFAULT_AVATAR = '/images/voice-call/trainer-ai-mic.svg';
 const BANNER_FALLBACK = '/images/voice-call/trainer-ai-mic.svg';
 
 export interface TrainingScenarioFromApi {
+  avatarUrl?: string | null;
   bannerUrl?: string | null;
   description?: string | null;
   key: string;
@@ -26,6 +27,7 @@ interface TrainingScenarioCardProps {
 const TrainingScenarioCard = memo<TrainingScenarioCardProps>(
   ({ scenario, onClick, loading, fullWidth }) => {
     const bannerUrl = scenario.bannerUrl?.trim() || null;
+    const avatarUrl = scenario.avatarUrl?.trim() || null;
     const title = scenario.title || 'Тренажёр';
     const description = scenario.description || 'Голосовой тренажёр. Нажмите, чтобы начать.';
 
@@ -49,9 +51,7 @@ const TrainingScenarioCard = memo<TrainingScenarioCardProps>(
         <div
           style={{
             aspectRatio: '16 / 9',
-            backgroundImage: bannerUrl
-              ? `url(${bannerUrl})`
-              : `url(${BANNER_FALLBACK})`,
+            backgroundImage: bannerUrl ? `url(${bannerUrl})` : `url(${BANNER_FALLBACK})`,
             backgroundPosition: 'center, center',
             backgroundRepeat: 'no-repeat, no-repeat',
             backgroundSize: bannerUrl ? 'cover, cover' : 'cover, 88px',
@@ -89,10 +89,10 @@ const TrainingScenarioCard = memo<TrainingScenarioCardProps>(
               {loading ? 'Запуск...' : 'Нажмите, чтобы начать'}
             </Text>
           </Flexbox>
-          <img
-            alt=""
-            src={VOICE_TRAINER_ICON}
-            style={{ alignSelf: 'flex-start', flex: 'none', height: 40, marginTop: 2, width: 40 }}
+          <Avatar
+            avatar={avatarUrl || DEFAULT_AVATAR}
+            size={40}
+            style={{ alignSelf: 'flex-start', flex: 'none', marginTop: 2 }}
           />
         </Flexbox>
       </Block>

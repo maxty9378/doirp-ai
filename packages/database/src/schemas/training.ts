@@ -27,6 +27,7 @@ export const trainingScenarios = pgTable(
     userLabel: text('user_label'),
     voiceName: text('voice_name'),
     bannerUrl: text('banner_url'),
+    avatarUrl: text('avatar_url'),
     contextWindow: integer('context_window'),
     silenceNudgeAfterMs: integer('silence_nudge_after_ms'),
     silenceNudgeCooldownMs: integer('silence_nudge_cooldown_ms'),

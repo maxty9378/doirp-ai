@@ -1,15 +1,15 @@
-import { getLLMConfig } from '@/envs/llm';
-import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
+import { getLLMConfig } from '@/envs/llm';
+import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { getTrainingScenarioByKey } from '@/server/services/training';
 
 import { proxyFetch } from '../_proxyFetch';
 
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
+const GEMINI_TEXT_MODEL = 'gemini-3.1-flash-lite-preview';
 
 const DEBRIEF_PROMPT = (transcript: string) =>
   `Ты — эксперт по коммуникациям и кризис-менеджменту. Ниже транскрипт стресс-интервью маркетолога компании с провокационной журналисткой.
@@ -26,11 +26,17 @@ ${transcript}
 Пиши по-русски, конкретно и доброжелательно. Без вступления.`;
 
 async function buildDebriefPrompt(transcript: string, scenarioId?: string | null): Promise<string> {
-  if (!scenarioId?.trim()) return DEBRIEF_PROMPT(transcript);
-  const scenario = await getTrainingScenarioByKey(scenarioId.trim());
-  const custom = scenario?.debriefPrompt?.trim();
-  if (custom) return custom.replace(/\{\{transcript\}\}/g, transcript);
-  return DEBRIEF_PROMPT(transcript);
+  let promptText = '';
+  if (!scenarioId?.trim()) {
+    promptText = DEBRIEF_PROMPT(transcript);
+  } else {
+    const scenario = await getTrainingScenarioByKey(scenarioId.trim());
+    const custom = scenario?.debriefPrompt?.trim();
+    if (custom) promptText = custom.replaceAll('{{transcript}}', transcript);
+    else promptText = DEBRIEF_PROMPT(transcript);
+  }
+
+  return `${promptText}\n\nВАЖНО: Твой ответ должен быть СТРОГО на русском языке.`;
 }
 
 export const runtime = 'nodejs';
@@ -53,15 +59,12 @@ export async function POST(req: Request) {
     const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
     if (!apiKey) {
-      return NextResponse.json(
-        { error: 'GOOGLE_API_KEY is not configured' },
-        { status: 503 },
-      );
+      return NextResponse.json({ error: 'GOOGLE_API_KEY is not configured' }, { status: 503 });
     }
 
     const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
     const endpoint = `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-    
+
     const res = await proxyFetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -21,7 +21,7 @@ const baseScenario = {
   enableScoring: true,
   id: 'trn_base_gfd',
   key: 'training-gfd-stress',
-  scoreDisplayLabel: 'ЭФИРНЫЙ ПРЕССИНГ',
+  scoreDisplayLabel: 'РЕЗУЛЬТАТ',
   scoreLevelLabels: { high: 'Высокий', low: 'Низкий', mid: 'Средний' },
   title: 'GFD: Стресс-интервью',
 } as const;

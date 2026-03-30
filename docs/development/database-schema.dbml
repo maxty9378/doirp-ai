@@ -1324,6 +1324,7 @@ table training_scenarios {
   user_label text
   voice_name text
   banner_url text
+  avatar_url text
   context_window integer
   silence_nudge_after_ms integer
   silence_nudge_cooldown_ms integer
@@ -1365,6 +1366,10 @@ table voice_call_sessions {
   speaker_name text
   transcript jsonb [not null]
   analysis_result jsonb
+  debug_log jsonb
+  transcript_source text
+  stt_status text
+  stt_error text
   score integer
   hang_up_reason text
   duration_seconds integer

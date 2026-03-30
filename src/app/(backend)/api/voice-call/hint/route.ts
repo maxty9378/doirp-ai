@@ -1,14 +1,14 @@
-import { getLLMConfig } from '@/envs/llm';
-import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
+import { getLLMConfig } from '@/envs/llm';
+import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 
 import { proxyFetch } from '../_proxyFetch';
 
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
+const GEMINI_TEXT_MODEL = 'gemini-3.1-flash-lite-preview';
 
 interface TranscriptEntry {
   role: 'ai' | 'user';
@@ -25,7 +25,10 @@ export async function POST(request: Request) {
     const body = (await request.json()) as { transcript?: TranscriptEntry[] };
     const transcript = Array.isArray(body?.transcript) ? body.transcript : [];
     if (transcript.length === 0) {
-      return NextResponse.json({ error: 'transcript is required (non-empty array)' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'transcript is required (non-empty array)' },
+        { status: 400 },
+      );
     }
 
     const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
@@ -38,6 +41,7 @@ export async function POST(request: Request) {
     const prompt = `Ты — опытный бизнес-тренер. Ниже представлен транскрипт текущего звонка между стажером-продавцом (user) и недовольным клиентом (ai).
 Твоя задача: напиши ОДНУ короткую, идеальную фразу (прямую речь), которую стажер должен сказать прямо сейчас, чтобы отработать возражение и успокоить клиента.
 Не пиши никаких вступлений, только саму фразу, которую нужно произнести вслух.
+ВАЖНО: Фраза должна быть СТРОГО на русском языке.
 
 Транскрипт диалога:
 ${transcript.map((t) => `${t.role.toUpperCase()}: ${t.text}`).join('\n')}`;

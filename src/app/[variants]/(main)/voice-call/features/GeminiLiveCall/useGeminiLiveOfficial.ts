@@ -680,6 +680,20 @@ export function useGeminiLiveOfficial({
         },
       });
 
+      const OriginalWebSocket = window.WebSocket;
+      if (config.geminiWsUrl) {
+        const proxyWsUrl = config.geminiWsUrl;
+        (window as any).WebSocket = class extends OriginalWebSocket {
+          constructor(url: string | URL, protocols?: string | string[]) {
+            let finalUrl = url.toString();
+            if (finalUrl.includes('BidiGenerateContent')) {
+              finalUrl = `${proxyWsUrl}${proxyWsUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(config.apiKey)}`;
+            }
+            super(finalUrl, protocols);
+          }
+        };
+      }
+
       const flushInterruptedAiTurn = () => {
         const rawTurnText =
           `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
@@ -864,45 +878,52 @@ export function useGeminiLiveOfficial({
         }
       };
 
-      const session = await client.live.connect({
-        callbacks: {
-          onclose: (event) => {
-            pushDebugEvent('ws-close', { code: event.code, reason: event.reason || '' });
-            sessionRef.current = null;
-            connectionLockRef.current = false;
+      let session;
+      try {
+        session = await client.live.connect({
+          callbacks: {
+            onclose: (event) => {
+              pushDebugEvent('ws-close', { code: event.code, reason: event.reason || '' });
+              sessionRef.current = null;
+              connectionLockRef.current = false;
 
-            if (manualDisconnectRef.current) return;
+              if (manualDisconnectRef.current) return;
 
-            if (!isSetupCompleteRef.current) {
-              reportError(
-                `Live-соединение закрыто до старта (code: ${event.code}${event.reason ? `: ${event.reason}` : ''}).`,
-              );
-              return;
-            }
+              if (!isSetupCompleteRef.current) {
+                reportError(
+                  `Live-соединение закрыто до старта (code: ${event.code}${event.reason ? `: ${event.reason}` : ''}).`,
+                );
+                return;
+              }
 
-            if (!hangupScheduledRef.current && transcriptRef.current.length > 0) {
-              finalizeCall('ai', 'Соединение закрыто.', 1000, false);
-              return;
-            }
+              if (!hangupScheduledRef.current && transcriptRef.current.length > 0) {
+                finalizeCall('ai', 'Соединение закрыто.', 1000, false);
+                return;
+              }
 
-            setStatus('idle');
+              setStatus('idle');
+            },
+            onerror: (event) => {
+              log('sdk-error %O', event);
+              pushDebugEvent('ws-error', {
+                message: event.message || 'SDK live error',
+              });
+            },
+            onmessage: (message) => {
+              void onmessage(message);
+            },
+            onopen: () => {
+              pushDebugEvent('ws-open');
+            },
           },
-          onerror: (event) => {
-            log('sdk-error %O', event);
-            pushDebugEvent('ws-error', {
-              message: event.message || 'SDK live error',
-            });
-          },
-          onmessage: (message) => {
-            void onmessage(message);
-          },
-          onopen: () => {
-            pushDebugEvent('ws-open');
-          },
-        },
-        config: liveConfig,
-        model: liveModel || DEFAULT_VOICE_CALL_LIVE_MODEL,
-      });
+          config: liveConfig,
+          model: liveModel || DEFAULT_VOICE_CALL_LIVE_MODEL,
+        });
+      } finally {
+        if (config.geminiWsUrl) {
+          window.WebSocket = OriginalWebSocket;
+        }
+      }
       sessionRef.current = session;
 
       const recorder = new AudioRecorder(PCM_IN_SAMPLE_RATE);

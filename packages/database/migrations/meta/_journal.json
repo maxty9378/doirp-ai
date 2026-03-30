@@ -763,6 +763,13 @@
       "when": 1774767200000,
       "tag": "0108_training_gfd_google_live",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1774854507410,
+      "tag": "0109_lonely_lucky_pierre",
+      "breakpoints": true
     }
   ],
   "version": "6"

@@ -9,18 +9,20 @@ import { serverDB } from '@/database/server';
 import { getTrainingScenarioWithKnowledge } from '@/server/services/training';
 
 interface ScoreLevelLabels {
+  high?: string;
   low?: string;
   mid?: string;
-  high?: string;
 }
 
 interface ScenarioUpdatePayload {
   analyzePrompt?: string | null;
   assistantLabel?: string | null;
+  autoSuccessPrompt?: string | null;
+  avatarUrl?: string | null;
   bannerUrl?: string | null;
   checkpointIds?: string[] | null;
-  debriefPrompt?: string | null;
   contextWindow?: number | null;
+  debriefPrompt?: string | null;
   description?: string | null;
   enableCheckpoints?: boolean | null;
   enableScoring?: boolean | null;
@@ -34,20 +36,19 @@ interface ScenarioUpdatePayload {
   key?: string | null;
   legend?: string | null;
   openingInstruction?: string | null;
-  showIntroDialog?: boolean | null;
-  roundEndingPrompt?: string | null;
-  silenceNudgeTemplate?: string | null;
-  shortAnswerNudge?: string | null;
   quietSpeakerNudge?: string | null;
-  autoSuccessPrompt?: string | null;
+  roundEndingPrompt?: string | null;
   scoreDisplayLabel?: string | null;
   scoreLevelLabels?: ScoreLevelLabels | null;
-  showLegend?: boolean | null;
   sessionDurationMs?: number | null;
+  shortAnswerNudge?: string | null;
+  showIntroDialog?: boolean | null;
+  showLegend?: boolean | null;
   silenceHardHangupMs?: number | null;
   silenceNudgeAfterMs?: number | null;
   silenceNudgeCooldownMs?: number | null;
   silenceNudgePhrases?: string[] | null;
+  silenceNudgeTemplate?: string | null;
   systemPrompt?: string | null;
   title?: string | null;
   userLabel?: string | null;
@@ -122,6 +123,7 @@ export async function PUT(req: NextRequest) {
   const patch: ScenarioUpdatePayload & { updatedAt: Date } = {
     analyzePrompt: body.analyzePrompt?.trim() || null,
     assistantLabel: body.assistantLabel?.trim() || null,
+    avatarUrl: body.avatarUrl?.trim() || null,
     bannerUrl: body.bannerUrl?.trim() || null,
     checkpointIds,
     debriefPrompt: body.debriefPrompt?.trim() || null,
@@ -148,8 +150,10 @@ export async function PUT(req: NextRequest) {
     scoreLevelLabels,
     showLegend: body.showLegend ?? null,
     sessionDurationMs: typeof body.sessionDurationMs === 'number' ? body.sessionDurationMs : null,
-    silenceHardHangupMs: typeof body.silenceHardHangupMs === 'number' ? body.silenceHardHangupMs : null,
-    silenceNudgeAfterMs: typeof body.silenceNudgeAfterMs === 'number' ? body.silenceNudgeAfterMs : null,
+    silenceHardHangupMs:
+      typeof body.silenceHardHangupMs === 'number' ? body.silenceHardHangupMs : null,
+    silenceNudgeAfterMs:
+      typeof body.silenceNudgeAfterMs === 'number' ? body.silenceNudgeAfterMs : null,
     silenceNudgeCooldownMs:
       typeof body.silenceNudgeCooldownMs === 'number' ? body.silenceNudgeCooldownMs : null,
     silenceNudgePhrases: silencePhrases,
@@ -165,9 +169,9 @@ export async function PUT(req: NextRequest) {
     const [updated] = await serverDB
       .update(trainingScenarios)
       .set(
-        Object.fromEntries(
-          Object.entries(patch).filter(([, v]) => v !== undefined),
-        ) as Partial<typeof trainingScenarios.$inferInsert>,
+        Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as Partial<
+          typeof trainingScenarios.$inferInsert
+        >,
       )
       .where(eq(trainingScenarios.key, key))
       .returning();

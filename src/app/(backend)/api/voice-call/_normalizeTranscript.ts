@@ -8,7 +8,7 @@ import {
 import { proxyFetch } from './_proxyFetch';
 
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
+const GEMINI_TEXT_MODEL = 'gemini-3.1-flash-lite-preview';
 
 const BROKEN_HYPHEN_PATTERN = /\b\p{Script=Cyrillic}+\s+-\s+\p{Script=Cyrillic}+\b/iu;
 const SHORT_CYRILLIC_PATTERN = /\p{Script=Cyrillic}+/gu;

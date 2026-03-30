@@ -12,7 +12,6 @@ import { EqualizerBars } from '@/components/EqualizerBars';
 import { LiveChat } from '@/components/LiveChat';
 import NeuralNetworkLoading from '@/components/NeuralNetworkLoading';
 import { RoundTimer } from '@/components/RoundTimer';
-import { ScoreDisplayBroadcast } from '@/components/ScoreDisplayBroadcast';
 import { VOICE_AGENT_TITLES } from '@/config/voiceAgents';
 import { DEFAULT_AVATAR } from '@/const/meta';
 import { isOfficialGoogleLiveTrainer } from '@/const/voiceCall';
@@ -53,30 +52,6 @@ const styles = createStaticStyles(({ css }) => ({
 
     @media (width >= 640px) {
       padding-block-end: 16px;
-    }
-  `,
-  back: css`
-    cursor: pointer;
-
-    position: absolute;
-    z-index: 10;
-    inset-block-start: 16px;
-    inset-inline-start: 16px;
-
-    border: none;
-
-    font-size: 13px;
-    color: var(--color-text-secondary);
-
-    background: none;
-
-    &:hover {
-      color: var(--color-text);
-    }
-
-    @media (width <= 640px) {
-      inset-block-start: 12px;
-      inset-inline-start: 12px;
     }
   `,
   hangUpBanner: css`
@@ -1081,7 +1056,6 @@ const GeminiLiveCall = memo(
             saveError,
           });
           sessionId = localId;
-          message.warning('Сессия сохранена локально. Попробуем синхронизировать позже.');
         }
 
         if (sttStatus !== 'succeeded' && sttError) {
@@ -1327,17 +1301,6 @@ const GeminiLiveCall = memo(
       }
     }, [status, callStartAt]);
 
-    const [barFlash, setBarFlash] = useState<'positive' | 'negative' | null>(null);
-    const prevBarScoreRef = useRef(score);
-    useEffect(() => {
-      const delta = score - prevBarScoreRef.current;
-      prevBarScoreRef.current = score;
-      if (delta === 0) return;
-      setBarFlash(delta > 0 ? 'positive' : 'negative');
-      const t = setTimeout(() => setBarFlash(null), 1200);
-      return () => clearTimeout(t);
-    }, [score]);
-
     const aiIsSpeaking = aiVolume > 5;
     const userIsSpeaking = userVolume > 10;
     const hangupBannerText =
@@ -1434,7 +1397,7 @@ const GeminiLiveCall = memo(
             <div className={styles.failedOverlay} />
             <div className={styles.failedCenter}>
               <div className={styles.failedText}>
-                <h1 className={styles.failedTitle}>УШЁЛ ПО-АНГЛИЙСКИ</h1>
+                <h1 className={styles.failedTitle}>ПОБЕГ</h1>
                 <div className={styles.failedDesc}>
                   ИНТЕРВЬЮ ПРЕРВАНО.
                   <br />
@@ -1467,70 +1430,7 @@ const GeminiLiveCall = memo(
     }
 
     return (
-      <div
-        className={styles.root}
-        style={{
-          boxShadow:
-            barFlash === 'negative'
-              ? 'inset 0 0 120px rgba(239, 68, 68, 0.18), inset 0 0 300px rgba(239, 68, 68, 0.08)'
-              : barFlash === 'positive'
-                ? 'inset 0 0 120px rgba(34, 197, 94, 0.15), inset 0 0 300px rgba(34, 197, 94, 0.06)'
-                : undefined,
-          transition: 'box-shadow 0.5s ease',
-        }}
-      >
-        {barFlash === 'negative' && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              fontSize: 120,
-              opacity: 0.12,
-              pointerEvents: 'none',
-              zIndex: 0,
-              animation: 'shame-pop 0.8s ease-out forwards',
-              userSelect: 'none',
-            }}
-          >
-            😬
-          </div>
-        )}
-        {barFlash === 'positive' && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              fontSize: 120,
-              opacity: 0.12,
-              pointerEvents: 'none',
-              zIndex: 0,
-              animation: 'shame-pop 0.8s ease-out forwards',
-              userSelect: 'none',
-            }}
-          >
-            💪
-          </div>
-        )}
-        <style>{`
-        @keyframes shame-pop {
-          0% { 
-            opacity: 0.25; 
-            transform: translate(-50%, -50%) scale(0.5); 
-          }
-          30% { 
-            opacity: 0.18; 
-            transform: translate(-50%, -50%) scale(1.2); 
-          }
-          100% { 
-            opacity: 0; 
-            transform: translate(-50%, -50%) scale(1.5); 
-          }
-        }
-      `}</style>
+      <div className={styles.root}>
         {showNameDialog && (
           <div className={styles.nameDialogMask}>
             <div className={styles.nameDialogCard}>
@@ -1591,12 +1491,6 @@ const GeminiLiveCall = memo(
               </div>
             </div>
           </div>
-        )}
-
-        {!embedded && !isMobileLayout && (
-          <button className={styles.back} type="button" onClick={() => navigate('/')}>
-            ← Выход
-          </button>
         )}
 
         {isAnalyzing && (
@@ -1744,8 +1638,8 @@ const GeminiLiveCall = memo(
 
             <div className={styles.bbDivider} />
 
-            {/* Центральная колонка: таймер + скор */}
-            <div className={styles.bbCenter}>
+            {/* Центральная колонка: таймер */}
+            <div className={styles.bbCenter} style={{ justifyContent: 'center' }}>
               <div className={styles.bbTimerBox}>
                 <RoundTimer
                   callStartAt={callStartAt}
@@ -1753,12 +1647,6 @@ const GeminiLiveCall = memo(
                   isCallActive={isCallActive}
                 />
               </div>
-              <ScoreDisplayBroadcast
-                embedded
-                score={score}
-                scoreDisplayLabel={uiConfig.scoreDisplayLabel}
-                scoreLevelLabels={uiConfig.scoreLevelLabels}
-              />
             </div>
 
             <div className={styles.bbDivider} />

@@ -11,7 +11,7 @@ import { normalizeVoiceCallTranscriptWithGemini } from '../_normalizeTranscript'
 import { proxyFetch } from '../_proxyFetch';
 
 const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_TEXT_MODEL = 'gemini-2.0-flash';
+const GEMINI_TEXT_MODEL = 'gemini-3.1-flash-lite-preview';
 
 export interface TranscriptEntryInput {
   role: 'ai' | 'user';
@@ -77,12 +77,28 @@ ${transcript}
 
 Верни ТОЛЬКО валидный JSON без markdown-обёртки, со следующей структурой:
 {
-  "overallScore": число от 0 до 100 (общий балл в процентах),
+  "overallScore": число от 0 до 100 (средневзвешенный балл по компетенциям),
   "competencies": [
-    { "name": "Стрессоустойчивость", "score": число 0-100 },
-    { "name": "Аргументация и фактология", "score": число 0-100 },
-    { "name": "Управление конфликтом/эмоциями", "score": число 0-100 },
-    { "name": "Следование этике бренда", "score": число 0-100 }
+    { 
+      "name": "Стрессоустойчивость", 
+      "score": число 0-100,
+      "comment": "почему такая оценка (кратко)"
+    },
+    { 
+      "name": "Аргументация и фактология", 
+      "score": число 0-100,
+      "comment": "почему такая оценка (кратко)"
+    },
+    { 
+      "name": "Управление конфликтом/эмоциями", 
+      "score": число 0-100,
+      "comment": "почему такая оценка (кратко)"
+    },
+    { 
+      "name": "Следование этике бренда", 
+      "score": число 0-100,
+      "comment": "почему такая оценка (кратко)"
+    }
   ],
   "summary": "Развернутое и реалистичное резюме (3-5 предложений) о том, как обучаемый справился со стрессом, какие ошибки допустил и что сделал хорошо. Оценивай строго, но справедливо.",
   "strengths": ["сильная сторона 1", "сильная сторона 2"],
@@ -102,16 +118,29 @@ ${transcript}
   ]
 }
 
+ГАЙД ПО ОЦЕНКЕ (шкала 0-100):
+- 0-20: Критический провал, грубость, полное молчание или уход из диалога.
+- 21-40: Слабая позиция, много пауз, неуверенность, отсутствие аргументов.
+- 41-60: Средний результат, удовлетворительные ответы, но без инициативы.
+- 61-80: Хорошая работа, уверенная позиция, наличие фактов и аргументов.
+- 81-100: Блестящее владение ситуацией, идеальное хладнокровие, победа в споре.
+
 ВАЖНЫЕ ПРАВИЛА:
 1. Анализируй ТОЛЬКО реплики, начинающиеся на "Пользователь (Обучаемый)". Не приписывай обучаемому реплики провокатора!
 2. В phraseFeedback разбирай по очереди фразы обучаемого. Если фраза удачная — suggestedPhrase может совпадать или быть с небольшим улучшением, advice — что сделано хорошо.
-3. Если "Пользователь (Обучаемый)" всё время молчал (нет его реплик в транскрипте), напиши об этом в summary (укажи на ступор/молчание), поставь низкий балл, а в phraseFeedback добавь один объект, где userPhrase — "[Молчание]", а suggestedPhrase — пример уверенного ответа на провокацию, чтобы начать диалог.
+3. Если "Пользователь (Обучаемый)" всё время молчал (нет его реплик в транскрипте), напиши об этом в summary (укажи на ступор/молчание), поставь низкий балл (0-10), а в phraseFeedback добавь один объект, где userPhrase — "[Молчание]", а suggestedPhrase — пример уверенного ответа на провокацию, чтобы начать диалог.
 4. Обязательно заполни behavioralMetrics, оценив поведение пользователя по тексту транскрипта и длительности разговора.
 Пиши все тексты по-русски.`;
 };
 
-function buildAnalyzePrompt(transcript: string, scenarioId?: string | null, speakerName?: string, durationSec?: number): Promise<string> {
-  if (!scenarioId?.trim()) return Promise.resolve(ANALYZE_PROMPT(transcript, speakerName, durationSec));
+function buildAnalyzePrompt(
+  transcript: string,
+  scenarioId?: string | null,
+  speakerName?: string,
+  durationSec?: number,
+): Promise<string> {
+  if (!scenarioId?.trim())
+    return Promise.resolve(ANALYZE_PROMPT(transcript, speakerName, durationSec));
   return getTrainingScenarioByKey(scenarioId.trim()).then((scenario) => {
     const custom = scenario?.analyzePrompt?.trim();
     if (custom) return custom.replaceAll('{{transcript}}', transcript);
@@ -128,7 +157,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = (await req.json()) as { transcript?: unknown; scenarioId?: string; speakerName?: string; durationSec?: number };
+    const body = (await req.json()) as {
+      transcript?: unknown;
+      scenarioId?: string;
+      speakerName?: string;
+      durationSec?: number;
+    };
     const normalizedEntries = normalizeTranscriptEntries(body?.transcript);
     const entries = await normalizeVoiceCallTranscriptWithGemini(normalizedEntries, {
       force: true,
@@ -144,7 +178,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const promptTextBase = await buildAnalyzePrompt(transcript, body.scenarioId, body.speakerName, body.durationSec);
+    const promptTextBase = await buildAnalyzePrompt(
+      transcript,
+      body.scenarioId,
+      body.speakerName,
+      body.durationSec,
+    );
 
     const hasUserLines = entries.some((e) => e.role === 'user');
     let promptText = promptTextBase;
@@ -155,6 +194,10 @@ export async function POST(req: Request) {
       promptText +=
         '\n\nВНИМАНИЕ: Оценивай только реплики "Пользователь (Обучаемый):". Строго запрещено приписывать фразы "Собеседника (AI-провокатора):" Пользователю в phraseFeedback.';
     }
+
+    // Принудительно требуем русский язык, даже если используется кастомный промпт
+    promptText +=
+      '\n\nВАЖНО: Весь твой ответ (summary, feedback, названия компетенций и т.д.) должен быть СТРОГО на русском языке.';
 
     const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);

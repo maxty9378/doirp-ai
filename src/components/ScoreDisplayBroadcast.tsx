@@ -5,21 +5,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ScoreLevelLabels } from './ScoreDisplay';
 
 export interface ScoreDisplayBroadcastProps {
+  embedded?: boolean;
   score: number;
   scoreDisplayLabel?: string | null;
   scoreLevelLabels?: ScoreLevelLabels | null;
-  embedded?: boolean;
 }
 
-const DEFAULT_SCORE_LABEL = 'ЭФИРНЫЙ ПРЕССИНГ';
+const DEFAULT_SCORE_LABEL = 'РЕЗУЛЬТАТ';
 const DEFAULT_LEVEL_LOW = 'Провал интервью';
 const DEFAULT_LEVEL_MID = 'Напряжённая пауза';
 const DEFAULT_LEVEL_HIGH = 'Уверенная позиция';
 
-function getLevelLabel(
-  score: number,
-  scoreLevelLabels?: ScoreLevelLabels | null,
-): string {
+function getLevelLabel(score: number, scoreLevelLabels?: ScoreLevelLabels | null): string {
   if (score < -10) return scoreLevelLabels?.low?.trim() || DEFAULT_LEVEL_LOW;
   if (score > 10) return scoreLevelLabels?.high?.trim() || DEFAULT_LEVEL_HIGH;
   return scoreLevelLabels?.mid?.trim() || DEFAULT_LEVEL_MID;
