@@ -39,11 +39,12 @@ export async function POST(request: Request) {
 
     const body = (await request.json().catch(() => ({}))) as PlanTurnBody;
     const agentId = body.agentId || DEFAULT_TRAINING_AGENT_ID;
-    const transcript = Array.isArray(body.transcript) ? body.transcript.filter(isTranscriptEntry) : [];
+    const transcript = Array.isArray(body.transcript)
+      ? body.transcript.filter(isTranscriptEntry)
+      : [];
 
-    if (transcript.length === 0) {
-      return NextResponse.json({ error: 'Transcript is required' }, { status: 400 });
-    }
+    // Для первого хода интервью транскрипт может быть пустым — это не ошибка.
+    // Просто вернём результат на основе пустой истории.
 
     const trainingScenario = await getTrainingScenarioWithKnowledge(agentId).catch((dbError) => {
       console.warn('[voice-call/plan-turn] Training scenario from DB failed:', dbError);

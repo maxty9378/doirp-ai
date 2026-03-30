@@ -56,7 +56,37 @@ describe('training scenario variants', () => {
     expect(scenarios[1]?.id).toBe(baseScenario.id);
   });
 
+  it('prefers the exact scenario from DB if it exists (allows user customization)', async () => {
+    const customGoogleLiveScenario = {
+      ...baseScenario,
+      id: 'trn_custom_google_live',
+      key: 'training-gfd-stress-google-live',
+      legend: 'Custom Legend for Google Live',
+      title: 'Custom GFD: Google Live',
+    } as const;
+
+    // Сначала ищем по точному ключу
+    mockFrom.mockReturnValueOnce({ where: mockWhere });
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockLimit.mockResolvedValueOnce([customGoogleLiveScenario]);
+
+    const scenario = await getTrainingScenarioByKey('training-gfd-stress-google-live');
+
+    expect(scenario).toMatchObject({
+      id: 'trn_custom_google_live',
+      key: 'training-gfd-stress-google-live',
+      legend: 'Custom Legend for Google Live',
+      title: 'Custom GFD: Google Live',
+    });
+  });
+
   it('resolves the dedicated Google Live key to the base scenario content but returns variant metadata', async () => {
+    // 1. По точному ключу не находим
+    mockFrom.mockReturnValueOnce({ where: mockWhere });
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockLimit.mockResolvedValueOnce([]);
+
+    // 2. Fallback на базовый ключ
     mockFrom.mockReturnValueOnce({ where: mockWhere });
     mockWhere.mockReturnValueOnce({ limit: mockLimit });
     mockLimit.mockResolvedValueOnce([baseScenario]);

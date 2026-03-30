@@ -65,20 +65,35 @@ export const listAllTrainingScenarios = async (): Promise<TrainingScenarioItem[]
 export const getTrainingScenarioByKey = async (
   key: string,
 ): Promise<TrainingScenarioItem | null> => {
+  // 1. Сначала ищем по точному ключу в БД
+  // Если пользователь изменил конкретную версию (например, -google-live),
+  // мы должны вернуть именно её.
+  const [exactScenario] = await serverDB
+    .select()
+    .from(trainingScenarios)
+    .where(eq(trainingScenarios.key, key))
+    .limit(1);
+
+  if (exactScenario) return exactScenario;
+
+  // 2. Если по точному ключу не нашли, пробуем разрешить ключ (fallback)
   const resolvedKey = resolveVoiceCallScenarioKey(key);
-  const [scenario] = await serverDB
+
+  // Если это уже был разрешенный ключ и мы его не нашли выше, значит его нет в БД
+  if (key === resolvedKey) return null;
+
+  const [baseScenario] = await serverDB
     .select()
     .from(trainingScenarios)
     .where(eq(trainingScenarios.key, resolvedKey))
     .limit(1);
 
-  if (!scenario) return null;
+  if (!baseScenario) return null;
 
-  if (key === resolvedKey) return scenario;
+  // 3. Если нашли базовый сценарий для специального ключа (варианта), возвращаем вариант
+  if (key === GFD_GOOGLE_LIVE_VOICE_AGENT_ID) return buildGoogleLiveScenarioVariant(baseScenario);
 
-  if (key === GFD_GOOGLE_LIVE_VOICE_AGENT_ID) return buildGoogleLiveScenarioVariant(scenario);
-
-  return scenario;
+  return baseScenario;
 };
 
 export const getTrainingScenarioWithKnowledge = async (

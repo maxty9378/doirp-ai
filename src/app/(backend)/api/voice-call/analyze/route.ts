@@ -221,21 +221,33 @@ export async function POST(req: Request) {
       }),
     });
 
-    const data = (await res.json()) as {
+    const responseData = (await res.json().catch(() => ({}))) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
       error?: { message?: string };
     };
 
     if (!res.ok) {
-      const msg = data?.error?.message || 'Ошибка запроса к модели анализа';
+      const msg = responseData?.error?.message || 'Ошибка запроса к модели анализа';
       console.warn('[voice-call/analyze] Ответ Gemini:', res.status, msg);
+
+      // Если ошибка похожа на блокировку по региону или VPN, возвращаем более мягкое сообщение
+      const isGeoBlocked =
+        res.status === 403 ||
+        res.status === 400 ||
+        res.status === 451 ||
+        /location|region|not supported|restricted|country|geo/i.test(msg);
+
+      const userFriendlyError = isGeoBlocked
+        ? 'Сервис анализа временно недоступен в вашем регионе. Пожалуйста, проверьте настройки подключения или попробуйте позже.'
+        : msg;
+
       return NextResponse.json(
-        { error: msg },
+        { error: userFriendlyError },
         { status: res.status >= 400 && res.status < 600 ? res.status : 502 },
       );
     }
 
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    const raw = responseData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     if (!raw) {
       return NextResponse.json({ error: 'Empty analyze response' }, { status: 502 });
     }

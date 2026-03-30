@@ -42,6 +42,7 @@ const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
 const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 300_000;
 const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слышите?'];
+const FINAL_PROMPT_MAX_WAIT_MS = 20_000;
 const DEFAULT_TURN_PLANNER_TOOL_NAME = 'get_training_turn_context';
 const DEFAULT_ASSISTANT_LABEL = 'ИИ-агент';
 const DEFAULT_USER_LABEL = 'Вы';
@@ -50,6 +51,9 @@ const DEFAULT_VOICE_NAME = 'Sulafat';
 const log = debug('lobe-client:voice-call:live-official');
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+const buildRoundEndingPrompt = (rawPrompt: string) =>
+  `${rawPrompt.trim()}\n\nВажно: если ты сейчас произносишь предыдущую реплику, ПРЕРВИСЬ и сразу начни финальную фразу. Скажи итог одним связным ответом и после этого замолчи.`;
 
 const base64ToBytes = (base64: string) => {
   const binary = atob(base64);
@@ -319,6 +323,8 @@ export function useGeminiLiveOfficial({
   const isSetupCompleteRef = useRef(false);
   const roundStartRef = useRef<number | null>(null);
   const roundVerdictTriggeredRef = useRef(false);
+  const awaitingFinalAiTurnRef = useRef(false);
+  const finalPromptSentAtRef = useRef<number | null>(null);
   const deductedSessionRef = useRef(false);
   const plannerStateRef = useRef<Record<string, unknown> | null>(null);
   const disconnectRef = useRef<() => void>(() => {});
@@ -474,7 +480,12 @@ export function useGeminiLiveOfficial({
       if (autoSuccessPrompt) sendRealtimeText(autoSuccessPrompt);
 
       window.setTimeout(() => {
-        if (hangupScheduledRef.current || statusRef.current !== 'ready') return;
+        if (
+          hangupScheduledRef.current ||
+          statusRef.current !== 'ready' ||
+          awaitingFinalAiTurnRef.current
+        )
+          return;
         finalizeCall('success', 'Интервью завершено: все цели достигнуты.', 1200, false);
       }, 9000);
     },
@@ -519,6 +530,8 @@ export function useGeminiLiveOfficial({
     recordedUserPcmBytesRef.current = 0;
     roundStartRef.current = null;
     roundVerdictTriggeredRef.current = false;
+    awaitingFinalAiTurnRef.current = false;
+    finalPromptSentAtRef.current = null;
     deductedSessionRef.current = false;
     hangupScheduledRef.current = false;
     isSetupCompleteRef.current = false;
@@ -600,6 +613,8 @@ export function useGeminiLiveOfficial({
       recordedUserPcmBytesRef.current = 0;
       roundStartRef.current = null;
       roundVerdictTriggeredRef.current = false;
+      awaitingFinalAiTurnRef.current = false;
+      finalPromptSentAtRef.current = null;
       deductedSessionRef.current = false;
       hangupScheduledRef.current = false;
       isSetupCompleteRef.current = false;
@@ -640,7 +655,9 @@ export function useGeminiLiveOfficial({
         (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '');
 
       const liveConfig: LiveConnectConfig = {
-        inputAudioTranscription: {},
+        inputAudioTranscription: {
+          languageCodes: ['ru-RU'],
+        },
         outputAudioTranscription: {},
         responseModalities: [Modality.AUDIO],
         speechConfig: {
@@ -875,6 +892,12 @@ export function useGeminiLiveOfficial({
 
           currentAiTurnTextRef.current = '';
           currentAiTurnMetaTextRef.current = '';
+
+          if (awaitingFinalAiTurnRef.current) {
+            awaitingFinalAiTurnRef.current = false;
+            finalPromptSentAtRef.current = null;
+            finalizeCall('success', 'Время интервью истекло. Эфир завершён.', 250, false);
+          }
         }
       };
 
@@ -896,7 +919,11 @@ export function useGeminiLiveOfficial({
                 return;
               }
 
-              if (!hangupScheduledRef.current && transcriptRef.current.length > 0) {
+              if (
+                !hangupScheduledRef.current &&
+                transcriptRef.current.length > 0 &&
+                !awaitingFinalAiTurnRef.current
+              ) {
                 finalizeCall('ai', 'Соединение закрыто.', 1000, false);
                 return;
               }
@@ -998,12 +1025,26 @@ export function useGeminiLiveOfficial({
 
       if (!roundVerdictTriggeredRef.current && remaining <= 15_000 && remaining > 0) {
         roundVerdictTriggeredRef.current = true;
-        if (uiConfigRef.current.roundEndingPrompt) {
-          sendRealtimeText(uiConfigRef.current.roundEndingPrompt);
+        const rawPrompt = uiConfigRef.current.roundEndingPrompt;
+        if (rawPrompt) {
+          awaitingFinalAiTurnRef.current = true;
+          finalPromptSentAtRef.current = Date.now();
+          sendRealtimeText(buildRoundEndingPrompt(rawPrompt));
         }
       }
 
       if (remaining <= 0 && !hangupScheduledRef.current) {
+        if (awaitingFinalAiTurnRef.current) {
+          const waitedMs = finalPromptSentAtRef.current
+            ? Date.now() - finalPromptSentAtRef.current
+            : 0;
+          if (waitedMs < FINAL_PROMPT_MAX_WAIT_MS) return;
+
+          // Если ИИ внезапно не отправил финальную фразу — не зависаем навсегда.
+          awaitingFinalAiTurnRef.current = false;
+          finalPromptSentAtRef.current = null;
+        }
+
         finalizeCall('success', 'Время интервью истекло. Эфир завершён.', 1200, false);
       }
     }, 1000);

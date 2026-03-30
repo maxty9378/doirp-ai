@@ -43,9 +43,12 @@ export async function GET() {
       );
     }
 
+    const DEV_DEFAULT_VOICE_WS = 'ws://localhost:3011';
     const rawProxyUrl =
       process.env.VOICE_CALL_WS_PROXY_URL?.trim() ||
-      (process.env.NODE_ENV === 'development' ? process.env.VOICE_CALL_WS_PROXY_DEV?.trim() : null);
+      (process.env.NODE_ENV === 'development'
+        ? process.env.VOICE_CALL_WS_PROXY_DEV?.trim() || DEV_DEFAULT_VOICE_WS
+        : null);
 
     return NextResponse.json({
       apiKey,

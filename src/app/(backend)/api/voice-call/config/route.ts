@@ -208,7 +208,7 @@ export async function GET(request: Request) {
     const userLabel =
       trainingScenario?.scenario.userLabel || (isTpPrice ? SALES_REP_LABEL : YOU_LABEL);
 
-    const DEV_DEFAULT_VOICE_WS = 'wss://apidoirp.ru/voice-call-ws';
+    const DEV_DEFAULT_VOICE_WS = 'ws://localhost:3011';
     const rawProxyUrl =
       process.env.VOICE_CALL_WS_PROXY_URL?.trim() ||
       (process.env.NODE_ENV === 'development'

@@ -1,5 +1,5 @@
 import { headers } from 'next/headers';
-import { type NextRequest,NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
@@ -28,7 +28,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Аудиофайл пустой.' }, { status: 400 });
     }
 
-    const sttResult = await transcribeVoiceCallAudioWithGoogle(audioBuffer, audio.type || 'audio/wav');
+    const sttResult = await transcribeVoiceCallAudioWithGoogle(
+      audioBuffer,
+      audio.type || 'audio/wav',
+    );
 
     const normalizedSegments = await normalizeVoiceCallTranscriptWithGemini(
       sanitizeVoiceCallTranscript(
@@ -42,14 +45,16 @@ export async function POST(req: NextRequest) {
       segments: normalizedSegments.map((segment) => ({
         text: segment.text,
       })),
-      transcriptText: normalizedSegments.map((segment) => segment.text).join(' ').trim(),
+      transcriptText: normalizedSegments
+        .map((segment) => segment.text)
+        .join(' ')
+        .trim(),
       transcriptSource: 'google-stt',
     });
   } catch (error) {
-    console.error('[voice-call/transcribe]', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
-      { status: 500 },
-    );
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    console.error('[voice-call/transcribe] Server Error:', message, error);
+
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }

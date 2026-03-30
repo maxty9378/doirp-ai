@@ -252,7 +252,7 @@ const startLongRunningRecognize = async (gcsUri: string) => {
       config: {
         enableAutomaticPunctuation: true,
         enableWordTimeOffsets: false,
-        encoding: 'LINEAR16',
+        encoding: 'ENCODING_UNSPECIFIED',
         languageCode: DEFAULT_LANGUAGE_CODE,
         model,
         sampleRateHertz: 16000,

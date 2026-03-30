@@ -1,27 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
-import Select from 'react-select';
 
 import { useLiveAPIContext } from '../../contexts/LiveAPIContext';
 
 const voiceOptions = [
-  { value: 'Puck', label: 'Puck' },
-  { value: 'Charon', label: 'Charon' },
-  { value: 'Kore', label: 'Kore' },
-  { value: 'Fenrir', label: 'Fenrir' },
-  { value: 'Aoede', label: 'Aoede' },
-];
+  { value: 'Puck', title: 'Puck', description: 'Игривый тембр' },
+  { value: 'Charon', title: 'Charon', description: 'Уверенный тембр' },
+  { value: 'Kore', title: 'Kore', description: 'Спокойный тембр' },
+  { value: 'Fenrir', title: 'Fenrir', description: 'Живой тембр' },
+  { value: 'Aoede', title: 'Aoede', description: 'Мягкий тембр' },
+] as const;
 
 export default function VoiceSelector() {
   const { config, setConfig } = useLiveAPIContext();
-  const [selectedOption, setSelectedOption] = useState<{ label: string; value: string } | null>(
-    voiceOptions[4],
-  );
+
+  const getCurrentVoice = () =>
+    config.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName || voiceOptions[1].value;
+
+  const [selectedVoice, setSelectedVoice] = useState<string>(getCurrentVoice());
 
   useEffect(() => {
-    const voiceName =
-      config.speechConfig?.voiceConfig?.prebuiltVoiceConfig?.voiceName || voiceOptions[4].value;
-
-    setSelectedOption({ label: voiceName, value: voiceName });
+    setSelectedVoice(getCurrentVoice());
   }, [config]);
 
   const updateConfig = useCallback(
@@ -41,40 +39,36 @@ export default function VoiceSelector() {
   );
 
   return (
-    <div className="select-group">
-      <label htmlFor="voice-selector">Голос</label>
-      <Select
-        className="react-select"
-        classNamePrefix="react-select"
-        defaultValue={selectedOption}
-        id="voice-selector"
-        onChange={(option) => {
-          setSelectedOption(option);
-          if (option) {
-            updateConfig(option.value);
-          }
-        }}
-        options={voiceOptions}
-        styles={{
-          control: (baseStyles) => ({
-            ...baseStyles,
-            background: 'var(--neutral-15)',
-            border: 0,
-            color: 'var(--neutral-90)',
-            maxHeight: '33px',
-            minHeight: '33px',
-          }),
-          option: (styles, { isFocused, isSelected }) => ({
-            ...styles,
-            backgroundColor: isFocused
-              ? 'var(--neutral-30)'
-              : isSelected
-                ? 'var(--neutral-20)'
-                : undefined,
-          }),
-        }}
-        value={selectedOption}
-      />
+    <div className="voice-selector">
+      <div className="voice-selector-label">Голос</div>
+
+      <div aria-label="Выбор голоса" className="voice-options" role="radiogroup">
+        {voiceOptions.map((item) => {
+          const isSelected = item.value === selectedVoice;
+
+          return (
+            <button
+              aria-checked={isSelected}
+              className={`voice-option ${isSelected ? 'active' : ''}`}
+              key={item.value}
+              role="radio"
+              type="button"
+              onClick={() => {
+                setSelectedVoice(item.value);
+                updateConfig(item.value);
+              }}
+            >
+              <div className="voice-option-main">
+                <div className="voice-option-title">{item.title}</div>
+                <div className="voice-option-desc">{item.description}</div>
+              </div>
+              <div aria-hidden className="voice-option-check">
+                {isSelected ? '✓' : ''}
+              </div>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

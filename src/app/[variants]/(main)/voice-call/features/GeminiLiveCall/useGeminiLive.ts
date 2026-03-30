@@ -164,8 +164,12 @@ const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
 // По умолчанию раунд длится 5 минут
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 300_000;
 const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слушаете?'];
+const FINAL_PROMPT_MAX_WAIT_MS = 20_000;
 const _MONOLOGUE_DURATION_MS = 15_000;
 const _MONOLOGUE_VOLUME_THRESHOLD = 10;
+
+const buildRoundEndingPrompt = (rawPrompt: string) =>
+  `${rawPrompt.trim()}\n\nВажно: если ты сейчас произносишь предыдущую реплику, ПРЕРВИСЬ и сразу начни финальную фразу. Скажи итог одним связным ответом и после этого замолчи.`;
 
 /** Очищает служебные теги в тексте от модели */
 function cleanAiText(text: string, options?: { stripEnglishReasoning?: boolean }): string {
@@ -536,6 +540,8 @@ export function useGeminiLive({
   const aiSpeakingSinceRef = useRef<number>(0);
   const roundStartRef = useRef<number | null>(null);
   const roundVerdictTriggeredRef = useRef(false);
+  const awaitingFinalAiTurnRef = useRef(false);
+  const finalPromptSentAtRef = useRef<number | null>(null);
   const firstAiTurnCompleteRef = useRef(false);
   const speakerNameRef = useRef(speakerName?.trim() || '');
   const deductedSessionRef = useRef(false);
@@ -819,7 +825,12 @@ export function useGeminiLive({
       if (autoSuccessPrompt) sendClientText(autoSuccessPrompt);
 
       setTimeout(() => {
-        if (hangupScheduledRef.current || statusRef.current !== 'ready') return;
+        if (
+          hangupScheduledRef.current ||
+          statusRef.current !== 'ready' ||
+          awaitingFinalAiTurnRef.current
+        )
+          return;
         finalizeCall('success', 'Интервью завершено: все цели достигнуты.', 1200, false);
       }, 9000);
     },
@@ -1251,6 +1262,8 @@ export function useGeminiLive({
             playConnectionTone();
             roundStartRef.current = Date.now();
             roundVerdictTriggeredRef.current = false;
+            awaitingFinalAiTurnRef.current = false;
+            finalPromptSentAtRef.current = null;
             sendStartTrigger();
             return;
           }
@@ -1345,6 +1358,12 @@ export function useGeminiLive({
               firstAiTurnCompleteRef.current = true;
             }
             lastBotEndRef.current = Date.now();
+
+            if (awaitingFinalAiTurnRef.current) {
+              awaitingFinalAiTurnRef.current = false;
+              finalPromptSentAtRef.current = null;
+              finalizeCall('success', 'Время интервью истекло. Эфир завершён.', 250, false);
+            }
           }
         } catch (e) {
           console.warn('Ошибка парсинга:', e);
@@ -1414,7 +1433,11 @@ export function useGeminiLive({
           return;
         }
 
-        if (!hangupScheduledRef.current && transcriptRef.current.length > 0) {
+        if (
+          !hangupScheduledRef.current &&
+          transcriptRef.current.length > 0 &&
+          !awaitingFinalAiTurnRef.current
+        ) {
           finalizeCall('ai', 'Соединение закрыто.', 1000, false);
         } else if (!hangupScheduledRef.current) {
           setStatus('idle');
@@ -1539,6 +1562,8 @@ export function useGeminiLive({
     lastAudioStreamEndAtRef.current = 0;
     audioChunkSentCountRef.current = 0;
     audioStreamEndedRef.current = false;
+    awaitingFinalAiTurnRef.current = false;
+    finalPromptSentAtRef.current = null;
 
     playDisconnectTone();
 
@@ -1612,10 +1637,24 @@ export function useGeminiLive({
         if (!roundVerdictTriggeredRef.current && remaining <= 15_000 && remaining > 0) {
           roundVerdictTriggeredRef.current = true;
           const roundEndingPrompt = uiConfigRef.current.roundEndingPrompt;
-          if (roundEndingPrompt) sendClientText(roundEndingPrompt);
+          if (roundEndingPrompt) {
+            awaitingFinalAiTurnRef.current = true;
+            finalPromptSentAtRef.current = Date.now();
+            sendClientText(buildRoundEndingPrompt(roundEndingPrompt));
+          }
         }
 
         if (remaining <= 0 && !hangupScheduledRef.current) {
+          if (awaitingFinalAiTurnRef.current) {
+            const waitedMs = finalPromptSentAtRef.current
+              ? Date.now() - finalPromptSentAtRef.current
+              : 0;
+            if (waitedMs < FINAL_PROMPT_MAX_WAIT_MS) return;
+
+            awaitingFinalAiTurnRef.current = false;
+            finalPromptSentAtRef.current = null;
+          }
+
           finalizeCall('success', 'Время интервью истекло. Эфир завершён.', 1200, false);
           return;
         }

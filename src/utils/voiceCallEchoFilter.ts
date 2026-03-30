@@ -163,18 +163,36 @@ const mergeAdjacentTranscriptText = (prev: string, next: string) => {
   return `${a} ${b}`;
 };
 
-const SHORT_USER_UTTERANCES_KEEP = new Set(['да', 'нет', 'угу', 'ага', 'ок', 'окей', 'готово']);
+const SHORT_USER_UTTERANCES_KEEP = new Set([
+  'да',
+  'нет',
+  'угу',
+  'ага',
+  'ок',
+  'окей',
+  'готово',
+  'слушаю',
+  'алло',
+  'привет',
+  'понял',
+  'ясно',
+  'верно',
+  'точно',
+]);
 
 const looksLikeNoisyUserFragment = (text: string) => {
   const normalized = normalizeEchoText(text);
   if (!normalized) return true;
   if (SHORT_USER_UTTERANCES_KEEP.has(normalized)) return false;
 
-  // Слишком короткие «обрывки»
-  if (normalized.length <= 4) return true;
+  // Совсем короткие обрывки (1-2 символа), которые не в белом списке
+  if (normalized.length <= 2) return true;
 
   const tokens = normalized.split(' ').filter(Boolean);
-  if (tokens.length === 1 && tokens[0].length <= 6) return true;
+
+  // Если это одно слово, оно должно быть хотя бы 3 символа (например, "чек", "фон")
+  // 6 символов было слишком агрессивно (отсекало "привет", "понял")
+  if (tokens.length === 1 && tokens[0].length <= 2) return true;
 
   return false;
 };
@@ -289,7 +307,8 @@ export const sanitizeVoiceCallTranscript = <T extends VoiceCallTranscriptEntry>(
   const trimmed = entries
     .map((e) => {
       const raw = typeof e.text === 'string' ? e.text : String(e.text ?? '');
-      const nextText = e.role === 'ai' ? cleanAiTextForStore(raw) : normalizeUserTranscriptText(raw);
+      const nextText =
+        e.role === 'ai' ? cleanAiTextForStore(raw) : normalizeUserTranscriptText(raw);
       return { ...e, text: nextText };
     })
     .filter((e) => e.text.length > 0) as T[];

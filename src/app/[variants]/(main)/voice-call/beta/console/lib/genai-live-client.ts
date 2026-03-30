@@ -137,7 +137,9 @@ export class GenAILiveClient extends EventEmitter<LiveClientEventTypes> {
     const proxyBaseUrl = this.options.httpOptions?.baseUrl;
     const apiKey = this.options.apiKey;
 
-    if (proxyBaseUrl && proxyBaseUrl.includes('apidoirp.ru')) {
+    // Перехватываем WebSocket URL только когда baseUrl реально указывает на прокси,
+    // иначе подключаемся к Google Live напрямую.
+    if (proxyBaseUrl && !proxyBaseUrl.includes('generativelanguage.googleapis.com')) {
       const proxyWsUrl = proxyBaseUrl.replace(/^http/, 'ws');
       (window as any).WebSocket = class extends OriginalWebSocket {
         constructor(url: string | URL, protocols?: string | string[]) {
