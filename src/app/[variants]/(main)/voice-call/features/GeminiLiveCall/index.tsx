@@ -1202,6 +1202,11 @@ const GeminiLiveCall = memo(
     const handleConfirmSpeaker = () => {
       const trimmed = speakerName.trim();
       if (!trimmed) return;
+      // Важно для Safari/iOS: прогреваем аудио-контекст строго из клика пользователя,
+      // иначе браузер может заблокировать звук после асинхронных запросов.
+      if (useOfficialLiveHook) {
+        void officialLive.prewarmAudio?.();
+      }
       // Сохраняем уже очищенное имя, чтобы передать его в конфиг
       setSpeakerName(trimmed);
       setShowNameDialog(false);

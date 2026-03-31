@@ -47,6 +47,9 @@ const DEFAULT_TURN_PLANNER_TOOL_NAME = 'get_training_turn_context';
 const DEFAULT_ASSISTANT_LABEL = 'ИИ-агент';
 const DEFAULT_USER_LABEL = 'Вы';
 const DEFAULT_VOICE_NAME = 'Sulafat';
+const AI_VOLUME_FPS = 12;
+const TURN_PLANNER_TIMEOUT_MS = 800;
+const NUDGE_AI_QUIET_WINDOW_MS = 1800;
 
 const log = debug('lobe-client:voice-call:live-official');
 
@@ -377,6 +380,24 @@ export function useGeminiLiveOfficial({
   const deductedSessionRef = useRef(false);
   const plannerStateRef = useRef<Record<string, unknown> | null>(null);
   const disconnectRef = useRef<() => void>(() => {});
+  const lastAiVolumeAtRef = useRef(0);
+  const lastAiVolumeValueRef = useRef(0);
+  const lastAiActivityAtRef = useRef(0);
+
+  const prewarmAudio = useCallback(() => {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!playContextRef.current || playContextRef.current.state === 'closed') {
+      playContextRef.current = new Ctx({ sampleRate: PCM_OUT_SAMPLE_RATE });
+    }
+    if (playContextRef.current.state === 'suspended') {
+      // Важно для Safari/iOS: вызывается из пользовательского клика до любых await.
+      void playContextRef.current.resume().catch((error) => {
+        console.error('[GeminiLiveOfficial] audio resume failed:', error);
+      });
+    }
+  }, []);
 
   const syncDebugSnapshot = useCallback(() => {
     if (typeof window === 'undefined') return;
@@ -451,6 +472,8 @@ export function useGeminiLiveOfficial({
     const transcript = [...transcriptRef.current];
 
     try {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), TURN_PLANNER_TIMEOUT_MS);
       const response = await fetch('/api/voice-call/plan-turn', {
         body: JSON.stringify({
           agentId,
@@ -460,7 +483,9 @@ export function useGeminiLiveOfficial({
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         method: 'POST',
+        signal: controller.signal,
       });
+      window.clearTimeout(timeout);
 
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
@@ -577,6 +602,10 @@ export function useGeminiLiveOfficial({
     plannerStateRef.current = null;
     recordedUserPcmChunksRef.current = [];
     recordedUserPcmBytesRef.current = 0;
+    lastAiActivityAtRef.current = 0;
+    // Важно: lastUserSpeechRef используется для вычисления тишины.
+    // Если не сбросить между сессиями, "молчание" может считаться уже истёкшим.
+    lastUserSpeechRef.current = 0;
     lastSilenceNudgeAtRef.current = 0;
     silenceNudgeCountRef.current = 0;
     roundStartRef.current = null;
@@ -617,6 +646,9 @@ export function useGeminiLiveOfficial({
     manualDisconnectRef.current = false;
 
     try {
+      // До любых await: Safari/iOS требует resume AudioContext строго из пользовательского действия.
+      prewarmAudio();
+
       const startRes = await fetch('/api/voice-call/start', {
         credentials: 'include',
         method: 'POST',
@@ -663,8 +695,11 @@ export function useGeminiLiveOfficial({
       transcriptRef.current = [];
       currentAiTurnTextRef.current = '';
       currentAiTurnMetaTextRef.current = '';
+      lastAiActivityAtRef.current = 0;
       recordedUserPcmChunksRef.current = [];
       recordedUserPcmBytesRef.current = 0;
+      // lastUserSpeechRef влияет на старте таймера тишины — сбрасываем, чтобы nudge не срабатывал сразу.
+      lastUserSpeechRef.current = 0;
       lastSilenceNudgeAtRef.current = 0;
       silenceNudgeCountRef.current = 0;
       roundStartRef.current = null;
@@ -678,17 +713,13 @@ export function useGeminiLiveOfficial({
       syncDebugSnapshot();
 
       pushDebugEvent('connect-start', { agentId });
-
-      const Ctx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (!playContextRef.current || playContextRef.current.state === 'closed') {
-        playContextRef.current = new Ctx({ sampleRate: PCM_OUT_SAMPLE_RATE });
-      }
-      if (playContextRef.current.state === 'suspended') await playContextRef.current.resume();
+      // Контекст уже "застолбили" в prewarmAudio; здесь просто гарантируем, что он есть.
+      prewarmAudio();
 
       if (!streamerRef.current) {
-        streamerRef.current = new AudioStreamer(playContextRef.current);
+        const playContext = playContextRef.current;
+        if (!playContext) throw new Error('Аудиоконтекст недоступен.');
+        streamerRef.current = new AudioStreamer(playContext);
         analyserRef.current = streamerRef.current.analyser;
         freqDataRef.current = new Uint8Array(
           new ArrayBuffer(streamerRef.current.analyser.frequencyBinCount),
@@ -706,9 +737,13 @@ export function useGeminiLiveOfficial({
       const extraSpeakerLine = trimmedName
         ? `\n- На вопросы сейчас отвечает сотрудник: ${trimmedName}. Обращайся к нему по имени.`
         : '';
+
+      const russianSpeechStyle = `\n\n[СТИЛЬ РЕЧИ]\n- Говори на чистом, естественном русском языке без иностранного акцента. У тебя идеальная русская дикция, правильные ударения и интонации носителя языка.\n- Если в контенте встречаются англоязычные названия (бренды, продукты, аббревиатуры), произноси их по-русски — транслитерируй в кириллицу (например: GFD → «Джи-Эф-Ди», Tornado Energy → «Торнадо Энерджи»).\n- Держи спокойный темп. Используй больше точек и тире, допускай многоточия (...) для микропауз. Избегай длинных фраз на одном дыхании.\n`;
+
       const sysInst =
         (config.systemInstruction || systemInstruction || '') +
-        (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '');
+        (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '') +
+        russianSpeechStyle;
 
       const liveConfig: LiveConnectConfig = {
         // Gemini API не поддерживает languageCodes в этом поле.
@@ -768,11 +803,8 @@ export function useGeminiLiveOfficial({
       }
 
       const flushInterruptedAiTurn = () => {
-        const rawTurnText =
-          `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
-        const spokenText = cleanAiText(currentAiTurnTextRef.current.trim());
-        const storeText = spokenText || (rawTurnText ? cleanAiText(rawTurnText) : '');
-        if (storeText) transcriptRef.current.push({ role: 'ai', text: storeText });
+        // Поведение ближе к официальным Live API примерам:
+        // при interrupted не фиксируем "обрезанный" turn в историю.
         currentAiTurnTextRef.current = '';
         currentAiTurnMetaTextRef.current = '';
       };
@@ -780,6 +812,7 @@ export function useGeminiLiveOfficial({
       const appendAiSpokenTranscription = (text: unknown) => {
         const next = typeof text === 'string' ? text.trim() : '';
         if (!next) return;
+        lastAiActivityAtRef.current = Date.now();
 
         currentAiTurnTextRef.current = mergeLiveTranscriptionText(
           currentAiTurnTextRef.current,
@@ -900,6 +933,7 @@ export function useGeminiLiveOfficial({
 
         if (serverContent.interrupted) {
           pushDebugEvent('server-interrupted');
+          lastAiActivityAtRef.current = Date.now();
           flushInterruptedAiTurn();
           streamerRef.current?.stop();
           return;
@@ -911,7 +945,10 @@ export function useGeminiLiveOfficial({
         const parts = serverContent.modelTurn?.parts ?? [];
         for (const part of parts) {
           const audioB64 = part.inlineData?.data;
-          if (audioB64) streamerRef.current?.addPCM16(audioB64);
+          if (audioB64) {
+            lastAiActivityAtRef.current = Date.now();
+            streamerRef.current?.addPCM16(audioB64);
+          }
           if (part.text) currentAiTurnMetaTextRef.current += `${part.text} `;
         }
 
@@ -1059,6 +1096,7 @@ export function useGeminiLiveOfficial({
     cleanupMedia,
     finalizeCall,
     maybeAutoFinish,
+    prewarmAudio,
     pushDebugEvent,
     reportError,
     requestTurnPlan,
@@ -1139,7 +1177,20 @@ export function useGeminiLiveOfficial({
           !lastSilenceNudgeAtRef.current ||
           now - lastSilenceNudgeAtRef.current >= silenceNudgeCooldownMs;
 
-        if (canNudgeBySilence && canNudgeByCooldown) {
+        const isAiCurrentlySpeaking =
+          !!streamerRef.current?.isPlaying ||
+          currentAiTurnTextRef.current.trim().length > 0 ||
+          currentAiTurnMetaTextRef.current.trim().length > 0;
+        const aiRecentlyActive =
+          !!lastAiActivityAtRef.current &&
+          now - lastAiActivityAtRef.current < NUDGE_AI_QUIET_WINDOW_MS;
+
+        if (
+          canNudgeBySilence &&
+          canNudgeByCooldown &&
+          !isAiCurrentlySpeaking &&
+          !aiRecentlyActive
+        ) {
           const phrase = silencePhrases[silenceNudgeCountRef.current % silencePhrases.length];
           const nudgeText = buildSilenceNudgeText(
             uiConfigRef.current.silenceNudgeTemplate,
@@ -1176,7 +1227,17 @@ export function useGeminiLiveOfficial({
         analyser.getByteFrequencyData(freqData);
         const sum = freqData.reduce((total, value) => total + value, 0);
         const average = sum / Math.max(1, freqData.length);
-        setAiVolume(Math.round((average / 255) * 100));
+        const nextValue = Math.round((average / 255) * 100);
+        const now = performance.now();
+        const minInterval = 1000 / AI_VOLUME_FPS;
+        if (
+          now - lastAiVolumeAtRef.current >= minInterval &&
+          nextValue !== lastAiVolumeValueRef.current
+        ) {
+          lastAiVolumeAtRef.current = now;
+          lastAiVolumeValueRef.current = nextValue;
+          setAiVolume(nextValue);
+        }
       }
 
       rafId = requestAnimationFrame(tick);
@@ -1225,5 +1286,6 @@ export function useGeminiLiveOfficial({
     status,
     uiConfig,
     userVolume,
+    prewarmAudio,
   };
 }
