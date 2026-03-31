@@ -1,11 +1,13 @@
 'use client';
 
 import {
+  EndSensitivity,
   GoogleGenAI,
   type LiveConnectConfig,
   type LiveServerMessage,
   Modality,
   type Session,
+  StartSensitivity,
   Type,
 } from '@google/genai/web';
 import debug from 'debug';
@@ -746,9 +748,17 @@ export function useGeminiLiveOfficial({
         russianSpeechStyle;
 
       const liveConfig: LiveConnectConfig = {
-        // Gemini API не поддерживает languageCodes в этом поле.
         inputAudioTranscription: {},
         outputAudioTranscription: {},
+        realtimeInputConfig: {
+          automaticActivityDetection: {
+            disabled: false,
+            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
+            prefixPaddingMs: 100,
+            silenceDurationMs: 500,
+            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
+          },
+        },
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: {
@@ -873,7 +883,9 @@ export function useGeminiLiveOfficial({
           isSetupCompleteRef.current = true;
           connectionLockRef.current = false;
           setStatus('ready');
-          roundStartRef.current = Date.now();
+          const now = Date.now();
+          roundStartRef.current = now;
+          lastUserSpeechRef.current = now;
           pushDebugEvent('setup-complete');
           sendStartTrigger();
           return;

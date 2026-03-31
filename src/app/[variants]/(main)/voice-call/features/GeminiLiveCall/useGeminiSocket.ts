@@ -3,27 +3,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface UseGeminiSocketOptions {
-  wsUrl: string;
-  systemInstruction: string;
-  voiceName: string;
   liveModel?: string;
-
-  onOpen?: () => void;
+  onAudioChunk?: (base64Audio: string) => void;
   onClose?: (code: number, reason: string) => void;
   onError?: (error: unknown) => void;
 
-  onAudioChunk?: (base64Audio: string) => void;
-  onTurnComplete?: () => void;
-  onTranscription?: (text: string) => void;
   onInterrupted?: () => void;
+  onOpen?: () => void;
+  onTranscription?: (text: string) => void;
+
+  onTurnComplete?: () => void;
+  systemInstruction: string;
+  voiceName: string;
+  wsUrl: string;
 }
 
 export interface GeminiSocketApi {
   connect: () => void;
   disconnect: () => void;
+  isConnected: boolean;
   sendAudioData: (base64PCM: string) => void;
   sendClientText: (text: string) => void;
-  isConnected: boolean;
 }
 
 export function useGeminiSocket(options: UseGeminiSocketOptions): GeminiSocketApi {
@@ -31,7 +31,7 @@ export function useGeminiSocket(options: UseGeminiSocketOptions): GeminiSocketAp
     wsUrl,
     systemInstruction,
     voiceName,
-    liveModel = 'models/gemini-3.1-flash-live-preview',
+    liveModel = 'gemini-3.1-flash-live-preview',
     onOpen,
     onClose,
     onError,
@@ -46,23 +46,20 @@ export function useGeminiSocket(options: UseGeminiSocketOptions): GeminiSocketAp
   const [isConnected, setIsConnected] = useState(false);
   const setupCompletedRef = useRef(false);
 
-  const closeSocket = useCallback(
-    (code?: number, reason?: string) => {
-      const ws = socketRef.current;
-      if (!ws) return;
-      try {
-        ws.close(code, reason);
-      } catch {
-        // ignore
-      } finally {
-        socketRef.current = null;
-        isConnectedRef.current = false;
-        setupCompletedRef.current = false;
-        setIsConnected(false);
-      }
-    },
-    [],
-  );
+  const closeSocket = useCallback((code?: number, reason?: string) => {
+    const ws = socketRef.current;
+    if (!ws) return;
+    try {
+      ws.close(code, reason);
+    } catch {
+      // ignore
+    } finally {
+      socketRef.current = null;
+      isConnectedRef.current = false;
+      setupCompletedRef.current = false;
+      setIsConnected(false);
+    }
+  }, []);
 
   const handleMessage = useCallback(
     async (event: MessageEvent) => {
@@ -142,13 +139,23 @@ export function useGeminiSocket(options: UseGeminiSocketOptions): GeminiSocketAp
         isConnectedRef.current = true;
         setIsConnected(true);
 
+        const resolvedModel = liveModel.startsWith('models/') ? liveModel : `models/${liveModel}`;
         const setupMsg: Record<string, unknown> = {
           setup: {
-            model: liveModel,
+            model: resolvedModel,
             generationConfig: {
               responseModalities: ['AUDIO'],
               speechConfig: {
                 voiceConfig: { prebuiltVoiceConfig: { voiceName } },
+              },
+            },
+            realtimeInputConfig: {
+              automaticActivityDetection: {
+                disabled: false,
+                startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+                endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+                prefixPaddingMs: 100,
+                silenceDurationMs: 500,
               },
             },
           },
@@ -222,14 +229,8 @@ export function useGeminiSocket(options: UseGeminiSocketOptions): GeminiSocketAp
       if (!trimmed) return;
 
       const msg = {
-        clientContent: {
-          turns: [
-            {
-              role: 'user',
-              parts: [{ text: trimmed }],
-            },
-          ],
-          turnComplete: true,
+        realtimeInput: {
+          text: trimmed,
         },
       };
 

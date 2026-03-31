@@ -4,8 +4,8 @@ import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
 const GFD_GOOGLE_LIVE_KEY = 'training-gfd-stress-google-live';
-const DEFAULT_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
-const GFD_GOOGLE_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
+const DEFAULT_LIVE_MODEL = 'gemini-3.1-flash-live-preview';
+const GFD_GOOGLE_LIVE_MODEL = 'gemini-3.1-flash-live-preview';
 const SCORE_LABEL_GFD = 'РЕЗУЛЬТАТ';
 
 const mockGetSession = vi.fn();

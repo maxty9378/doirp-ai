@@ -782,7 +782,7 @@ export function useGeminiLive({
       pushDebugEvent('client-text', { text: text.slice(0, 200) });
       ws.send(
         JSON.stringify({
-          clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true },
+          realtimeInput: { text },
         }),
       );
     },
@@ -879,7 +879,8 @@ export function useGeminiLive({
       const config = configRef.current as typeof configRef.current & { systemInstruction?: string };
       if (!config?.apiKey) throw new Error('Нет API-ключа Google.');
 
-      const liveModel = config.liveModel?.trim() || resolveVoiceCallLiveModel(agentId);
+      const rawModel = config.liveModel?.trim() || resolveVoiceCallLiveModel(agentId);
+      const liveModel = rawModel.startsWith('models/') ? rawModel : `models/${rawModel}`;
 
       const nextUiConfig: GeminiLiveUIConfig = {
         assistantLabel: config.assistantLabel || 'ИИ-агент',
@@ -1101,14 +1102,8 @@ export function useGeminiLive({
           pushDebugEvent('start-trigger', { text: startText.slice(0, 200) });
           wsRef.current.send(
             JSON.stringify({
-              clientContent: {
-                turns: [
-                  {
-                    role: 'user',
-                    parts: [{ text: startText }],
-                  },
-                ],
-                turnComplete: true,
+              realtimeInput: {
+                text: startText,
               },
             }),
           );
@@ -1132,6 +1127,15 @@ export function useGeminiLive({
               responseModalities: ['AUDIO'],
               speechConfig: {
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: config.voiceName || voiceName } },
+              },
+            },
+            realtimeInputConfig: {
+              automaticActivityDetection: {
+                disabled: false,
+                startOfSpeechSensitivity: 'START_SENSITIVITY_LOW',
+                endOfSpeechSensitivity: 'END_SENSITIVITY_LOW',
+                prefixPaddingMs: 100,
+                silenceDurationMs: 500,
               },
             },
             sessionResumption: {},
@@ -1265,7 +1269,9 @@ export function useGeminiLive({
             connectionLockRef.current = false;
             setStatus('ready');
             playConnectionTone();
-            roundStartRef.current = Date.now();
+            const now = Date.now();
+            roundStartRef.current = now;
+            lastUserSpeechRef.current = now;
             roundVerdictTriggeredRef.current = false;
             awaitingFinalAiTurnRef.current = false;
             finalPromptSentAtRef.current = null;
