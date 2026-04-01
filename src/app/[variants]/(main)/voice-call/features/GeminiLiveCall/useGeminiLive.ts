@@ -4,6 +4,7 @@ import debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  DEFAULT_TRAINING_ROUND_ENDING_PROMPT,
   DEFAULT_VOICE_CALL_AGENT_ID,
   DEFAULT_VOICE_CALL_LIVE_MODEL,
   GEMINI_31_FLASH_LIVE_MODEL,
@@ -164,7 +165,8 @@ const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
 // По умолчанию раунд длится 5 минут
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 300_000;
 const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слушаете?'];
-const FINAL_PROMPT_MAX_WAIT_MS = 20_000;
+const FINAL_AI_RESPONSE_ABSOLUTE_MAX_MS = 120_000;
+const FINAL_AUDIO_TAIL_MS = 400;
 const _MONOLOGUE_DURATION_MS = 15_000;
 const _MONOLOGUE_VOLUME_THRESHOLD = 10;
 
@@ -896,7 +898,7 @@ export function useGeminiLive({
         introDialogTitle: config.introDialogTitle ?? undefined,
         showIntroDialog: config.showIntroDialog ?? true,
         openingInstruction: config.openingInstruction ?? undefined,
-        roundEndingPrompt: config.roundEndingPrompt ?? undefined,
+        roundEndingPrompt: config.roundEndingPrompt?.trim() || DEFAULT_TRAINING_ROUND_ENDING_PROMPT,
         silenceNudgeTemplate: config.silenceNudgeTemplate ?? undefined,
         shortAnswerNudge: config.shortAnswerNudge ?? undefined,
         quietSpeakerNudge: config.quietSpeakerNudge ?? undefined,
@@ -1117,9 +1119,22 @@ export function useGeminiLive({
         const extraSpeakerLine = speakerNameRef.current
           ? `\n- На вопросы сейчас отвечает сотрудник: ${speakerNameRef.current}. Обращайся к нему по имени.`
           : '';
+        const russianSpeechStyle = [
+          '',
+          '[РЕЧЬ И ЖИВОСТЬ]',
+          '- Говори на чистом русском языке — как носитель, без акцента. Правильные ударения, живая интонация.',
+          '- Англоязычные бренды и аббревиатуры произноси по-русски: GFD → «Джи-Эф-Ди», Zero → «Зеро».',
+          '- Каждая реплика — живая реакция на последнее слово собеседника, а не заготовленный скрипт.',
+          '- Меняй интонацию: иногда холодно, иногда с иронией, иногда устало.',
+          '- Используй паузы через многоточие: «Ну... допустим», «Подождите...»',
+          '- Разговорные сокращения: «вы ж», «это ж», «ну и», «да ладно».',
+          '- Никогда не повторяй одну и ту же фразу-зацепку дважды подряд.',
+          '',
+        ].join('\n');
         const sysInst =
           (config.systemInstruction || systemInstruction || '') +
-          (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '');
+          (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '') +
+          russianSpeechStyle;
         const setupMsg: Record<string, unknown> = {
           setup: {
             model: liveModel,
@@ -1371,9 +1386,7 @@ export function useGeminiLive({
             lastBotEndRef.current = Date.now();
 
             if (awaitingFinalAiTurnRef.current) {
-              awaitingFinalAiTurnRef.current = false;
-              finalPromptSentAtRef.current = null;
-              finalizeCall('success', 'Время интервью истекло. Эфир завершён.', 250, false);
+              finalizeAfterFinalPlaybackRef.current();
             }
           }
         } catch (e) {
@@ -1610,6 +1623,32 @@ export function useGeminiLive({
     disconnectRef.current = disconnect;
   }, [disconnect]);
 
+  const finalizeAfterFinalPlaybackRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    finalizeAfterFinalPlaybackRef.current = () => {
+      const waitPlaybackIdle = () => {
+        if (hangupScheduledRef.current) return;
+        if (streamerRef.current?.isPlaying) {
+          requestAnimationFrame(waitPlaybackIdle);
+          return;
+        }
+        window.setTimeout(() => {
+          if (hangupScheduledRef.current) return;
+          awaitingFinalAiTurnRef.current = false;
+          finalPromptSentAtRef.current = null;
+          finalizeCall(
+            'success',
+            'Время интервью истекло. Эфир завершён.',
+            FINAL_AUDIO_TAIL_MS,
+            false,
+          );
+        }, FINAL_AUDIO_TAIL_MS);
+      };
+      requestAnimationFrame(waitPlaybackIdle);
+    };
+  }, [finalizeCall]);
+
   useEffect(
     () => () => {
       cleanupMedia();
@@ -1647,20 +1686,29 @@ export function useGeminiLive({
 
         if (!roundVerdictTriggeredRef.current && remaining <= 15_000 && remaining > 0) {
           roundVerdictTriggeredRef.current = true;
-          const roundEndingPrompt = uiConfigRef.current.roundEndingPrompt;
-          if (roundEndingPrompt) {
-            awaitingFinalAiTurnRef.current = true;
-            finalPromptSentAtRef.current = Date.now();
-            sendClientText(buildRoundEndingPrompt(roundEndingPrompt));
-          }
+          awaitingFinalAiTurnRef.current = true;
+          finalPromptSentAtRef.current = Date.now();
+          const roundEndingPrompt =
+            uiConfigRef.current.roundEndingPrompt?.trim() || DEFAULT_TRAINING_ROUND_ENDING_PROMPT;
+          sendClientText(buildRoundEndingPrompt(roundEndingPrompt));
         }
 
         if (remaining <= 0 && !hangupScheduledRef.current) {
+          if (!roundVerdictTriggeredRef.current) {
+            roundVerdictTriggeredRef.current = true;
+            awaitingFinalAiTurnRef.current = true;
+            finalPromptSentAtRef.current = now;
+            const roundEndingPrompt =
+              uiConfigRef.current.roundEndingPrompt?.trim() || DEFAULT_TRAINING_ROUND_ENDING_PROMPT;
+            sendClientText(buildRoundEndingPrompt(roundEndingPrompt));
+            return;
+          }
+
           if (awaitingFinalAiTurnRef.current) {
             const waitedMs = finalPromptSentAtRef.current
               ? Date.now() - finalPromptSentAtRef.current
               : 0;
-            if (waitedMs < FINAL_PROMPT_MAX_WAIT_MS) return;
+            if (waitedMs < FINAL_AI_RESPONSE_ABSOLUTE_MAX_MS) return;
 
             awaitingFinalAiTurnRef.current = false;
             finalPromptSentAtRef.current = null;

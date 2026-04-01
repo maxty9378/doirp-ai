@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
 import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
 import {
+  DEFAULT_TRAINING_ROUND_ENDING_PROMPT,
   DEFAULT_VOICE_CALL_AGENT_ID,
   DEFAULT_VOICE_CALL_LIVE_MODEL,
   GEMINI_31_FLASH_LIVE_MODEL,
@@ -295,12 +296,14 @@ export async function GET(request: Request) {
       payload.introDialogPlaceholder = trainingScenario.scenario.introDialogPlaceholder ?? null;
       payload.introDialogHint = trainingScenario.scenario.introDialogHint ?? null;
       payload.introDialogButtonLabel = trainingScenario.scenario.introDialogButtonLabel ?? null;
-      payload.roundEndingPrompt = trainingScenario.scenario.roundEndingPrompt ?? null;
       payload.silenceNudgeTemplate = trainingScenario.scenario.silenceNudgeTemplate ?? null;
       payload.shortAnswerNudge = trainingScenario.scenario.shortAnswerNudge ?? null;
       payload.quietSpeakerNudge = trainingScenario.scenario.quietSpeakerNudge ?? null;
       payload.autoSuccessPrompt = trainingScenario.scenario.autoSuccessPrompt ?? null;
     }
+
+    const roundEndingFromDb = trainingScenario?.scenario.roundEndingPrompt?.trim() ?? '';
+    payload.roundEndingPrompt = roundEndingFromDb || DEFAULT_TRAINING_ROUND_ENDING_PROMPT;
 
     return NextResponse.json(payload);
   } catch (error) {

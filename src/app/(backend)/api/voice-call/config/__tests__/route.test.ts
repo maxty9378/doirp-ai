@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
+
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
@@ -120,10 +122,33 @@ describe('GET /api/voice-call/config', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       liveModel?: string | null;
+      roundEndingPrompt?: string | null;
       scoreDisplayLabel?: string | null;
     };
     expect(body.liveModel).toBe(DEFAULT_LIVE_MODEL);
     expect(body.scoreDisplayLabel).toBe(SCORE_LABEL_GFD);
+    expect(body.roundEndingPrompt).toBe(DEFAULT_TRAINING_ROUND_ENDING_PROMPT);
+  });
+
+  it('returns default roundEndingPrompt when DB scenario has empty round_ending_prompt', async () => {
+    mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      scenario: {
+        contextWindow: 5,
+        goals: [],
+        roundEndingPrompt: null,
+        systemPrompt: 'System',
+        title: 'T',
+        voiceName: 'Sulafat',
+      },
+      knowledgeEntries: [],
+    });
+
+    const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { roundEndingPrompt?: string };
+    expect(body.roundEndingPrompt).toBe(DEFAULT_TRAINING_ROUND_ENDING_PROMPT);
   });
 
   it('returns Gemini 3.1 model for the dedicated Google Live trainer', async () => {

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
+
 import { AudioStreamer } from './AudioStreamer';
 import { useAudioStreamer } from './useAudioStreamer';
 import { useGeminiSocket } from './useGeminiSocket';
@@ -14,37 +16,37 @@ export interface TranscriptEntry {
 }
 
 export interface VoiceCallCheckpoint {
+  done: boolean;
   id: string;
   label: string;
-  done: boolean;
 }
 
 export interface UseVoiceSimulatorOptions {
-  wsUrl: string;
-  systemInstruction: string;
-  voiceName: string;
+  checkpointsConfig: { id: string; label: string }[];
+  /** Предупреждение за ~15 сек до конца раунда (fallback — текущая строка) */
+  roundEndingPrompt?: string | null;
+  silenceHardHangupMs: number;
 
   silenceNudgeAfterMs: number;
   silenceNudgeCooldownMs: number;
-  silenceHardHangupMs: number;
   silenceNudgePhrases: string[];
-
-  /** Предупреждение за ~15 сек до конца раунда (fallback — текущая строка) */
-  roundEndingPrompt?: string | null;
   /** Шаблон нуджа при тишине; плейсхолдер {{phrase}} (fallback — текущая строка) */
   silenceNudgeTemplate?: string | null;
 
-  checkpointsConfig: { id: string; label: string }[];
+  systemInstruction: string;
+  voiceName: string;
+
+  wsUrl: string;
 }
 
 export interface UseVoiceSimulatorState {
-  status: VoiceSimulatorStatus;
-  error: string | null;
-  userVolume: number;
   aiVolume: number;
-  score: number;
   checkpoints: VoiceCallCheckpoint[];
+  error: string | null;
   liveTranscript: TranscriptEntry[];
+  score: number;
+  status: VoiceSimulatorStatus;
+  userVolume: number;
 }
 
 export interface UseVoiceSimulatorApi {
@@ -53,18 +55,16 @@ export interface UseVoiceSimulatorApi {
 }
 
 const SCORE_TAG_RE = /\[SCORE:\s*([+-]?\d+)\]/gi;
-const CHECKPOINT_TAG_RE = /\[CHECKPOINT:\s*([A-Z0-9_]+)\]/gi;
+const CHECKPOINT_TAG_RE = /\[CHECKPOINT:\s*(\w+)\]/gi;
 
-const DEFAULT_ROUND_ENDING_PROMPT =
-  'Через 15 секунд наш эфир на конференции подходит к концу. Кратко подведи итог: убедил ли тебя собеседник или нет, и скажи: "зрители нашего стрима сами сделают выводы". После этого естественно завершай разговор как в реальном живом общении на мероприятии, без служебных фраз про окончание звонка.';
 const DEFAULT_SILENCE_NUDGE_TEMPLATE =
   'Собеседник молчит. Скажи коротко мотивационную фразу, например: "{{phrase}}".';
 
 function cleanAiText(text: string): string {
-  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-  cleaned = cleaned.replace(SCORE_TAG_RE, '');
-  cleaned = cleaned.replace(CHECKPOINT_TAG_RE, '');
-  cleaned = cleaned.replace(/\s+/g, ' ');
+  let cleaned = text.replaceAll(/<think>[\s\S]*?<\/think>/gi, '');
+  cleaned = cleaned.replaceAll(SCORE_TAG_RE, '');
+  cleaned = cleaned.replaceAll(CHECKPOINT_TAG_RE, '');
+  cleaned = cleaned.replaceAll(/\s+/g, ' ');
   return cleaned.trim();
 }
 
@@ -264,7 +264,7 @@ export function useVoiceSimulator(
 
         if (!roundVerdictTriggeredRef.current && remaining <= 15_000 && remaining > 0) {
           roundVerdictTriggeredRef.current = true;
-          const prompt = options.roundEndingPrompt?.trim() || DEFAULT_ROUND_ENDING_PROMPT;
+          const prompt = options.roundEndingPrompt?.trim() || DEFAULT_TRAINING_ROUND_ENDING_PROMPT;
           socket.sendClientText(prompt);
         }
 
@@ -293,9 +293,8 @@ export function useVoiceSimulator(
           ) {
             const phrase =
               silenceNudgePhrases[Math.floor(Math.random() * silenceNudgePhrases.length)];
-            const template =
-              options.silenceNudgeTemplate?.trim() || DEFAULT_SILENCE_NUDGE_TEMPLATE;
-            socket.sendClientText(template.replace(/\{\{phrase\}\}/g, phrase));
+            const template = options.silenceNudgeTemplate?.trim() || DEFAULT_SILENCE_NUDGE_TEMPLATE;
+            socket.sendClientText(template.replaceAll('{{phrase}}', phrase));
             silenceCooldownRef.current = now + silenceNudgeCooldownMs;
             silenceNudgeCountRef.current += 1;
           }
@@ -342,4 +341,3 @@ export function useVoiceSimulator(
     disconnect,
   };
 }
-

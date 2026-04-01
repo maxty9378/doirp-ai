@@ -14,6 +14,7 @@ import debug from 'debug';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  DEFAULT_TRAINING_ROUND_ENDING_PROMPT,
   DEFAULT_VOICE_CALL_AGENT_ID,
   DEFAULT_VOICE_CALL_LIVE_MODEL,
   GEMINI_31_FLASH_LIVE_MODEL,
@@ -44,7 +45,10 @@ const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
 const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 300_000;
 const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слышите?'];
-const FINAL_PROMPT_MAX_WAIT_MS = 20_000;
+/** После отправки финального промпта ждём ответ модели не дольше (защита от зависания). */
+const FINAL_AI_RESPONSE_ABSOLUTE_MAX_MS = 120_000;
+/** Небольшая пауза после окончания воспроизведения PCM, чтобы не обрезать хвост. */
+const FINAL_AUDIO_TAIL_MS = 400;
 const DEFAULT_TURN_PLANNER_TOOL_NAME = 'get_training_turn_context';
 const DEFAULT_ASSISTANT_LABEL = 'ИИ-агент';
 const DEFAULT_USER_LABEL = 'Вы';
@@ -245,7 +249,7 @@ const normalizeUiConfig = (config: GeminiLiveConfig): GeminiLiveUIConfig => ({
   introDialogTitle: config.introDialogTitle ?? undefined,
   openingInstruction: config.openingInstruction ?? undefined,
   quietSpeakerNudge: config.quietSpeakerNudge ?? undefined,
-  roundEndingPrompt: config.roundEndingPrompt ?? undefined,
+  roundEndingPrompt: config.roundEndingPrompt?.trim() || DEFAULT_TRAINING_ROUND_ENDING_PROMPT,
   scoreDisplayLabel: config.scoreDisplayLabel ?? undefined,
   scoreLevelLabels: config.scoreLevelLabels ?? undefined,
   sessionDurationMs:
@@ -635,6 +639,32 @@ export function useGeminiLiveOfficial({
 
   disconnectRef.current = disconnect;
 
+  const finalizeAfterFinalPlaybackRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    finalizeAfterFinalPlaybackRef.current = () => {
+      const waitPlaybackIdle = () => {
+        if (hangupScheduledRef.current) return;
+        if (streamerRef.current?.isPlaying) {
+          requestAnimationFrame(waitPlaybackIdle);
+          return;
+        }
+        window.setTimeout(() => {
+          if (hangupScheduledRef.current) return;
+          awaitingFinalAiTurnRef.current = false;
+          finalPromptSentAtRef.current = null;
+          finalizeCall(
+            'success',
+            'Время интервью истекло. Эфир завершён.',
+            FINAL_AUDIO_TAIL_MS,
+            false,
+          );
+        }, FINAL_AUDIO_TAIL_MS);
+      };
+      requestAnimationFrame(waitPlaybackIdle);
+    };
+  }, [finalizeCall]);
+
   const clearError = useCallback(() => {
     connectionLockRef.current = false;
     setStatus('idle');
@@ -740,7 +770,18 @@ export function useGeminiLiveOfficial({
         ? `\n- На вопросы сейчас отвечает сотрудник: ${trimmedName}. Обращайся к нему по имени.`
         : '';
 
-      const russianSpeechStyle = `\n\n[СТИЛЬ РЕЧИ]\n- Говори на чистом, естественном русском языке без иностранного акцента. У тебя идеальная русская дикция, правильные ударения и интонации носителя языка.\n- Если в контенте встречаются англоязычные названия (бренды, продукты, аббревиатуры), произноси их по-русски — транслитерируй в кириллицу (например: GFD → «Джи-Эф-Ди», Tornado Energy → «Торнадо Энерджи»).\n- Держи спокойный темп. Используй больше точек и тире, допускай многоточия (...) для микропауз. Избегай длинных фраз на одном дыхании.\n`;
+      const russianSpeechStyle = [
+        '',
+        '[РЕЧЬ И ЖИВОСТЬ]',
+        '- Говори на чистом русском языке — как носитель, без акцента. Правильные ударения, живая интонация.',
+        '- Англоязычные бренды и аббревиатуры произноси по-русски: GFD → «Джи-Эф-Ди», Zero → «Зеро».',
+        '- Каждая реплика — живая реакция на последнее слово собеседника, а не заготовленный скрипт.',
+        '- Меняй интонацию: иногда холодно, иногда с иронией, иногда устало.',
+        '- Используй паузы через многоточие: «Ну... допустим», «Подождите...»',
+        '- Разговорные сокращения: «вы ж», «это ж», «ну и», «да ладно».',
+        '- Никогда не повторяй одну и ту же фразу-зацепку дважды подряд.',
+        '',
+      ].join('\n');
 
       const sysInst =
         (config.systemInstruction || systemInstruction || '') +
@@ -1000,9 +1041,7 @@ export function useGeminiLiveOfficial({
           currentAiTurnMetaTextRef.current = '';
 
           if (awaitingFinalAiTurnRef.current) {
-            awaitingFinalAiTurnRef.current = false;
-            finalPromptSentAtRef.current = null;
-            finalizeCall('success', 'Время интервью истекло. Эфир завершён.', 250, false);
+            finalizeAfterFinalPlaybackRef.current();
           }
         }
       };
@@ -1149,22 +1188,28 @@ export function useGeminiLiveOfficial({
 
       if (!roundVerdictTriggeredRef.current && remaining <= 15_000 && remaining > 0) {
         roundVerdictTriggeredRef.current = true;
-        const rawPrompt = uiConfigRef.current.roundEndingPrompt;
-        if (rawPrompt) {
-          awaitingFinalAiTurnRef.current = true;
-          finalPromptSentAtRef.current = Date.now();
-          sendRealtimeText(buildRoundEndingPrompt(rawPrompt));
-        }
+        awaitingFinalAiTurnRef.current = true;
+        finalPromptSentAtRef.current = Date.now();
+        const rawPrompt =
+          uiConfigRef.current.roundEndingPrompt?.trim() || DEFAULT_TRAINING_ROUND_ENDING_PROMPT;
+        sendRealtimeText(buildRoundEndingPrompt(rawPrompt));
       }
 
       if (remaining <= 0 && !hangupScheduledRef.current) {
-        if (awaitingFinalAiTurnRef.current) {
-          const waitedMs = finalPromptSentAtRef.current
-            ? Date.now() - finalPromptSentAtRef.current
-            : 0;
-          if (waitedMs < FINAL_PROMPT_MAX_WAIT_MS) return;
+        if (!roundVerdictTriggeredRef.current) {
+          roundVerdictTriggeredRef.current = true;
+          awaitingFinalAiTurnRef.current = true;
+          finalPromptSentAtRef.current = now;
+          const rawPrompt =
+            uiConfigRef.current.roundEndingPrompt?.trim() || DEFAULT_TRAINING_ROUND_ENDING_PROMPT;
+          sendRealtimeText(buildRoundEndingPrompt(rawPrompt));
+          return;
+        }
 
-          // Если ИИ внезапно не отправил финальную фразу — не зависаем навсегда.
+        if (awaitingFinalAiTurnRef.current) {
+          const waitedMs = finalPromptSentAtRef.current ? now - finalPromptSentAtRef.current : 0;
+          if (waitedMs < FINAL_AI_RESPONSE_ABSOLUTE_MAX_MS) return;
+
           awaitingFinalAiTurnRef.current = false;
           finalPromptSentAtRef.current = null;
         }
