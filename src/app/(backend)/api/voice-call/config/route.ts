@@ -19,6 +19,10 @@ import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { getTrainingScenarioWithKnowledge } from '@/server/services/training';
 
 import { sanitizeVoiceSystemInstruction } from '../../../../../utils/voiceCallSystemText';
+import {
+  buildTrainingProgressInstruction,
+  DEFAULT_TRAINING_PROGRESS_TOOL_NAME,
+} from '../../../../../utils/voiceCallTraining';
 import { resolveVoiceCallWsProxyUrl } from '../_wsProxyConfig';
 
 const DEFAULT_CONTEXT_WINDOW = 5;
@@ -92,7 +96,7 @@ const TP_PRICE_SYSTEM_LINES = [
   '\u041E\u0442\u0432\u0435\u0447\u0430\u0439 \u043A\u043E\u0440\u043E\u0442\u043A\u043E: 1-2 \u043F\u0440\u0435\u0434\u043B\u043E\u0436\u0435\u043D\u0438\u044F, \u043F\u043E-\u0440\u0443\u0441\u0441\u043A\u0438, \u0431\u0435\u0437 \u043C\u0435\u0442\u0430\u043A\u043E\u043C\u043C\u0435\u043D\u0442\u0430\u0440\u0438\u0435\u0432.',
   '\u0414\u0435\u0440\u0436\u0438 \u0436\u0451\u0441\u0442\u043A\u0438\u0439 \u0442\u043E\u043D \u0438 \u0434\u0430\u0432\u0438 \u043F\u043E \u0432\u043E\u0437\u0440\u0430\u0436\u0435\u043D\u0438\u044E \u00AB\u0434\u043E\u0440\u043E\u0433\u043E\u00BB, \u043D\u043E \u0440\u0435\u0430\u0433\u0438\u0440\u0443\u0439 \u043D\u0430 \u0441\u0438\u043B\u044C\u043D\u044B\u0435 \u0430\u0440\u0433\u0443\u043C\u0435\u043D\u0442\u044B \u043E \u0434\u043E\u0445\u043E\u0434\u043D\u043E\u0441\u0442\u0438, \u0441\u0435\u0440\u0432\u0438\u0441\u0435 \u0438 \u043C\u0430\u0440\u043A\u0435\u0442\u0438\u043D\u0433\u043E\u0432\u043E\u0439 \u043F\u043E\u0434\u0434\u0435\u0440\u0436\u043A\u0435.',
   '\u041D\u0435 \u0441\u0432\u043E\u0434\u0438 \u043F\u0435\u0440\u0435\u0433\u043E\u0432\u043E\u0440\u044B \u043A \u0441\u043A\u0438\u0434\u043A\u0435 \u043A\u0430\u043A \u043A \u0435\u0434\u0438\u043D\u0441\u0442\u0432\u0435\u043D\u043D\u043E\u043C\u0443 \u0440\u0435\u0448\u0435\u043D\u0438\u044E.',
-  '\u041F\u043E\u0441\u043B\u0435 \u043A\u0430\u0436\u0434\u043E\u0439 \u0441\u0432\u043E\u0435\u0439 \u0440\u0435\u043F\u043B\u0438\u043A\u0438 \u0434\u043E\u0431\u0430\u0432\u043B\u044F\u0439 \u0442\u0435\u0445\u043D\u0438\u0447\u0435\u0441\u043A\u0438\u0439 \u0442\u0435\u0433 \u0432 \u043A\u043E\u043D\u0446\u0435: [CURRENT_SCORE: X], \u0433\u0434\u0435 X \u2014 \u043D\u0430\u043A\u043E\u043F\u0438\u0442\u0435\u043B\u044C\u043D\u044B\u0439 \u0441\u0447\u0451\u0442.',
+  '\u0421\u043B\u0443\u0436\u0435\u0431\u043D\u044B\u0439 \u043F\u0440\u043E\u0433\u0440\u0435\u0441\u0441 \u0441\u0446\u0435\u043D\u0430\u0440\u0438\u044F \u043F\u0435\u0440\u0435\u0434\u0430\u0432\u0430\u0439 \u0442\u043E\u043B\u044C\u043A\u043E \u0447\u0435\u0440\u0435\u0437 \u0438\u043D\u0441\u0442\u0440\u0443\u043C\u0435\u043D\u0442\u044B, \u0430 \u043D\u0435 \u0447\u0435\u0440\u0435\u0437 \u0442\u0435\u043A\u0441\u0442 \u0440\u0435\u043F\u043B\u0438\u043A\u0438.',
 ];
 
 const resolveVoiceCallLiveModel = (agentId: string) => {
@@ -194,9 +198,29 @@ export async function GET(request: Request) {
 
     const baseSystemInstruction =
       isTpPrice && preset ? buildTpPriceVoiceSystem(preset) : (preset?.systemRole ?? '');
-    const systemInstructionBase = sanitizeVoiceSystemInstruction(
-      trainingScenario?.scenario.systemPrompt || baseSystemInstruction,
-    );
+    const isTrainingVoiceScenario = Boolean(trainingScenario || preset);
+    const enableCheckpoints = trainingScenario?.scenario.enableCheckpoints ?? isTpPrice;
+    const enableScoring = trainingScenario?.scenario.enableScoring ?? true;
+    const checkpointIds = trainingScenario?.scenario.checkpointIds ?? [];
+    const trainingProgressToolName =
+      isTrainingVoiceScenario && (enableCheckpoints || enableScoring)
+        ? DEFAULT_TRAINING_PROGRESS_TOOL_NAME
+        : null;
+    const systemInstructionBase = [
+      sanitizeVoiceSystemInstruction(
+        trainingScenario?.scenario.systemPrompt || baseSystemInstruction,
+      ),
+      isTrainingVoiceScenario
+        ? buildTrainingProgressInstruction({
+            checkpointIds,
+            enableCheckpoints,
+            enableScoring,
+            toolName: trainingProgressToolName,
+          })
+        : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
 
     const userContextLines = [
       USER_CONTEXT_HEADER,
@@ -233,8 +257,8 @@ export async function GET(request: Request) {
       ...(geminiWsUrl ? { geminiWsUrl } : {}),
       assistantLabel,
       contextWindow: trainingScenario?.scenario.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
-      enableCheckpoints: trainingScenario?.scenario.enableCheckpoints ?? isTpPrice,
-      enableScoring: trainingScenario?.scenario.enableScoring ?? true,
+      enableCheckpoints,
+      enableScoring,
       enableTurnPlanner: Boolean(trainingScenario),
       sessionDurationMs:
         selectedDurationMs ??
@@ -256,6 +280,7 @@ export async function GET(request: Request) {
       liveModel,
       systemInstruction,
       turnPlannerToolName: trainingScenario ? TRAINING_TURN_TOOL_NAME : null,
+      trainingProgressToolName,
       userLabel,
       userName: userFullName,
       voiceName,
@@ -266,7 +291,7 @@ export async function GET(request: Request) {
       payload.legend = trainingScenario.scenario.legend ?? null;
       payload.showLegend = trainingScenario.scenario.showLegend ?? true;
       payload.goals = trainingScenario.scenario.goals ?? [];
-      payload.checkpointIds = trainingScenario.scenario.checkpointIds ?? [];
+      payload.checkpointIds = checkpointIds;
       payload.scoreDisplayLabel = trainingScenario.scenario.scoreDisplayLabel ?? null;
       payload.scoreLevelLabels = trainingScenario.scenario.scoreLevelLabels ?? null;
       payload.openingInstruction = trainingScenario.scenario.openingInstruction ?? null;

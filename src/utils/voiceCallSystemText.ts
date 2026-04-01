@@ -10,6 +10,12 @@ const PLANNER_META_TAG_RE = /\[\s*(?:weaknessCode|responseMode)\s*:\s*(?:[^\s[\]
 const VOICE_META_INSTRUCTION_LINE_PATTERNS = [
   /\[\s*weaknessCode\s*:/i,
   /\[\s*responseMode\s*:/i,
+  /\[\s*CURRENT_SCORE\s*:/i,
+  /\[\s*SCORE\s*:/i,
+  /\[\s*CHECKPOINT\s*:/i,
+  /\bCURRENT_SCORE\b/i,
+  /\bCHECKPOINT\b/i,
+  /\bSCORE(?=\s*:|\s*\])/i,
   /служебн\S*\s+тег/i,
   /техническ.*\bweaknessCode\b/i,
   /техническ.*\bresponseMode\b/i,

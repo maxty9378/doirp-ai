@@ -10,11 +10,11 @@ import { proxyFetch } from './_proxyFetch';
 const GOOGLE_OAUTH_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const GOOGLE_STORAGE_UPLOAD_ENDPOINT = 'https://storage.googleapis.com/upload/storage/v1';
 const GOOGLE_STORAGE_ENDPOINT = 'https://storage.googleapis.com/storage/v1';
-const GOOGLE_SPEECH_ENDPOINT = 'https://speech.googleapis.com/v1';
+const GOOGLE_SPEECH_ENDPOINT = 'https://speech.googleapis.com/v2';
 const GOOGLE_CLOUD_SCOPE = 'https://www.googleapis.com/auth/cloud-platform';
 const DEFAULT_LANGUAGE_CODE = 'ru-RU';
 const DEFAULT_SPEECH_LOCATION = 'global';
-const DEFAULT_SPEECH_MODEL = 'latest_long';
+const DEFAULT_SPEECH_MODEL = 'chirp_3';
 const LONG_RUNNING_POLL_INTERVAL_MS = 2000;
 const LONG_RUNNING_TIMEOUT_MS = 180000;
 const ACCESS_TOKEN_SKEW_MS = 60_000;
@@ -30,22 +30,41 @@ interface GoogleAccessTokenCache {
   expiresAt: number;
 }
 
-interface LongRunningRecognizeOperation {
+interface SpeechRecognitionResult {
+  alternatives?: Array<{
+    confidence?: number;
+    transcript?: string;
+  }>;
+  resultEndOffset?: string;
+}
+
+interface BatchRecognizeFileResult {
+  error?: {
+    code?: number;
+    message?: string;
+  };
+  inlineResult?: {
+    transcript?: {
+      results?: SpeechRecognitionResult[];
+    };
+  };
+  transcript?: {
+    results?: SpeechRecognitionResult[];
+  };
+}
+
+interface BatchRecognizeResponse {
+  results?: Record<string, BatchRecognizeFileResult>;
+}
+
+interface BatchRecognizeOperation {
   done?: boolean;
   error?: {
     code?: number;
     message?: string;
   };
   name?: string;
-  response?: {
-    results?: Array<{
-      alternatives?: Array<{
-        confidence?: number;
-        transcript?: string;
-      }>;
-      resultEndTime?: string;
-    }>;
-  };
+  response?: BatchRecognizeResponse;
 }
 
 export interface PostCallSpeechSegment {
@@ -65,9 +84,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const parseDurationToMs = (value?: string) => {
   if (!value) return undefined;
+
   const normalized = value.trim();
-  if (!normalized) return undefined;
-  if (!normalized.endsWith('s')) return undefined;
+  if (!normalized || !normalized.endsWith('s')) return undefined;
 
   const seconds = Number.parseFloat(normalized.slice(0, -1));
   if (!Number.isFinite(seconds)) return undefined;
@@ -240,22 +259,25 @@ const deleteTempAudioFromGcs = async (bucket: string, objectName: string) => {
   }
 };
 
-const startLongRunningRecognize = async (gcsUri: string) => {
+const startBatchRecognize = async (gcsUri: string) => {
   const accessToken = await getGoogleCloudAccessToken();
-  const { model } = getGoogleSpeechSettings();
+  const { location, model } = getGoogleSpeechSettings();
+  const project = getGoogleSpeechProject();
+  const recognizer = `projects/${project}/locations/${location}/recognizers/_`;
 
-  const response = await proxyFetch(`${GOOGLE_SPEECH_ENDPOINT}/speech:longrunningrecognize`, {
+  const response = await proxyFetch(`${GOOGLE_SPEECH_ENDPOINT}/${recognizer}:batchRecognize`, {
     body: JSON.stringify({
-      audio: {
-        uri: gcsUri,
-      },
       config: {
-        enableAutomaticPunctuation: true,
-        enableWordTimeOffsets: false,
-        encoding: 'ENCODING_UNSPECIFIED',
-        languageCode: DEFAULT_LANGUAGE_CODE,
+        autoDecodingConfig: {},
+        features: {
+          enableAutomaticPunctuation: true,
+        },
+        languageCodes: [DEFAULT_LANGUAGE_CODE],
         model,
-        sampleRateHertz: 16000,
+      },
+      files: [{ uri: gcsUri }],
+      recognitionOutputConfig: {
+        inlineResponseConfig: {},
       },
     }),
     headers: {
@@ -265,22 +287,18 @@ const startLongRunningRecognize = async (gcsUri: string) => {
     method: 'POST',
   });
 
-  const data = (await response.json().catch(() => ({}))) as LongRunningRecognizeOperation;
+  const data = (await response.json().catch(() => ({}))) as BatchRecognizeOperation;
   if (!response.ok || !data.name) {
-    throw new Error(
-      data.error?.message || 'Google Speech не принял long-running transcription request.',
-    );
+    throw new Error(data.error?.message || 'Google Speech не принял batchRecognize request.');
   }
 
   return data.name;
 };
 
-const pollLongRunningOperation = async (operationName: string) => {
+const pollBatchRecognizeOperation = async (operationName: string) => {
   const accessToken = await getGoogleCloudAccessToken();
-  const normalizedOperationName = operationName.startsWith('operations/')
-    ? operationName
-    : `operations/${operationName}`;
-  const operationUrl = `${GOOGLE_SPEECH_ENDPOINT}/${normalizedOperationName}`;
+  const operationPath = operationName.replace(/^\/+/, '');
+  const operationUrl = `${GOOGLE_SPEECH_ENDPOINT}/${operationPath}`;
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < LONG_RUNNING_TIMEOUT_MS) {
@@ -291,7 +309,7 @@ const pollLongRunningOperation = async (operationName: string) => {
       method: 'GET',
     });
 
-    const data = (await response.json().catch(() => ({}))) as LongRunningRecognizeOperation;
+    const data = (await response.json().catch(() => ({}))) as BatchRecognizeOperation;
 
     if (!response.ok) {
       throw new Error(data.error?.message || 'Не удалось получить статус Google Speech operation.');
@@ -302,7 +320,7 @@ const pollLongRunningOperation = async (operationName: string) => {
         throw new Error(data.error.message);
       }
 
-      return data.response?.results ?? [];
+      return data.response?.results ?? {};
     }
 
     await sleep(LONG_RUNNING_POLL_INTERVAL_MS);
@@ -312,22 +330,42 @@ const pollLongRunningOperation = async (operationName: string) => {
 };
 
 const extractSpeechSegments = (
-  results: Awaited<ReturnType<typeof pollLongRunningOperation>>,
+  resultsByFile: Record<string, BatchRecognizeFileResult>,
+  gcsUri: string,
 ): PostCallSpeechSegment[] => {
-  return results
-    .flatMap((result) => {
-      const alternative = result.alternatives?.[0];
-      if (!alternative) return [];
-      const text = alternative.transcript?.trim();
-      if (!text) return [];
+  const fileResults =
+    Object.keys(resultsByFile).length === 0
+      ? []
+      : [resultsByFile[gcsUri], ...Object.values(resultsByFile)].filter(
+          (item): item is BatchRecognizeFileResult => Boolean(item),
+        );
 
-      return [
-        {
-          confidence: alternative.confidence,
-          endTimeMs: parseDurationToMs(result.resultEndTime),
-          text,
-        },
-      ];
+  const uniqueResults = Array.from(new Set(fileResults));
+
+  return uniqueResults
+    .flatMap((fileResult) => {
+      if (fileResult.error?.message) {
+        throw new Error(fileResult.error.message);
+      }
+
+      const transcriptResults =
+        fileResult.inlineResult?.transcript?.results ?? fileResult.transcript?.results ?? [];
+
+      return transcriptResults.flatMap((result) => {
+        const alternative = result.alternatives?.[0];
+        if (!alternative) return [];
+
+        const text = alternative.transcript?.trim();
+        if (!text) return [];
+
+        return [
+          {
+            confidence: alternative.confidence,
+            endTimeMs: parseDurationToMs(result.resultEndOffset),
+            text,
+          },
+        ];
+      });
     })
     .filter((segment) => segment.text.length > 0);
 };
@@ -346,9 +384,9 @@ export const transcribeVoiceCallAudioWithGoogle = async (
   const uploaded = await uploadTempAudioToGcs(audioBuffer, mimeType);
 
   try {
-    const operationName = await startLongRunningRecognize(uploaded.uri);
-    const rawResults = await pollLongRunningOperation(operationName);
-    const segments = extractSpeechSegments(rawResults);
+    const operationName = await startBatchRecognize(uploaded.uri);
+    const rawResults = await pollBatchRecognizeOperation(operationName);
+    const segments = extractSpeechSegments(rawResults, uploaded.uri);
 
     return {
       segments,

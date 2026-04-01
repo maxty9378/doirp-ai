@@ -1,17 +1,30 @@
-import { getLLMConfig } from '@/envs/llm';
-import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import {
   sanitizeVoiceCallTranscript,
   type VoiceCallTranscriptEntry,
 } from '@/utils/voiceCallEchoFilter';
 
-import { proxyFetch } from './_proxyFetch';
+import { generateGeminiStructuredJson } from './_geminiStructured';
 
-const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TEXT_MODEL = 'gemini-3.1-flash-lite-preview';
-
 const BROKEN_HYPHEN_PATTERN = /\b\p{Script=Cyrillic}+\s+-\s+\p{Script=Cyrillic}+\b/iu;
 const SHORT_CYRILLIC_PATTERN = /\p{Script=Cyrillic}+/gu;
+const NORMALIZE_TRANSCRIPT_SCHEMA = {
+  properties: {
+    items: {
+      items: {
+        properties: {
+          index: { type: 'INTEGER' as const },
+          text: { type: 'STRING' as const },
+        },
+        required: ['index', 'text'],
+        type: 'OBJECT' as const,
+      },
+      type: 'ARRAY' as const,
+    },
+  },
+  required: ['items'],
+  type: 'OBJECT' as const,
+};
 
 interface NormalizeTranscriptOptions {
   force?: boolean;
@@ -50,23 +63,17 @@ const looksLikeBrokenAsrText = (text: string) => {
 const shouldNormalizeWithGemini = (transcript: VoiceCallTranscriptEntry[]) =>
   transcript.some((entry) => entry.role === 'user' && looksLikeBrokenAsrText(entry.text));
 
-const buildNormalizePrompt = (
-  items: Array<{ index: number; text: string }>,
-) => `Ты приводишь к читаемому виду сырую ASR-транскрипцию русской речи.
-
-Верни ТОЛЬКО валидный JSON без markdown-обёртки в формате:
-{
-  "items": [
-    { "index": 0, "text": "исправленный текст" }
-  ]
-}
+const buildNormalizePrompt = (items: Array<{ index: number; text: string }>) =>
+  `Ты приводишь к читаемому виду сырую ASR-транскрипцию русской речи.
 
 Правила:
 1. Сохрани все индексы из входного JSON.
 2. Исправляй только явные артефакты распознавания речи: разорванные слова, разорванные дефисы, склейку слогов, случайные дубли коротких кусков и лишние пробелы.
 3. Не улучшай ответ по смыслу. Не добавляй новые факты, аргументы или формулировки, которых не было.
 4. Если сомневаешься, оставь текст максимально близко к оригиналу.
-5. Пиши СТРОГО на кириллице. НЕ используй латиницу или транслит для русских слов (никаких "Kak dela", только "Как дела").
+5. Пиши строго на кириллице. Не используй латиницу или транслит для русских слов.
+
+Верни объект с полем items.
 
 Входной JSON:
 ${JSON.stringify({ items }, null, 2)}`;
@@ -92,45 +99,16 @@ export const normalizeVoiceCallTranscriptWithGemini = async (
 
   if (userItems.length === 0) return transcript;
 
-  const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
-  const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
-  if (!apiKey) return transcript;
-
   try {
-    const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
-    const endpoint = `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-    const response = await proxyFetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: buildNormalizePrompt(userItems) }] }],
-        generationConfig: {
-          maxOutputTokens: 2048,
-          temperature: 0.05,
-        },
-      }),
+    const parsed = await generateGeminiStructuredJson<NormalizeTranscriptResponse>({
+      emptyResponseMessage: 'Empty normalize transcript response',
+      maxOutputTokens: 2048,
+      model: GEMINI_TEXT_MODEL,
+      promptText: buildNormalizePrompt(userItems),
+      responseSchema: NORMALIZE_TRANSCRIPT_SCHEMA,
+      temperature: 0.05,
     });
 
-    const data = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      error?: { message?: string };
-    };
-
-    if (!response.ok) {
-      console.warn(
-        '[voice-call/normalizeTranscript] Gemini request failed:',
-        response.status,
-        data?.error?.message,
-      );
-      return transcript;
-    }
-
-    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!raw) return transcript;
-
-    const cleaned = raw.replaceAll(/^```(?:json)?\s*|\s*```$/g, '').trim();
-    const parsed = JSON.parse(cleaned) as NormalizeTranscriptResponse;
     if (!Array.isArray(parsed.items)) return transcript;
 
     const normalized = [...transcript];

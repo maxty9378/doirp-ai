@@ -13,6 +13,11 @@ import {
 import { useUserStore } from '@/store/user';
 import { type VoiceCallDebugEvent, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
 import { cleanVoiceAiText } from '@/utils/voiceCallSystemText';
+import {
+  applyTrainingProgress,
+  DEFAULT_TRAINING_PROGRESS_TOOL_NAME,
+  normalizeTrainingProgressArgs,
+} from '@/utils/voiceCallTraining';
 
 import { AudioStreamer } from './AudioStreamer';
 
@@ -41,7 +46,7 @@ export interface GeminiLiveConfig {
   apiKey: string;
   assistantLabel?: string;
   autoSuccessPrompt?: string | null;
-  /** ID чекпоинтов для парсинга тегов [CHECKPOINT: ...] от LLM (порядок соответствует goals) */
+  /** ID чекпоинтов сценария для tool-based отчёта о прогрессе */
   checkpointIds?: string[];
   contextWindow?: number;
   enableCheckpoints?: boolean;
@@ -71,6 +76,7 @@ export interface GeminiLiveConfig {
   silenceNudgePhrases?: string[];
   silenceNudgeTemplate?: string | null;
   systemInstruction: string;
+  trainingProgressToolName?: string | null;
   turnPlannerToolName?: string | null;
   userLabel?: string;
   voiceName: string;
@@ -85,7 +91,7 @@ export interface ScoreLevelLabelsConfig {
 export interface GeminiLiveUIConfig {
   assistantLabel: string;
   autoSuccessPrompt?: string | null;
-  /** ID чекпоинтов для парсинга тегов [CHECKPOINT: ...] от LLM */
+  /** ID чекпоинтов сценария */
   checkpointIds: string[];
   contextWindow: number;
   enableCheckpoints: boolean;
@@ -154,6 +160,7 @@ interface TrainingTurnPlan {
 }
 
 interface PlannerToolCall {
+  args?: Record<string, unknown>;
   id?: string;
   name?: string;
 }
@@ -343,83 +350,6 @@ const buildWavBlobFromPcmChunks = (chunks: Uint8Array[], sampleRate: number) => 
   return new Blob([wavBuffer], { type: 'audio/wav' });
 };
 
-const isWs = (c: string) => /\s/u.test(c);
-
-const parseScoreDeltaSum = (text: string) => {
-  const upper = text.toUpperCase();
-  let index = 0;
-  let total = 0;
-
-  while (index < upper.length) {
-    const found = upper.indexOf('SCORE', index);
-    if (found === -1) break;
-    let i = found + 5;
-    while (i < upper.length && isWs(upper[i])) i += 1;
-    if (upper[i] !== ':') {
-      index = i;
-      continue;
-    }
-    i += 1;
-    while (i < upper.length && isWs(upper[i])) i += 1;
-
-    let sign = 1;
-    if (upper[i] === '+' || upper[i] === '-') {
-      sign = upper[i] === '-' ? -1 : 1;
-      i += 1;
-      while (i < upper.length && isWs(upper[i])) i += 1;
-    }
-
-    const start = i;
-    while (i < upper.length && upper[i] >= '0' && upper[i] <= '9') i += 1;
-    if (i > start) {
-      const n = Number(upper.slice(start, i));
-      if (Number.isFinite(n)) total += sign * n;
-    }
-
-    index = i;
-  }
-
-  return total;
-};
-
-const parseCheckpointIds = (text: string) => {
-  const upper = text.toUpperCase();
-  let index = 0;
-  const ids: string[] = [];
-
-  while (index < upper.length) {
-    const found = upper.indexOf('CHECKPOINT', index);
-    if (found === -1) break;
-    let i = found + 10;
-    while (i < upper.length && isWs(upper[i])) i += 1;
-    if (upper[i] !== ':') {
-      index = i;
-      continue;
-    }
-    i += 1;
-    while (i < upper.length && isWs(upper[i])) i += 1;
-
-    const start = i;
-    while (i < upper.length) {
-      const c = upper[i];
-      if ((c >= 'A' && c <= 'Z') || c === '_') {
-        i += 1;
-      } else {
-        break;
-      }
-    }
-    if (i > start) {
-      ids.push(upper.slice(start, i));
-    }
-
-    index = i;
-  }
-
-  return ids;
-};
-
-const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
-
 export interface UseGeminiLiveOptions {
   agentId?: string;
   interviewDurationMs?: number;
@@ -466,6 +396,7 @@ export function useGeminiLive({
 
   const debugEventsRef = useRef<VoiceCallDebugEvent[]>([]);
   const statusRef = useRef(status);
+  const scoreRef = useRef(score);
   const syncDebugSnapshot = useCallback(() => {
     if (typeof window === 'undefined') return;
 
@@ -480,6 +411,10 @@ export function useGeminiLive({
     statusRef.current = status;
     syncDebugSnapshot();
   }, [status, syncDebugSnapshot]);
+
+  useEffect(() => {
+    scoreRef.current = score;
+  }, [score]);
 
   const checkpointsRef = useRef<VoiceCallCheckpoint[]>([]);
   useEffect(() => {
@@ -834,6 +769,46 @@ export function useGeminiLive({
     [finalizeCall, sendClientText],
   );
 
+  const applyTrainingProgressReport = useCallback(
+    (args: unknown) => {
+      const report = normalizeTrainingProgressArgs(
+        args,
+        checkpointsRef.current.map((checkpoint) => checkpoint.id),
+      );
+      const progress = applyTrainingProgress({
+        checkpoints: checkpointsRef.current,
+        enableCheckpoints: uiConfigRef.current.enableCheckpoints,
+        enableScoring: uiConfigRef.current.enableScoring,
+        report,
+        score: scoreRef.current,
+      });
+
+      if (uiConfigRef.current.enableScoring && progress.scoreChanged) {
+        scoreRef.current = progress.nextScore;
+        setScore(progress.nextScore);
+        maybeAutoFinish(progress.nextScore);
+      }
+
+      if (
+        uiConfigRef.current.enableCheckpoints &&
+        progress.nextCheckpoints !== checkpointsRef.current
+      ) {
+        checkpointsRef.current = progress.nextCheckpoints;
+        setCheckpoints(progress.nextCheckpoints);
+      }
+
+      pushDebugEvent('training-progress', {
+        checkpointIds: report.checkpointIds,
+        notes: report.notes,
+        scoreDelta: report.scoreDelta ?? null,
+        scoreTotal: progress.nextScore,
+      });
+
+      return progress;
+    },
+    [maybeAutoFinish, pushDebugEvent],
+  );
+
   const connect = useCallback(async () => {
     if (connectionLockRef.current) return;
     connectionLockRef.current = true;
@@ -1168,6 +1143,38 @@ export function useGeminiLive({
             },
           ];
         }
+        if (config.trainingProgressToolName) {
+          const tools = ((setupMsg.setup as Record<string, unknown>).tools as
+            | Array<Record<string, unknown>>
+            | undefined) ?? [{ functionDeclarations: [] }];
+          const existingDeclarations =
+            (tools[0]?.functionDeclarations as Array<Record<string, unknown>> | undefined) ?? [];
+
+          existingDeclarations.push({
+            description:
+              'Р—Р°С„РёРєСЃРёСЂРѕРІР°С‚СЊ СЂРµР·СѓР»СЊС‚Р°С‚ С‚РµРєСѓС‰РµРіРѕ С…РѕРґР° С‚СЂРµРЅР°Р¶С‘СЂР°: scoreDelta, scoreTotal, checkpointIds Рё notes. Р­С‚Рѕ СЃР»СѓР¶РµР±РЅС‹Рµ РґР°РЅРЅС‹Рµ, РёС… РЅРµР»СЊР·СЏ РѕР·РІСѓС‡РёРІР°С‚СЊ.',
+            name: config.trainingProgressToolName || DEFAULT_TRAINING_PROGRESS_TOOL_NAME,
+            parameters: {
+              properties: {
+                checkpointIds: {
+                  items: { type: 'STRING' },
+                  type: 'ARRAY',
+                },
+                notes: { type: 'STRING' },
+                scoreDelta: { type: 'NUMBER' },
+                scoreTotal: { type: 'NUMBER' },
+              },
+              required: ['checkpointIds', 'scoreDelta'],
+              type: 'OBJECT',
+            },
+          });
+
+          tools[0] = {
+            ...tools[0],
+            functionDeclarations: existingDeclarations,
+          };
+          (setupMsg.setup as Record<string, unknown>).tools = tools;
+        }
         if (sysInst)
           (setupMsg.setup as Record<string, unknown>).systemInstruction = {
             parts: [{ text: sysInst }],
@@ -1212,6 +1219,24 @@ export function useGeminiLive({
             for (const toolCall of toolCalls) {
               const toolName = toolCall.name || '';
               const toolId = toolCall.id;
+              const progressToolName =
+                config.trainingProgressToolName || DEFAULT_TRAINING_PROGRESS_TOOL_NAME;
+
+              if (config.trainingProgressToolName && toolName === progressToolName) {
+                const progress = applyTrainingProgressReport(toolCall.args);
+                functionResponses.push({
+                  id: toolId,
+                  name: toolName,
+                  response: {
+                    accepted: true,
+                    checkpointIds: progress.nextCheckpoints
+                      .filter((checkpoint) => checkpoint.done)
+                      .map((checkpoint) => checkpoint.id),
+                    score: progress.nextScore,
+                  },
+                });
+                continue;
+              }
 
               if (toolName !== (config.turnPlannerToolName || DEFAULT_TURN_PLANNER_TOOL_NAME)) {
                 functionResponses.push({
@@ -1337,33 +1362,8 @@ export function useGeminiLive({
           if (serverContent.turnComplete) {
             const rawTurnText =
               `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
-            const turnText = rawTurnText;
             // eslint-disable-next-line no-console
-            console.log('[GeminiLive] turnComplete text:', turnText.slice(0, 200));
-
-            // Парсинг тегов скоринга от LLM после завершения реплики
-            if (uiConfigRef.current.enableScoring) {
-              const totalDelta = parseScoreDeltaSum(turnText);
-              if (totalDelta !== 0) {
-                setScore((prev) => {
-                  const nextScore = clamp(prev + totalDelta, -50, 50);
-                  maybeAutoFinish(nextScore);
-                  return nextScore;
-                });
-              }
-            }
-
-            // Парсинг тегов чекпоинтов от LLM после завершения реплики
-            const checkpointIds = parseCheckpointIds(turnText);
-            if (checkpointIds.length > 0) {
-              const ids = new Set(checkpointIds.map((id) => id.toLowerCase()));
-              const next = checkpointsRef.current.map((cp) =>
-                ids.has(cp.id.toLowerCase()) ? { ...cp, done: true } : cp,
-              );
-              checkpointsRef.current = next;
-              setCheckpoints(next);
-            }
-
+            console.log('[GeminiLive] turnComplete text:', rawTurnText.slice(0, 200));
             const spokenText = cleanAiText(currentAiTurnTextRef.current.trim());
             const fallbackText = spokenText ? '' : cleanAiText(rawTurnText);
             const storeText = spokenText || fallbackText;

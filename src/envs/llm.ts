@@ -39,7 +39,7 @@ export const getLLMConfig = () => {
       GOOGLE_SPEECH_BUCKET: z.string().optional(),
       /** Speech-to-Text location. Defaults to global. */
       GOOGLE_SPEECH_LOCATION: z.string().optional(),
-      /** Speech-to-Text model. Defaults to latest_long. */
+      /** Speech-to-Text model. Defaults to chirp_3. */
       GOOGLE_SPEECH_MODEL: z.string().optional(),
 
       ENABLED_VERTEXAI: z.boolean(),

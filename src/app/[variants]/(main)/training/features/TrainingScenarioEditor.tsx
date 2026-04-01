@@ -880,7 +880,7 @@ const TrainingScenarioEditor = memo<TrainingScenarioEditorProps>(
           },
           {
             label: 'ID чекпоинтов',
-            desc: 'Каждый ID с новой строки. Порядок соответствует целям. LLM использует эти ID в тегах [CHECKPOINT: ID].',
+            desc: 'Каждый ID с новой строки. Порядок соответствует целям. Модель передаёт эти ID в tool-вызове прогресса, а не в тексте ответа.',
             children: (
               <Input.TextArea
                 autoSize={{ minRows: 3, maxRows: 6 }}

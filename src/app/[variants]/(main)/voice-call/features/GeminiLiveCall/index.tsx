@@ -916,6 +916,7 @@ const GeminiLiveCall = memo(
     >(null);
     const manualFailRef = useRef(false);
     const hangUpReasonRef = useRef<string | null>(null);
+    const liveScoreRef = useRef<number | null>(null);
 
     const analyzeTranscript = useCallback(
       async ({
@@ -1067,7 +1068,7 @@ const GeminiLiveCall = memo(
               debugLog,
               durationSeconds: durationSec,
               speakerName,
-              score: analysisResult?.overallScore ?? null,
+              score: liveScoreRef.current,
               sttError,
               sttStatus,
               transcriptSource,
@@ -1092,7 +1093,7 @@ const GeminiLiveCall = memo(
             transcript: transcriptToStore,
             analysisResult: analysisResult ?? null,
             debugLog,
-            score: analysisResult?.overallScore ?? null,
+            score: liveScoreRef.current,
             hangUpReason: hangUpReasonRef.current ?? undefined,
             durationSeconds: durationSec,
             speakerName,
@@ -1326,6 +1327,10 @@ const GeminiLiveCall = memo(
     useEffect(() => {
       hangUpReasonRef.current = hangUpReason ?? null;
     }, [hangUpReason]);
+
+    useEffect(() => {
+      liveScoreRef.current = score;
+    }, [score]);
 
     const [avatarUrl, setAvatarUrl] = useState(
       trainerAvatarUrl?.trim() || `/api/voice-call/trainer-avatar/${agentId}`,

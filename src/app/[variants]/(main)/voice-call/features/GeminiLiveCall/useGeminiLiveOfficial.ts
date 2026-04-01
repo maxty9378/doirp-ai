@@ -22,6 +22,11 @@ import {
 import { useUserStore } from '@/store/user';
 import { type VoiceCallDebugEvent, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
 import { cleanVoiceAiText } from '@/utils/voiceCallSystemText';
+import {
+  applyTrainingProgress,
+  DEFAULT_TRAINING_PROGRESS_TOOL_NAME,
+  normalizeTrainingProgressArgs,
+} from '@/utils/voiceCallTraining';
 
 import { AudioRecorder } from '../../beta/console/lib/audio-recorder';
 import { AudioStreamer } from './AudioStreamer';
@@ -59,8 +64,6 @@ const TURN_PLANNER_TIMEOUT_MS = 800;
 const NUDGE_AI_QUIET_WINDOW_MS = 1800;
 
 const log = debug('lobe-client:voice-call:live-official');
-
-const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 
 const buildRoundEndingPrompt = (rawPrompt: string) =>
   `${rawPrompt.trim()}\n\nВажно: если ты сейчас произносишь предыдущую реплику, ПРЕРВИСЬ и сразу начни финальную фразу. Скажи итог одним связным ответом и после этого замолчи.`;
@@ -152,79 +155,6 @@ const mergeLiveTranscriptionText = (prev: string, next: string) => {
   if (a.startsWith(b)) return a;
 
   return `${a} ${b}`.trim();
-};
-
-const isWhitespace = (char: string) => /\s/u.test(char);
-
-const parseScoreDeltaSum = (text: string) => {
-  const upper = text.toUpperCase();
-  let index = 0;
-  let total = 0;
-
-  while (index < upper.length) {
-    const found = upper.indexOf('SCORE', index);
-    if (found === -1) break;
-
-    let cursor = found + 5;
-    while (cursor < upper.length && isWhitespace(upper[cursor])) cursor += 1;
-    if (upper[cursor] !== ':') {
-      index = cursor;
-      continue;
-    }
-    cursor += 1;
-    while (cursor < upper.length && isWhitespace(upper[cursor])) cursor += 1;
-
-    let sign = 1;
-    if (upper[cursor] === '+' || upper[cursor] === '-') {
-      sign = upper[cursor] === '-' ? -1 : 1;
-      cursor += 1;
-      while (cursor < upper.length && isWhitespace(upper[cursor])) cursor += 1;
-    }
-
-    const start = cursor;
-    while (cursor < upper.length && upper[cursor] >= '0' && upper[cursor] <= '9') cursor += 1;
-    if (cursor > start) {
-      const value = Number(upper.slice(start, cursor));
-      if (Number.isFinite(value)) total += sign * value;
-    }
-
-    index = cursor;
-  }
-
-  return total;
-};
-
-const parseCheckpointIds = (text: string) => {
-  const upper = text.toUpperCase();
-  let index = 0;
-  const ids: string[] = [];
-
-  while (index < upper.length) {
-    const found = upper.indexOf('CHECKPOINT', index);
-    if (found === -1) break;
-
-    let cursor = found + 10;
-    while (cursor < upper.length && isWhitespace(upper[cursor])) cursor += 1;
-    if (upper[cursor] !== ':') {
-      index = cursor;
-      continue;
-    }
-
-    cursor += 1;
-    while (cursor < upper.length && isWhitespace(upper[cursor])) cursor += 1;
-
-    const start = cursor;
-    while (cursor < upper.length) {
-      const char = upper[cursor];
-      if ((char >= 'A' && char <= 'Z') || char === '_') cursor += 1;
-      else break;
-    }
-
-    if (cursor > start) ids.push(upper.slice(start, cursor));
-    index = cursor;
-  }
-
-  return ids;
 };
 
 const normalizeUiConfig = (config: GeminiLiveConfig): GeminiLiveUIConfig => ({
@@ -349,6 +279,7 @@ export function useGeminiLiveOfficial({
 
   const debugEventsRef = useRef<VoiceCallDebugEvent[]>([]);
   const statusRef = useRef(status);
+  const scoreRef = useRef(score);
   const configRef = useRef<GeminiLiveConfig | null>(null);
   const configCacheKeyRef = useRef('');
   const uiConfigRef = useRef(uiConfig);
@@ -413,6 +344,10 @@ export function useGeminiLiveOfficial({
     statusRef.current = status;
     syncDebugSnapshot();
   }, [status, syncDebugSnapshot]);
+
+  useEffect(() => {
+    scoreRef.current = score;
+  }, [score]);
 
   useEffect(() => {
     uiConfigRef.current = uiConfig;
@@ -564,6 +499,46 @@ export function useGeminiLiveOfficial({
       }, 9000);
     },
     [finalizeCall, sendRealtimeText],
+  );
+
+  const applyTrainingProgressReport = useCallback(
+    (args: unknown) => {
+      const report = normalizeTrainingProgressArgs(
+        args,
+        checkpointsRef.current.map((checkpoint) => checkpoint.id),
+      );
+      const progress = applyTrainingProgress({
+        checkpoints: checkpointsRef.current,
+        enableCheckpoints: uiConfigRef.current.enableCheckpoints,
+        enableScoring: uiConfigRef.current.enableScoring,
+        report,
+        score: scoreRef.current,
+      });
+
+      if (uiConfigRef.current.enableScoring && progress.scoreChanged) {
+        scoreRef.current = progress.nextScore;
+        setScore(progress.nextScore);
+        maybeAutoFinish(progress.nextScore);
+      }
+
+      if (
+        uiConfigRef.current.enableCheckpoints &&
+        progress.nextCheckpoints !== checkpointsRef.current
+      ) {
+        checkpointsRef.current = progress.nextCheckpoints;
+        setCheckpoints(progress.nextCheckpoints);
+      }
+
+      pushDebugEvent('training-progress', {
+        checkpointIds: report.checkpointIds,
+        notes: report.notes,
+        scoreDelta: report.scoreDelta ?? null,
+        scoreTotal: progress.nextScore,
+      });
+
+      return progress;
+    },
+    [maybeAutoFinish, pushDebugEvent],
   );
 
   const disconnect = useCallback(() => {
@@ -822,6 +797,40 @@ export function useGeminiLiveOfficial({
           },
         ];
       }
+      if (config.trainingProgressToolName) {
+        const tools = (liveConfig.tools as
+          | Array<{
+              functionDeclarations?: Array<Record<string, unknown>>;
+            }>
+          | null
+          | undefined) ?? [{ functionDeclarations: [] }];
+        const existingDeclarations = tools[0]?.functionDeclarations ?? [];
+
+        existingDeclarations.push({
+          description:
+            'Зафиксировать результат текущего хода тренажёра: scoreDelta, scoreTotal, checkpointIds и notes. Это служебные данные, их нельзя озвучивать.',
+          name: config.trainingProgressToolName || DEFAULT_TRAINING_PROGRESS_TOOL_NAME,
+          parameters: {
+            properties: {
+              checkpointIds: {
+                items: { type: Type.STRING },
+                type: Type.ARRAY,
+              },
+              notes: { type: Type.STRING },
+              scoreDelta: { type: Type.NUMBER },
+              scoreTotal: { type: Type.NUMBER },
+            },
+            required: ['checkpointIds', 'scoreDelta'],
+            type: Type.OBJECT,
+          },
+        });
+
+        tools[0] = {
+          ...tools[0],
+          functionDeclarations: existingDeclarations,
+        };
+        liveConfig.tools = tools as LiveConnectConfig['tools'];
+      }
 
       const proxyBaseUrl = buildProxyBaseUrl(config.geminiWsUrl);
 
@@ -932,6 +941,27 @@ export function useGeminiLiveOfficial({
           const functionResponses = await Promise.all(
             message.toolCall.functionCalls.map(async (toolCall) => {
               const toolName = toolCall.name || '';
+              const progressToolName =
+                config.trainingProgressToolName || DEFAULT_TRAINING_PROGRESS_TOOL_NAME;
+
+              if (config.trainingProgressToolName && toolName === progressToolName) {
+                const progress = applyTrainingProgressReport(
+                  toolCall.args as Record<string, unknown> | undefined,
+                );
+
+                return {
+                  id: toolCall.id,
+                  name: toolName,
+                  response: {
+                    accepted: true,
+                    checkpointIds: progress.nextCheckpoints
+                      .filter((checkpoint) => checkpoint.done)
+                      .map((checkpoint) => checkpoint.id),
+                    score: progress.nextScore,
+                  },
+                };
+              }
+
               if (toolName !== (config.turnPlannerToolName || DEFAULT_TURN_PLANNER_TOOL_NAME)) {
                 return {
                   id: toolCall.id,
@@ -1004,30 +1034,6 @@ export function useGeminiLiveOfficial({
         if (serverContent.turnComplete) {
           const rawTurnText =
             `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
-
-          if (uiConfigRef.current.enableScoring) {
-            const totalDelta = parseScoreDeltaSum(rawTurnText);
-            if (totalDelta !== 0) {
-              setScore((prev) => {
-                const nextScore = clamp(prev + totalDelta, -50, 50);
-                maybeAutoFinish(nextScore);
-                return nextScore;
-              });
-            }
-          }
-
-          if (uiConfigRef.current.enableCheckpoints) {
-            const checkpointIds = parseCheckpointIds(rawTurnText);
-            if (checkpointIds.length > 0) {
-              const ids = new Set(checkpointIds.map((id) => id.toLowerCase()));
-              const nextCheckpoints = checkpointsRef.current.map((item) =>
-                ids.has(item.id.toLowerCase()) ? { ...item, done: true } : item,
-              );
-              checkpointsRef.current = nextCheckpoints;
-              setCheckpoints(nextCheckpoints);
-            }
-          }
-
           const spokenText = cleanAiText(currentAiTurnTextRef.current.trim());
           const fallbackText = spokenText ? '' : cleanAiText(rawTurnText);
           const storeText = spokenText || fallbackText;

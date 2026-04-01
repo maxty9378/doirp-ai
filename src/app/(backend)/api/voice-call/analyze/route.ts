@@ -2,37 +2,74 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
-import { getLLMConfig } from '@/envs/llm';
-import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { getTrainingScenarioByKey } from '@/server/services/training';
 import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
 
+import { generateGeminiStructuredJson } from '../_geminiStructured';
 import { normalizeVoiceCallTranscriptWithGemini } from '../_normalizeTranscript';
-import { proxyFetch } from '../_proxyFetch';
 
-const DEFAULT_GOOGLE_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 const GEMINI_TEXT_MODEL = 'gemini-3.1-flash-lite-preview';
+const ANALYZE_RESPONSE_SCHEMA = {
+  properties: {
+    behavioralMetrics: {
+      properties: {
+        repetitionAndRudeness: { type: 'STRING' as const },
+        responseSpeed: { type: 'STRING' as const },
+        silenceInfo: { type: 'STRING' as const },
+      },
+      required: ['silenceInfo', 'responseSpeed', 'repetitionAndRudeness'],
+      type: 'OBJECT' as const,
+    },
+    competencies: {
+      items: {
+        properties: {
+          name: { type: 'STRING' as const },
+          score: { type: 'NUMBER' as const },
+        },
+        required: ['name', 'score'],
+        type: 'OBJECT' as const,
+      },
+      type: 'ARRAY' as const,
+    },
+    improvements: {
+      items: { type: 'STRING' as const },
+      type: 'ARRAY' as const,
+    },
+    overallScore: { type: 'NUMBER' as const },
+    phraseFeedback: {
+      items: {
+        properties: {
+          advice: { type: 'STRING' as const },
+          suggestedPhrase: { type: 'STRING' as const },
+          userPhrase: { type: 'STRING' as const },
+        },
+        required: ['userPhrase', 'suggestedPhrase', 'advice'],
+        type: 'OBJECT' as const,
+      },
+      type: 'ARRAY' as const,
+    },
+    recommendedAction: { type: 'STRING' as const },
+    strengths: {
+      items: { type: 'STRING' as const },
+      type: 'ARRAY' as const,
+    },
+    summary: { type: 'STRING' as const },
+  },
+  required: [
+    'overallScore',
+    'competencies',
+    'summary',
+    'strengths',
+    'improvements',
+    'behavioralMetrics',
+    'phraseFeedback',
+  ],
+  type: 'OBJECT' as const,
+};
 
 export interface TranscriptEntryInput {
   role: 'ai' | 'user';
   text: string;
-}
-
-/** Приводит тело запроса к списку реплик с непустым текстом (устраняет 400 из-за «пустого» транскрипта). */
-function normalizeTranscriptEntries(raw: unknown): TranscriptEntryInput[] {
-  if (!Array.isArray(raw)) return [];
-  const out: TranscriptEntryInput[] = [];
-  for (const item of raw) {
-    if (!item || typeof item !== 'object') continue;
-    const o = item as { role?: unknown; text?: unknown };
-    const text = typeof o.text === 'string' ? o.text.trim() : String(o.text ?? '').trim();
-    if (!text) continue;
-    const r = o.role;
-    const role: 'ai' | 'user' =
-      r === 'ai' || r === 'assistant' || r === 'model' || r === 'bot' ? 'ai' : 'user';
-    out.push({ role, text });
-  }
-  return sanitizeVoiceCallTranscript(out, { mode: 'analysis' });
 }
 
 export interface AnalyzeResponse {
@@ -45,20 +82,53 @@ export interface AnalyzeResponse {
   improvements: string[];
   overallScore: number;
   phraseFeedback: Array<{
-    userPhrase: string;
-    suggestedPhrase: string;
     advice: string;
+    suggestedPhrase: string;
+    userPhrase: string;
   }>;
   recommendedAction?: string;
   strengths: string[];
   summary: string;
 }
 
+/** Приводит тело запроса к списку реплик с непустым текстом. */
+function normalizeTranscriptEntries(raw: unknown): TranscriptEntryInput[] {
+  if (!Array.isArray(raw)) return [];
+
+  const out: TranscriptEntryInput[] = [];
+
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+
+    const candidate = item as { role?: unknown; text?: unknown };
+    const text =
+      typeof candidate.text === 'string'
+        ? candidate.text.trim()
+        : String(candidate.text ?? '').trim();
+    if (!text) continue;
+
+    const roleValue = candidate.role;
+    const role: 'ai' | 'user' =
+      roleValue === 'ai' ||
+      roleValue === 'assistant' ||
+      roleValue === 'model' ||
+      roleValue === 'bot'
+        ? 'ai'
+        : 'user';
+
+    out.push({ role, text });
+  }
+
+  return sanitizeVoiceCallTranscript(out, { mode: 'analysis' });
+}
+
 function formatTranscript(entries: TranscriptEntryInput[]): string {
   return entries
     .map(
-      (e) =>
-        (e.role === 'ai' ? 'Собеседник (AI-провокатор): ' : 'Пользователь (Обучаемый): ') + e.text,
+      (entry) =>
+        `${
+          entry.role === 'ai' ? 'Собеседник (AI-провокатор): ' : 'Пользователь (Обучаемый): '
+        }${entry.text}`,
     )
     .join('\n');
 }
@@ -75,62 +145,21 @@ ${speakerText}${durationText}
 ${transcript}
 """
 
-Верни ТОЛЬКО валидный JSON без markdown-обёртки, со следующей структурой:
-{
-  "overallScore": число от 0 до 100 (средневзвешенный балл по компетенциям),
-  "competencies": [
-    { 
-      "name": "Стрессоустойчивость", 
-      "score": число 0-100,
-      "comment": "почему такая оценка (кратко)"
-    },
-    { 
-      "name": "Аргументация и фактология", 
-      "score": число 0-100,
-      "comment": "почему такая оценка (кратко)"
-    },
-    { 
-      "name": "Управление конфликтом/эмоциями", 
-      "score": число 0-100,
-      "comment": "почему такая оценка (кратко)"
-    },
-    { 
-      "name": "Следование этике бренда", 
-      "score": число 0-100,
-      "comment": "почему такая оценка (кратко)"
-    }
-  ],
-  "summary": "Развернутое и реалистичное резюме (3-5 предложений) о том, как обучаемый справился со стрессом, какие ошибки допустил и что сделал хорошо. Оценивай строго, но справедливо.",
-  "strengths": ["сильная сторона 1", "сильная сторона 2"],
-  "improvements": ["что конкретно улучшить 1", "что конкретно улучшить 2"],
-  "behavioralMetrics": {
-    "silenceInfo": "Текстовое описание того, много ли обучаемый молчал (оцени по количеству его реплик относительно длительности звонка)",
-    "responseSpeed": "Оценка скорости реакции (отвечал сразу, брал паузы, или тормозил)",
-    "repetitionAndRudeness": "Оценка того, повторялся ли обучаемый или вел себя грубо/непрофессионально"
-  },
-  "recommendedAction": "Рекомендованное следующее действие для развития навыков коммуникации",
-  "phraseFeedback": [
-    {
-      "userPhrase": "реплика обучаемого из транскрипта",
-      "suggestedPhrase": "как лучше было сказать в этой ситуации",
-      "advice": "краткое пояснение, почему так лучше"
-    }
-  ]
-}
+Верни объект анализа по схеме structured output.
 
 ГАЙД ПО ОЦЕНКЕ (шкала 0-100):
-- 0-20: Критический провал, грубость, полное молчание или уход из диалога.
-- 21-40: Слабая позиция, много пауз, неуверенность, отсутствие аргументов.
-- 41-60: Средний результат, удовлетворительные ответы, но без инициативы.
-- 61-80: Хорошая работа, уверенная позиция, наличие фактов и аргументов.
-- 81-100: Блестящее владение ситуацией, идеальное хладнокровие, победа в споре.
+- 0-20: критический провал, грубость, полное молчание или уход из диалога.
+- 21-40: слабая позиция, много пауз, неуверенность, отсутствие аргументов.
+- 41-60: средний результат, удовлетворительные ответы, но без инициативы.
+- 61-80: хорошая работа, уверенная позиция, наличие фактов и аргументов.
+- 81-100: блестящее владение ситуацией, идеальное хладнокровие, победа в споре.
 
 ВАЖНЫЕ ПРАВИЛА:
-1. Анализируй ТОЛЬКО реплики, начинающиеся на "Пользователь (Обучаемый)". Не приписывай обучаемому реплики провокатора!
+1. Анализируй только реплики, начинающиеся на "Пользователь (Обучаемый):". Не приписывай обучаемому реплики провокатора.
 2. В phraseFeedback разбирай по очереди фразы обучаемого. Если фраза удачная — suggestedPhrase может совпадать или быть с небольшим улучшением, advice — что сделано хорошо.
-3. Если "Пользователь (Обучаемый)" всё время молчал (нет его реплик в транскрипте), напиши об этом в summary (укажи на ступор/молчание), поставь низкий балл (0-10), а в phraseFeedback добавь один объект, где userPhrase — "[Молчание]", а suggestedPhrase — пример уверенного ответа на провокацию, чтобы начать диалог.
-4. Обязательно заполни behavioralMetrics, оценив поведение пользователя по тексту транскрипта и длительности разговора.
-Пиши все тексты по-русски.`;
+3. Если "Пользователь (Обучаемый)" всё время молчал, напиши об этом в summary, поставь низкий балл (0-10), а в phraseFeedback добавь один объект с userPhrase="[Молчание]".
+4. Обязательно заполни behavioralMetrics, оценивая молчание, скорость реакции и повторы/грубость.
+5. Все текстовые поля должны быть строго на русском языке.`;
 };
 
 function buildAnalyzePrompt(
@@ -139,14 +168,69 @@ function buildAnalyzePrompt(
   speakerName?: string,
   durationSec?: number,
 ): Promise<string> {
-  if (!scenarioId?.trim())
+  if (!scenarioId?.trim()) {
     return Promise.resolve(ANALYZE_PROMPT(transcript, speakerName, durationSec));
+  }
+
   return getTrainingScenarioByKey(scenarioId.trim()).then((scenario) => {
     const custom = scenario?.analyzePrompt?.trim();
     if (custom) return custom.replaceAll('{{transcript}}', transcript);
     return ANALYZE_PROMPT(transcript, speakerName, durationSec);
   });
 }
+
+const normalizeAnalyzeResponse = (parsed: AnalyzeResponse): AnalyzeResponse => ({
+  behavioralMetrics:
+    parsed.behavioralMetrics && typeof parsed.behavioralMetrics === 'object'
+      ? {
+          repetitionAndRudeness:
+            typeof parsed.behavioralMetrics.repetitionAndRudeness === 'string'
+              ? parsed.behavioralMetrics.repetitionAndRudeness.trim()
+              : undefined,
+          responseSpeed:
+            typeof parsed.behavioralMetrics.responseSpeed === 'string'
+              ? parsed.behavioralMetrics.responseSpeed.trim()
+              : undefined,
+          silenceInfo:
+            typeof parsed.behavioralMetrics.silenceInfo === 'string'
+              ? parsed.behavioralMetrics.silenceInfo.trim()
+              : undefined,
+        }
+      : undefined,
+  competencies: Array.isArray(parsed.competencies)
+    ? parsed.competencies
+        .map((item) => ({
+          name: typeof item?.name === 'string' ? item.name.trim() : '',
+          score: Number.isFinite(item?.score) ? Number(item.score) : 0,
+        }))
+        .filter((item) => item.name.length > 0)
+    : [],
+  improvements: Array.isArray(parsed.improvements)
+    ? parsed.improvements
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+    : [],
+  overallScore: Number.isFinite(parsed.overallScore) ? Number(parsed.overallScore) : 0,
+  phraseFeedback: Array.isArray(parsed.phraseFeedback)
+    ? parsed.phraseFeedback
+        .map((item) => ({
+          advice: typeof item?.advice === 'string' ? item.advice.trim() : '',
+          suggestedPhrase:
+            typeof item?.suggestedPhrase === 'string' ? item.suggestedPhrase.trim() : '',
+          userPhrase: typeof item?.userPhrase === 'string' ? item.userPhrase.trim() : '',
+        }))
+        .filter(
+          (item) =>
+            item.userPhrase.length > 0 && item.suggestedPhrase.length > 0 && item.advice.length > 0,
+        )
+    : [],
+  recommendedAction:
+    typeof parsed.recommendedAction === 'string' ? parsed.recommendedAction.trim() : undefined,
+  strengths: Array.isArray(parsed.strengths)
+    ? parsed.strengths.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+    : [],
+  summary: typeof parsed.summary === 'string' ? parsed.summary.trim() : '',
+});
 
 export const runtime = 'nodejs';
 
@@ -158,16 +242,18 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json()) as {
-      transcript?: unknown;
+      durationSec?: number;
       scenarioId?: string;
       speakerName?: string;
-      durationSec?: number;
+      transcript?: unknown;
     };
+
     const normalizedEntries = normalizeTranscriptEntries(body?.transcript);
     const entries = await normalizeVoiceCallTranscriptWithGemini(normalizedEntries, {
       force: true,
     });
     const transcript = formatTranscript(entries);
+
     if (!transcript.trim()) {
       return NextResponse.json(
         {
@@ -185,97 +271,39 @@ export async function POST(req: Request) {
       body.durationSec,
     );
 
-    const hasUserLines = entries.some((e) => e.role === 'user');
+    const hasUserLines = entries.some((entry) => entry.role === 'user');
     let promptText = promptTextBase;
+
     if (!hasUserLines) {
       promptText +=
-        '\n\nВНИМАНИЕ: В данном транскрипте Пользователь (Обучаемый) не произнес ни одной фразы (молчал весь диалог). Обязательно отрази это в summary (поставь низкий балл за стрессоустойчивость) и в phraseFeedback (добавь один элемент: userPhrase="[Молчание]", suggestedPhrase="[Уверенный ответ для начала диалога]", advice="[Почему нельзя молчать]"). НЕ приписывай фразы Собеседника (ИИ-провокатора) Обучаемому!';
+        '\n\nВНИМАНИЕ: В данном транскрипте Пользователь (Обучаемый) не произнес ни одной фразы. Обязательно отрази это в summary, поставь низкий балл и добавь в phraseFeedback один объект с userPhrase="[Молчание]".';
     } else {
       promptText +=
-        '\n\nВНИМАНИЕ: Оценивай только реплики "Пользователь (Обучаемый):". Строго запрещено приписывать фразы "Собеседника (AI-провокатора):" Пользователю в phraseFeedback.';
+        '\n\nВНИМАНИЕ: Оценивай только реплики "Пользователь (Обучаемый):". Строго запрещено приписывать фразы "Собеседника (AI-провокатора):" пользователю в phraseFeedback.';
     }
 
-    // Принудительно требуем русский язык, даже если используется кастомный промпт
-    promptText +=
-      '\n\nВАЖНО: Весь твой ответ (summary, feedback, названия компетенций и т.д.) должен быть СТРОГО на русском языке.';
-
-    const { GOOGLE_API_KEY, GOOGLE_API_BASE } = getLLMConfig();
-    const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
-    if (!apiKey) {
-      return NextResponse.json({ error: 'GOOGLE_API_KEY is not configured' }, { status: 503 });
-    }
-
-    const baseUrl = GOOGLE_API_BASE?.trim() || DEFAULT_GOOGLE_API_BASE;
-    const endpoint = `${baseUrl}/models/${GEMINI_TEXT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
-
-    const res = await proxyFetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }],
-        // Не задаём responseMimeType: часть моделей/регионов отвечает 400; JSON просим в промпте и парсим ниже.
-        generationConfig: {
-          maxOutputTokens: 4096,
-          temperature: 0.3,
-        },
-      }),
+    const parsed = await generateGeminiStructuredJson<AnalyzeResponse>({
+      emptyResponseMessage: 'Empty analyze response',
+      maxOutputTokens: 4096,
+      model: GEMINI_TEXT_MODEL,
+      promptText,
+      responseSchema: ANALYZE_RESPONSE_SCHEMA,
+      temperature: 0.3,
     });
-
-    const responseData = (await res.json().catch(() => ({}))) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      error?: { message?: string };
-    };
-
-    if (!res.ok) {
-      const msg = responseData?.error?.message || 'Ошибка запроса к модели анализа';
-      console.warn('[voice-call/analyze] Ответ Gemini:', res.status, msg);
-
-      // Если ошибка похожа на блокировку по региону или VPN, возвращаем более мягкое сообщение
-      const isGeoBlocked =
-        res.status === 403 ||
-        res.status === 400 ||
-        res.status === 451 ||
-        /location|region|not supported|restricted|country|geo/i.test(msg);
-
-      const userFriendlyError = isGeoBlocked
-        ? 'Сервис анализа временно недоступен в вашем регионе. Пожалуйста, проверьте настройки подключения или попробуйте позже.'
-        : msg;
-
-      return NextResponse.json(
-        { error: userFriendlyError },
-        { status: res.status >= 400 && res.status < 600 ? res.status : 502 },
-      );
-    }
-
-    const raw = responseData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!raw) {
-      return NextResponse.json({ error: 'Empty analyze response' }, { status: 502 });
-    }
-
-    let parsed: AnalyzeResponse;
-    try {
-      const cleaned = raw.replaceAll(/^```(?:json)?\s*|\s*```$/g, '').trim();
-      parsed = JSON.parse(cleaned) as AnalyzeResponse;
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON from model' }, { status: 502 });
-    }
-
-    if (typeof parsed.overallScore !== 'number') parsed.overallScore = 0;
-    if (!Array.isArray(parsed.competencies)) parsed.competencies = [];
-    if (typeof parsed.summary !== 'string') parsed.summary = '';
-    if (!Array.isArray(parsed.strengths)) parsed.strengths = [];
-    if (!Array.isArray(parsed.improvements)) parsed.improvements = [];
-    if (!Array.isArray(parsed.phraseFeedback)) parsed.phraseFeedback = [];
 
     return NextResponse.json({
-      ...parsed,
+      ...normalizeAnalyzeResponse(parsed),
       normalizedTranscript: entries,
     });
-  } catch (e) {
-    console.error('[voice-call/analyze]', e);
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Internal server error' },
-      { status: 500 },
-    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
+    console.error('[voice-call/analyze]', error);
+
+    const isGeoBlocked = /location|region|not supported|restricted|country|geo/i.test(message);
+    const userFriendlyError = isGeoBlocked
+      ? 'Сервис анализа временно недоступен в вашем регионе. Пожалуйста, проверьте настройки подключения или попробуйте позже.'
+      : message;
+
+    return NextResponse.json({ error: userFriendlyError }, { status: 500 });
   }
 }

@@ -83,14 +83,14 @@ describe('GET /api/voice-call/config', () => {
     mockGetLLMConfig.mockReturnValueOnce({});
     mockApiKeyManagerPick.mockReturnValueOnce(null);
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
       scenario: {
-        systemPrompt: 'System prompt from DB',
-        scoreDisplayLabel: SCORE_LABEL_GFD,
-        voiceName: 'Sulafat',
         contextWindow: 5,
         goals: [],
+        scoreDisplayLabel: SCORE_LABEL_GFD,
+        systemPrompt: 'System prompt from DB',
+        voiceName: 'Sulafat',
       },
-      knowledgeEntries: [],
     });
 
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
@@ -99,11 +99,15 @@ describe('GET /api/voice-call/config', () => {
     expect(res.status).toBe(503);
   });
 
-  it('returns scoreDisplayLabel from DB scenario', async () => {
+  it('returns scoreDisplayLabel and progress tool config from DB scenario', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
       scenario: {
         assistantLabel: 'Журналистка-расследователь',
+        checkpointIds: ['VALUE', 'NEXT_STEP'],
         contextWindow: 5,
+        enableCheckpoints: true,
+        enableScoring: true,
         goals: [],
         legend: 'Legend',
         scoreDisplayLabel: SCORE_LABEL_GFD,
@@ -114,7 +118,6 @@ describe('GET /api/voice-call/config', () => {
         userLabel: 'Вы (Маркетолог GFD)',
         voiceName: 'Sulafat',
       },
-      knowledgeEntries: [],
     });
 
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
@@ -125,14 +128,18 @@ describe('GET /api/voice-call/config', () => {
       liveModel?: string | null;
       roundEndingPrompt?: string | null;
       scoreDisplayLabel?: string | null;
+      trainingProgressToolName?: string | null;
     };
+
     expect(body.liveModel).toBe(DEFAULT_LIVE_MODEL);
-    expect(body.scoreDisplayLabel).toBe(SCORE_LABEL_GFD);
     expect(body.roundEndingPrompt).toBe(DEFAULT_TRAINING_ROUND_ENDING_PROMPT);
+    expect(body.scoreDisplayLabel).toBe(SCORE_LABEL_GFD);
+    expect(body.trainingProgressToolName).toBe('report_training_turn_progress');
   });
 
-  it('returns default roundEndingPrompt when DB scenario has empty round_ending_prompt', async () => {
+  it('returns default roundEndingPrompt when DB scenario has empty roundEndingPrompt', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
       scenario: {
         contextWindow: 5,
         goals: [],
@@ -141,7 +148,6 @@ describe('GET /api/voice-call/config', () => {
         title: 'T',
         voiceName: 'Sulafat',
       },
-      knowledgeEntries: [],
     });
 
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
@@ -152,43 +158,54 @@ describe('GET /api/voice-call/config', () => {
     expect(body.roundEndingPrompt).toBe(DEFAULT_TRAINING_ROUND_ENDING_PROMPT);
   });
 
-  it('sanitizes planner meta tag instructions in voice system prompt', async () => {
+  it('sanitizes planner and score tag instructions in voice system prompt', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
       scenario: {
+        checkpointIds: ['VALUE'],
         contextWindow: 5,
+        enableCheckpoints: true,
+        enableScoring: true,
         goals: [],
         systemPrompt: [
           'Первая реплика: Представься как журналистка-блогер канала на VK Видео.',
           '',
           'Техническое требование: В САМЫЙ КОНЕЦ своей реплики добавляй служебные теги для UI.',
           'Пример: [weaknessCode: direct_answer_missing, responseMode: press_for_direct_answer]',
+          'Пример: [CURRENT_SCORE: 12] [CHECKPOINT: VALUE]',
         ].join('\n'),
         voiceName: 'Sulafat',
       },
-      knowledgeEntries: [],
     });
 
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { systemInstruction?: string | null };
+    const body = (await res.json()) as {
+      systemInstruction?: string | null;
+      trainingProgressToolName?: string | null;
+    };
+
     expect(body.systemInstruction).toContain('Представься как журналистка-блогер');
     expect(body.systemInstruction).not.toContain('[weaknessCode:');
     expect(body.systemInstruction).not.toContain('[responseMode:');
+    expect(body.systemInstruction).not.toContain('[CURRENT_SCORE:');
+    expect(body.systemInstruction).not.toContain('[CHECKPOINT:');
     expect(body.systemInstruction).not.toContain('служебные теги');
     expect(body.systemInstruction).toContain('Не добавляй в ответ служебные поля');
+    expect(body.trainingProgressToolName).toBe('report_training_turn_progress');
   });
 
   it('returns Gemini 3.1 model for the dedicated Google Live trainer', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
       scenario: {
         contextWindow: 5,
         goals: [],
         systemPrompt: 'System prompt from DB',
         voiceName: 'Sulafat',
       },
-      knowledgeEntries: [],
     });
 
     const req = new Request(
@@ -212,13 +229,13 @@ describe('GET /api/voice-call/config', () => {
 
   it('returns the public proxy websocket URL by default', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
       scenario: {
         contextWindow: 5,
         goals: [],
         systemPrompt: 'System prompt from DB',
         voiceName: 'Sulafat',
       },
-      knowledgeEntries: [],
     });
 
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
