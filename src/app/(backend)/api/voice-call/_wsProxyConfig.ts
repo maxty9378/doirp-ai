@@ -6,7 +6,7 @@ const AUTH_PROTECTED_PROXY_PATH = '/voice-call-ws';
  * The proxy service behind this URL is responsible for loading upstream HTTP/SOCKS proxies
  * from `voice_call_proxies` in the database.
  */
-export const PUBLIC_VOICE_PROXY_WS = 'wss://apidoirp.ru/voice-call-ws';
+export const PUBLIC_VOICE_PROXY_WS = 'wss://ponkacat.ru/voice-call-ws';
 
 export const normalizeProxyBaseUrl = (url: string | null | undefined) => {
   if (!url?.trim()) return null;
@@ -57,6 +57,7 @@ export const resolveVoiceCallWsProxyUrl = ({
   if (normalizedExplicit) return normalizedExplicit;
 
   if (nodeEnv === 'development') {
+    // In local dev, respect VOICE_CALL_WS_PROXY_DEV when set; otherwise use the public proxy.
     return normalizeVoiceProxyUrl(devProxyUrl) || PUBLIC_VOICE_PROXY_WS;
   }
 

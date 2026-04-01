@@ -38,6 +38,10 @@ describe('voice call ws proxy config', () => {
     ).toBe('ws://localhost:3011');
   });
 
+  it('falls back to the public proxy endpoint in development when env is empty', () => {
+    expect(resolveVoiceCallWsProxyUrl({ nodeEnv: 'development' })).toBe(PUBLIC_VOICE_PROXY_WS);
+  });
+
   it('falls back to the public proxy endpoint in production when env is empty', () => {
     expect(resolveVoiceCallWsProxyUrl({ nodeEnv: 'production' })).toBe(PUBLIC_VOICE_PROXY_WS);
   });

@@ -75,7 +75,7 @@ describe('GET /api/voice-call/beta/config', () => {
     expect(body.apiKey).toBe('test-key');
     expect(body.defaultModel).toBe(DEFAULT_LIVE_MODEL);
     expect(body.defaultVoice).toBe('Aoede');
-    expect(body.proxyBaseUrl).toBe('https://apidoirp.ru/voice-call-ws');
+    expect(body.proxyBaseUrl).toBe('https://ponkacat.ru/voice-call-ws');
   });
 
   it('returns proxy-mode payload with normalized proxyBaseUrl', async () => {
@@ -95,7 +95,7 @@ describe('GET /api/voice-call/beta/config', () => {
     const body = (await res.json()) as { proxyBaseUrl: string | null };
 
     expect(res.status).toBe(200);
-    expect(body.proxyBaseUrl).toBe('https://apidoirp.ru/voice-call-ws');
-    expect(PUBLIC_VOICE_PROXY_WS).toBe('wss://apidoirp.ru/voice-call-ws');
+    expect(body.proxyBaseUrl).toBe('https://ponkacat.ru/voice-call-ws');
+    expect(PUBLIC_VOICE_PROXY_WS).toBe('wss://ponkacat.ru/voice-call-ws');
   });
 });
