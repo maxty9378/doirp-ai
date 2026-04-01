@@ -1035,16 +1035,6 @@ const GeminiLiveCall = memo(
               analyzeError = errMsg;
             } else {
               const analysisPayload = (await analyzeRes.json()) as AnalyzeTranscriptResponse;
-              const llmNormalizedTranscript = Array.isArray(analysisPayload.normalizedTranscript)
-                ? sanitizeVoiceCallTranscript(analysisPayload.normalizedTranscript, {
-                    mode: 'store',
-                  })
-                : [];
-
-              if (llmNormalizedTranscript.length > 0) {
-                transcriptToStore = llmNormalizedTranscript;
-              }
-
               const { normalizedTranscript: _normalizedTranscript, ...analysisOnly } =
                 analysisPayload;
               analysisResult = analysisOnly as VoiceCallEndPayload['analysisResult'];

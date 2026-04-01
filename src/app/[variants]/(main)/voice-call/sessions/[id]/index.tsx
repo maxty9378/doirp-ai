@@ -207,17 +207,14 @@ export const VoiceCallSessionDetailPage = memo<VoiceCallSessionDetailPageProps>(
           throw new Error((errData as { error?: string }).error || 'Ошибка анализа');
         }
         const analysisPayload = (await analyzeRes.json()) as AnalyzeSessionResponse;
-        const nextTranscript = Array.isArray(analysisPayload.normalizedTranscript)
-          ? analysisPayload.normalizedTranscript
-          : session.transcript;
         const { normalizedTranscript: _normalizedTranscript, ...analysisResult } = analysisPayload;
 
         if (isLocalSession) {
-          const updated = { ...session, analysisResult, transcript: nextTranscript };
+          const updated = { ...session, analysisResult };
           saveLocalVoiceCallSession({
             id: session.id,
             scenarioId: session.scenarioId,
-            transcript: nextTranscript,
+            transcript: session.transcript,
             analysisResult,
             debugLog: session.debugLog ?? null,
             score: analysisResult?.overallScore ?? null,
@@ -241,7 +238,7 @@ export const VoiceCallSessionDetailPage = memo<VoiceCallSessionDetailPageProps>(
           throw new Error('Не удалось сохранить результат анализа.');
         }
 
-        setSession((prev) => (prev ? { ...prev, analysisResult, transcript: nextTranscript } : prev));
+        setSession((prev) => (prev ? { ...prev, analysisResult } : prev));
       } catch (e) {
         setRetryError(e instanceof Error ? e.message : 'Ошибка');
       } finally {

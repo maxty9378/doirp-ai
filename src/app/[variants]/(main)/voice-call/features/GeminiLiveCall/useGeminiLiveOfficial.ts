@@ -5,6 +5,7 @@ import {
   GoogleGenAI,
   type LiveConnectConfig,
   type LiveServerMessage,
+  MediaResolution,
   Modality,
   type Session,
   StartSensitivity,
@@ -329,6 +330,7 @@ export function useGeminiLiveOfficial({
   const lastAiVolumeAtRef = useRef(0);
   const lastAiVolumeValueRef = useRef(0);
   const lastAiActivityAtRef = useRef(0);
+  const lastUserVolumeAtRef = useRef(0);
   const sessionResumeHandleRef = useRef<string | null>(null);
   const sessionResumeAttemptsRef = useRef(0);
   const resumeTimerRef = useRef<number | null>(null);
@@ -907,6 +909,7 @@ export function useGeminiLiveOfficial({
 
       const baseLiveConfig: LiveConnectConfig = {
         inputAudioTranscription: {},
+        mediaResolution: MediaResolution.MEDIA_RESOLUTION_MEDIUM,
         outputAudioTranscription: {},
         realtimeInputConfig: {
           automaticActivityDetection: {
@@ -1114,6 +1117,9 @@ export function useGeminiLiveOfficial({
             });
           })
           .on('volume', (volume: number) => {
+            const now = performance.now();
+            if (now - lastUserVolumeAtRef.current < 1000 / 30) return; // 30 FPS max
+            lastUserVolumeAtRef.current = now;
             setUserVolume(Math.min(100, volume * USER_VOLUME_SCALE));
           });
         await recorder.start();
@@ -1126,7 +1132,11 @@ export function useGeminiLiveOfficial({
       };
 
       const onmessage = async (message: LiveServerMessage) => {
-        const payloadWithError = message as LiveServerMessage & { error?: { message?: string } };
+        const payloadWithError = message as LiveServerMessage & {
+          error?: { message?: string };
+          inputTranscription?: { text?: string };
+          outputTranscription?: { text?: string };
+        };
         if (payloadWithError.error?.message) {
           if (transcriptRef.current.length > 0) {
             finalizeCall('ai', 'Соединение прервано сервером ИИ.', 1500, false);
@@ -1234,6 +1244,12 @@ export function useGeminiLiveOfficial({
         const serverContent = message.serverContent;
         if (!serverContent) return;
 
+        const topLevelOutputText = payloadWithError.outputTranscription?.text;
+        if (topLevelOutputText) appendAiSpokenTranscription(topLevelOutputText);
+
+        const topLevelInputText = payloadWithError.inputTranscription?.text;
+        if (topLevelInputText) upsertUserTranscript(topLevelInputText);
+
         if (serverContent.interrupted) {
           pushDebugEvent('server-interrupted');
           lastAiActivityAtRef.current = Date.now();
@@ -1242,8 +1258,12 @@ export function useGeminiLiveOfficial({
           return;
         }
 
-        appendAiSpokenTranscription(serverContent.outputTranscription?.text);
-        upsertUserTranscript(serverContent.inputTranscription?.text);
+        if (!topLevelOutputText) {
+          appendAiSpokenTranscription(serverContent.outputTranscription?.text);
+        }
+        if (!topLevelInputText) {
+          upsertUserTranscript(serverContent.inputTranscription?.text);
+        }
 
         const parts = serverContent.modelTurn?.parts ?? [];
         for (const part of parts) {

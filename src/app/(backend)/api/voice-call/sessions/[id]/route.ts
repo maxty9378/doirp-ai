@@ -11,10 +11,6 @@ import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
 import { serverDB } from '@/database/server';
-import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
-
-import { normalizeVoiceCallTranscriptWithGemini } from '../../_normalizeTranscript';
-
 export const runtime = 'nodejs';
 
 const MAX_DEBUG_EVENTS = 300;
@@ -74,14 +70,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: 'Сессия не найдена' }, { status: 404 });
     }
 
-    const transcript = await normalizeVoiceCallTranscriptWithGemini(
-      sanitizeVoiceCallTranscript(row.transcript, { mode: 'store' }),
-      { force: true },
-    );
-
     return NextResponse.json({
       ...row,
-      transcript,
+      transcript: Array.isArray(row.transcript) ? row.transcript : [],
     });
   } catch (e) {
     console.error('[voice-call/sessions/[id] GET]', e);

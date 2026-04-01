@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
 
-import { PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
+import { APP_VOICE_PROXY_PATH } from '../../_wsProxyConfig';
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
@@ -32,6 +32,12 @@ vi.mock('@/server/services/training', () => ({
 const mockGetLLMConfig = vi.fn();
 vi.mock('@/envs/llm', () => ({
   getLLMConfig: () => mockGetLLMConfig(),
+}));
+
+vi.mock('@/envs/app', () => ({
+  appEnv: {
+    APP_URL: 'https://doirp-ai.vercel.app',
+  },
 }));
 
 const mockApiKeyManagerPick = vi.fn();
@@ -272,6 +278,6 @@ describe('GET /api/voice-call/config', () => {
 
     expect(res.status).toBe(200);
     const body = (await res.json()) as { geminiWsUrl?: string | null };
-    expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
+    expect(body.geminiWsUrl).toBe(`wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
   });
 });

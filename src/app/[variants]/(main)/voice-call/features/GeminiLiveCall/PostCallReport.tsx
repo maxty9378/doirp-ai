@@ -14,8 +14,6 @@ import {
 } from 'lucide-react';
 import { memo, useState } from 'react';
 
-import { sanitizeVoiceCallTranscript } from '@/utils/voiceCallEchoFilter';
-
 export interface PostCallReportData {
   behavioralMetrics?: {
     silenceInfo?: string;
@@ -219,8 +217,14 @@ export interface PostCallReportProps {
 
 const PostCallReport = memo<PostCallReportProps>(({ data, transcript, speakerName }) => {
   const [showTranscript, setShowTranscript] = useState(false);
-  const normalizedTranscript = transcript
-    ? sanitizeVoiceCallTranscript(transcript, { mode: 'store' })
+  const normalizedTranscript = Array.isArray(transcript)
+    ? transcript.filter(
+        (item) =>
+          item &&
+          (item.role === 'ai' || item.role === 'user') &&
+          typeof item.text === 'string' &&
+          item.text.trim().length > 0,
+      )
     : [];
 
   const scoreColor =

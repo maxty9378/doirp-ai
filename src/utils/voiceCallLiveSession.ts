@@ -1,9 +1,14 @@
 import type { ContextWindowCompressionConfig, SessionResumptionConfig } from '@google/genai/web';
 
 const PROTO_DURATION_SECONDS_RE = /^(-?\d+(?:\.\d+)?)s$/i;
+const DEFAULT_CONTEXT_COMPRESSION_TRIGGER_TOKENS = '104857';
+const DEFAULT_CONTEXT_COMPRESSION_TARGET_TOKENS = '52428';
 
 export const DEFAULT_VOICE_CALL_CONTEXT_WINDOW_COMPRESSION = {
-  slidingWindow: {},
+  slidingWindow: {
+    targetTokens: DEFAULT_CONTEXT_COMPRESSION_TARGET_TOKENS,
+  },
+  triggerTokens: DEFAULT_CONTEXT_COMPRESSION_TRIGGER_TOKENS,
 } as const satisfies ContextWindowCompressionConfig;
 
 interface ResumeDecisionParams {

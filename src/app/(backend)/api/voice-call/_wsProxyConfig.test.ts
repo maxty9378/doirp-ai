@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  APP_VOICE_PROXY_PATH,
+  buildAppVoiceProxyWsUrl,
   normalizeProxyBaseUrl,
   normalizeVoiceProxyUrl,
   PUBLIC_VOICE_PROXY_WS,
@@ -8,15 +10,21 @@ import {
 } from './_wsProxyConfig';
 
 describe('voice call ws proxy config', () => {
-  it('normalizes the legacy auth-protected proxy host to the public proxy endpoint', () => {
+  it('normalizes the legacy auth-protected proxy host to the app tunnel endpoint', () => {
     expect(normalizeVoiceProxyUrl('wss://doirp-ai.vercel.app/voice-call-ws')).toBe(
-      PUBLIC_VOICE_PROXY_WS,
+      `wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`,
     );
   });
 
   it('builds an HTTPS base URL from a WS endpoint', () => {
     expect(normalizeProxyBaseUrl('wss://voice-proxy.example.com/voice-call-ws?key=test')).toBe(
       'https://voice-proxy.example.com/voice-call-ws',
+    );
+  });
+
+  it('builds a same-origin WS tunnel URL from APP_URL', () => {
+    expect(buildAppVoiceProxyWsUrl('https://doirp-ai.vercel.app')).toBe(
+      `wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`,
     );
   });
 
@@ -42,7 +50,18 @@ describe('voice call ws proxy config', () => {
     expect(resolveVoiceCallWsProxyUrl({ nodeEnv: 'development' })).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 
-  it('falls back to the public proxy endpoint in production when env is empty', () => {
-    expect(resolveVoiceCallWsProxyUrl({ nodeEnv: 'production' })).toBe(PUBLIC_VOICE_PROXY_WS);
+  it('uses the same-origin tunnel endpoint in production when APP_URL is available', () => {
+    expect(
+      resolveVoiceCallWsProxyUrl({
+        appUrl: 'https://doirp-ai.vercel.app',
+        nodeEnv: 'production',
+      }),
+    ).toBe(`wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
+  });
+
+  it('falls back to the public proxy endpoint in production when APP_URL is empty', () => {
+    expect(resolveVoiceCallWsProxyUrl({ appUrl: null, nodeEnv: 'production' })).toBe(
+      PUBLIC_VOICE_PROXY_WS,
+    );
   });
 });

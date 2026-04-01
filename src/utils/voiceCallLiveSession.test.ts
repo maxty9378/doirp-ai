@@ -10,7 +10,10 @@ import {
 describe('voiceCallLiveSession', () => {
   it('builds default context window compression config', () => {
     expect(buildVoiceCallContextWindowCompression()).toEqual({
-      slidingWindow: {},
+      slidingWindow: {
+        targetTokens: '52428',
+      },
+      triggerTokens: '104857',
     });
   });
 

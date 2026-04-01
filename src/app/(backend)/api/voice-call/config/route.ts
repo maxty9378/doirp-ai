@@ -14,6 +14,7 @@ import {
   TP_PRICE_VOICE_AGENT_ID,
 } from '@/const/voiceCall';
 import { serverDB } from '@/database/server';
+import { appEnv } from '@/envs/app';
 import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { getTrainingScenarioWithKnowledge } from '@/server/services/training';
@@ -242,6 +243,7 @@ export async function GET(request: Request) {
       trainingScenario?.scenario.userLabel || (isTpPrice ? SALES_REP_LABEL : YOU_LABEL);
 
     const rawProxyUrl = resolveVoiceCallWsProxyUrl({
+      appUrl: appEnv.APP_URL,
       devProxyUrl: process.env.VOICE_CALL_WS_PROXY_DEV,
       explicitProxyUrl: process.env.VOICE_CALL_WS_PROXY_URL,
       nodeEnv: process.env.NODE_ENV,

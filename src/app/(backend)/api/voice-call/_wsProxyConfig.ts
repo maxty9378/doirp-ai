@@ -1,12 +1,28 @@
 const AUTH_PROTECTED_PROXY_HOST = 'doirp-ai.vercel.app';
 const AUTH_PROTECTED_PROXY_PATH = '/voice-call-ws';
+export const APP_VOICE_PROXY_PATH = '/gemini-live-ws';
 
 /**
- * Browser-facing WebSocket proxy endpoint.
- * The proxy service behind this URL is responsible for loading upstream HTTP/SOCKS proxies
- * from `voice_call_proxies` in the database.
+ * Direct public WebSocket proxy endpoint on the VPS.
+ * In production, browsers should prefer the same-origin Vercel tunnel path instead.
  */
 export const PUBLIC_VOICE_PROXY_WS = 'wss://ponkacat.ru/voice-call-ws';
+
+export const buildAppVoiceProxyWsUrl = (appUrl: string | null | undefined) => {
+  if (!appUrl?.trim()) return null;
+
+  try {
+    const parsed = new URL(appUrl.trim());
+    parsed.protocol = parsed.protocol === 'http:' ? 'ws:' : 'wss:';
+    parsed.pathname = APP_VOICE_PROXY_PATH;
+    parsed.search = '';
+    parsed.hash = '';
+
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+};
 
 export const normalizeProxyBaseUrl = (url: string | null | undefined) => {
   if (!url?.trim()) return null;
@@ -33,7 +49,10 @@ export const normalizeVoiceProxyUrl = (url: string | null | undefined) => {
       parsed.hostname === AUTH_PROTECTED_PROXY_HOST && path === AUTH_PROTECTED_PROXY_PATH;
 
     if (isAuthProtectedProxy) {
-      return PUBLIC_VOICE_PROXY_WS;
+      parsed.pathname = APP_VOICE_PROXY_PATH;
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.toString().replace(/\/$/, '');
     }
 
     return parsed.toString().replace(/\/$/, '');
@@ -43,12 +62,14 @@ export const normalizeVoiceProxyUrl = (url: string | null | undefined) => {
 };
 
 interface ResolveVoiceCallWsProxyUrlOptions {
+  appUrl?: string | null;
   devProxyUrl?: string | null;
   explicitProxyUrl?: string | null;
   nodeEnv?: string;
 }
 
 export const resolveVoiceCallWsProxyUrl = ({
+  appUrl,
   devProxyUrl,
   explicitProxyUrl,
   nodeEnv = process.env.NODE_ENV,
@@ -61,5 +82,5 @@ export const resolveVoiceCallWsProxyUrl = ({
     return normalizeVoiceProxyUrl(devProxyUrl) || PUBLIC_VOICE_PROXY_WS;
   }
 
-  return PUBLIC_VOICE_PROXY_WS;
+  return buildAppVoiceProxyWsUrl(appUrl) || PUBLIC_VOICE_PROXY_WS;
 };

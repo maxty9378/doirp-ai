@@ -2,12 +2,15 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { auth } from '@/auth';
+import { appEnv } from '@/envs/app';
 import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 
+import { buildVoiceCallContextWindowCompression } from '../../../../../../utils/voiceCallLiveSession';
 import { normalizeProxyBaseUrl, resolveVoiceCallWsProxyUrl } from '../../_wsProxyConfig';
 
 const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
+const DEFAULT_MEDIA_RESOLUTION = 'MEDIA_RESOLUTION_MEDIUM';
 const DEFAULT_VOICE = 'Aoede';
 
 export async function GET() {
@@ -31,6 +34,7 @@ export async function GET() {
     }
 
     const rawProxyUrl = resolveVoiceCallWsProxyUrl({
+      appUrl: appEnv.APP_URL,
       devProxyUrl: process.env.VOICE_CALL_WS_PROXY_DEV,
       explicitProxyUrl: process.env.VOICE_CALL_WS_PROXY_URL,
       nodeEnv: process.env.NODE_ENV,
@@ -39,6 +43,8 @@ export async function GET() {
     return NextResponse.json({
       apiKey,
       defaultConfig: {
+        contextWindowCompression: buildVoiceCallContextWindowCompression(),
+        mediaResolution: DEFAULT_MEDIA_RESOLUTION,
         responseModalities: ['AUDIO'],
         speechConfig: {
           voiceConfig: {
