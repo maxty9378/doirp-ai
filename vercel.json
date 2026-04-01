@@ -3,7 +3,7 @@
   "installCommand": "npx pnpm@10.26.2 install",
   "rewrites": [
     {
-      "destination": "http://95.81.97.249/gemini-live-ws",
+      "destination": "http://45.91.238.46/gemini-live-ws",
       "source": "/gemini-live-ws"
     }
   ]

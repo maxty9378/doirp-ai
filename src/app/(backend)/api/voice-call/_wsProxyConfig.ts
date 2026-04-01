@@ -6,7 +6,7 @@ export const APP_VOICE_PROXY_PATH = '/gemini-live-ws';
  * Direct public WebSocket proxy endpoint on the VPS.
  * In production, browsers should prefer the same-origin Vercel tunnel path instead.
  */
-export const PUBLIC_VOICE_PROXY_WS = 'wss://ponkacat.ru/voice-call-ws';
+export const PUBLIC_VOICE_PROXY_WS = 'wss://apidoirp.ru/voice-call-ws';
 
 export const buildAppVoiceProxyWsUrl = (appUrl: string | null | undefined) => {
   if (!appUrl?.trim()) return null;
