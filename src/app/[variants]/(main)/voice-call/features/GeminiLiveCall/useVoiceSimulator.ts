@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
+import { cleanVoiceAiText } from '@/utils/voiceCallSystemText';
 
 import { AudioStreamer } from './AudioStreamer';
 import { useAudioStreamer } from './useAudioStreamer';
@@ -61,11 +62,7 @@ const DEFAULT_SILENCE_NUDGE_TEMPLATE =
   'Собеседник молчит. Скажи коротко мотивационную фразу, например: "{{phrase}}".';
 
 function cleanAiText(text: string): string {
-  let cleaned = text.replaceAll(/<think>[\s\S]*?<\/think>/gi, '');
-  cleaned = cleaned.replaceAll(SCORE_TAG_RE, '');
-  cleaned = cleaned.replaceAll(CHECKPOINT_TAG_RE, '');
-  cleaned = cleaned.replaceAll(/\s+/g, ' ');
-  return cleaned.trim();
+  return cleanVoiceAiText(text, { stripEnglishReasoning: false });
 }
 
 function extractScoreDeltas(text: string): number[] {

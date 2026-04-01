@@ -11,8 +11,8 @@ import {
   GFD_GOOGLE_LIVE_VOICE_AGENT_ID,
 } from '@/const/voiceCall';
 import { useUserStore } from '@/store/user';
-import { stripEnglishReasoning } from '@/utils/stripEnglishReasoning';
 import { type VoiceCallDebugEvent, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
+import { cleanVoiceAiText } from '@/utils/voiceCallSystemText';
 
 import { AudioStreamer } from './AudioStreamer';
 
@@ -174,14 +174,7 @@ const buildRoundEndingPrompt = (rawPrompt: string) =>
   `${rawPrompt.trim()}\n\nВажно: если ты сейчас произносишь предыдущую реплику, ПРЕРВИСЬ и сразу начни финальную фразу. Скажи итог одним связным ответом и после этого замолчи.`;
 
 /** Очищает служебные теги в тексте от модели */
-function cleanAiText(text: string, options?: { stripEnglishReasoning?: boolean }): string {
-  let cleaned = text.replaceAll(/<think>[\s\S]*?<\/think>/gi, '');
-  cleaned = cleaned.replaceAll(/(?:\[\s*SCORE\s*:|SCORE\s*:)\s*(?:[-+]\s*)?\d+\s*\]?/gi, '');
-  cleaned = cleaned.replaceAll(/(?:\[\s*CHECKPOINT\s*:|CHECKPOINT\s*:)\s*[A-Z_]+\s*\]?/gi, '');
-  cleaned = cleaned.replaceAll(/\s+/g, ' ');
-  if (options?.stripEnglishReasoning !== false) cleaned = stripEnglishReasoning(cleaned);
-  return cleaned.trim();
-}
+const cleanAiText = cleanVoiceAiText;
 
 export interface TranscriptEntry {
   role: 'ai' | 'user';

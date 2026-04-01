@@ -20,11 +20,12 @@ import {
   GEMINI_31_FLASH_LIVE_MODEL,
 } from '@/const/voiceCall';
 import { useUserStore } from '@/store/user';
-import { stripEnglishReasoning } from '@/utils/stripEnglishReasoning';
 import { type VoiceCallDebugEvent, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
+import { cleanVoiceAiText } from '@/utils/voiceCallSystemText';
 
 import { AudioRecorder } from '../../beta/console/lib/audio-recorder';
 import { AudioStreamer } from './AudioStreamer';
+import { getSilenceNudgeDurationMs, shouldSendSilenceNudge } from './silenceNudge';
 import type {
   GeminiLiveConfig,
   GeminiLiveUIConfig,
@@ -139,15 +140,7 @@ const buildWavBlobFromPcmChunks = (chunks: Uint8Array[], sampleRate: number) => 
   return new Blob([wavBuffer], { type: 'audio/wav' });
 };
 
-function cleanAiText(text: string, options?: { stripEnglishReasoning?: boolean }) {
-  let cleaned = text.replaceAll(/<think>[\s\S]*?<\/think>/gi, '');
-  cleaned = cleaned.replaceAll(/(?:\[\s*SCORE\s*:|SCORE\s*:)\s*(?:[-+]\s*)?\d+\s*\]?/gi, '');
-  cleaned = cleaned.replaceAll(/(?:\[\s*CHECKPOINT\s*:|CHECKPOINT\s*:)\s*[A-Z_]+\s*\]?/gi, '');
-  cleaned = cleaned.replaceAll(/\s+/g, ' ');
-  if (options?.stripEnglishReasoning !== false) cleaned = stripEnglishReasoning(cleaned);
-
-  return cleaned.trim();
-}
+const cleanAiText = cleanVoiceAiText;
 
 const mergeLiveTranscriptionText = (prev: string, next: string) => {
   const a = prev.trim();
@@ -370,6 +363,7 @@ export function useGeminiLiveOfficial({
   const currentAiTurnMetaTextRef = useRef('');
   const recordedUserPcmChunksRef = useRef<Uint8Array[]>([]);
   const recordedUserPcmBytesRef = useRef(0);
+  const lastBotEndRef = useRef(0);
   const lastUserSpeechRef = useRef(0);
   const lastSilenceNudgeAtRef = useRef(0);
   const silenceNudgeCountRef = useRef(0);
@@ -609,6 +603,7 @@ export function useGeminiLiveOfficial({
     recordedUserPcmChunksRef.current = [];
     recordedUserPcmBytesRef.current = 0;
     lastAiActivityAtRef.current = 0;
+    lastBotEndRef.current = 0;
     // Важно: lastUserSpeechRef используется для вычисления тишины.
     // Если не сбросить между сессиями, "молчание" может считаться уже истёкшим.
     lastUserSpeechRef.current = 0;
@@ -622,8 +617,6 @@ export function useGeminiLiveOfficial({
     hangupScheduledRef.current = false;
     isSetupCompleteRef.current = false;
     connectionLockRef.current = false;
-    manualDisconnectRef.current = false;
-
     setStatus('idle');
     setErrorMessage(null);
     setUserVolume(0);
@@ -730,6 +723,7 @@ export function useGeminiLiveOfficial({
       lastAiActivityAtRef.current = 0;
       recordedUserPcmChunksRef.current = [];
       recordedUserPcmBytesRef.current = 0;
+      lastBotEndRef.current = 0;
       // lastUserSpeechRef влияет на старте таймера тишины — сбрасываем, чтобы nudge не срабатывал сразу.
       lastUserSpeechRef.current = 0;
       lastSilenceNudgeAtRef.current = 0;
@@ -888,6 +882,7 @@ export function useGeminiLiveOfficial({
         }
 
         lastUserSpeechRef.current = now;
+        lastBotEndRef.current = 0;
         silenceNudgeCountRef.current = 0;
         pushDebugEvent('user-input-transcription', { text: inputText.slice(0, 160) });
       };
@@ -926,7 +921,8 @@ export function useGeminiLiveOfficial({
           setStatus('ready');
           const now = Date.now();
           roundStartRef.current = now;
-          lastUserSpeechRef.current = now;
+          lastBotEndRef.current = 0;
+          lastUserSpeechRef.current = 0;
           pushDebugEvent('setup-complete');
           sendStartTrigger();
           return;
@@ -1036,6 +1032,7 @@ export function useGeminiLiveOfficial({
           const fallbackText = spokenText ? '' : cleanAiText(rawTurnText);
           const storeText = spokenText || fallbackText;
           if (storeText) transcriptRef.current.push({ role: 'ai', text: storeText });
+          lastBotEndRef.current = Date.now();
 
           currentAiTurnTextRef.current = '';
           currentAiTurnMetaTextRef.current = '';
@@ -1055,7 +1052,10 @@ export function useGeminiLiveOfficial({
               sessionRef.current = null;
               connectionLockRef.current = false;
 
-              if (manualDisconnectRef.current) return;
+              if (manualDisconnectRef.current || hangupScheduledRef.current) {
+                setStatus('idle');
+                return;
+              }
 
               if (!isSetupCompleteRef.current) {
                 reportError(
@@ -1218,22 +1218,13 @@ export function useGeminiLiveOfficial({
       }
 
       // Фразы при тишине из БД (silenceNudgePhrases/silenceNudgeTemplate).
-      const hasTranscript = transcriptRef.current.length > 0;
       const isFinalWindow = roundVerdictTriggeredRef.current || remaining <= 15_000;
       if (
         !hangupScheduledRef.current &&
         !awaitingFinalAiTurnRef.current &&
         !isFinalWindow &&
-        hasTranscript &&
         silenceNudgeAfterMs > 0
       ) {
-        const silenceSince = lastUserSpeechRef.current || roundStartRef.current || now;
-        const silenceDuration = now - silenceSince;
-        const canNudgeBySilence = silenceDuration >= silenceNudgeAfterMs;
-        const canNudgeByCooldown =
-          !lastSilenceNudgeAtRef.current ||
-          now - lastSilenceNudgeAtRef.current >= silenceNudgeCooldownMs;
-
         const isAiCurrentlySpeaking =
           !!streamerRef.current?.isPlaying ||
           currentAiTurnTextRef.current.trim().length > 0 ||
@@ -1241,12 +1232,24 @@ export function useGeminiLiveOfficial({
         const aiRecentlyActive =
           !!lastAiActivityAtRef.current &&
           now - lastAiActivityAtRef.current < NUDGE_AI_QUIET_WINDOW_MS;
+        const silenceDuration = getSilenceNudgeDurationMs({
+          lastBotEndAt: lastBotEndRef.current,
+          lastUserSpeechAt: lastUserSpeechRef.current,
+          now,
+        });
 
         if (
-          canNudgeBySilence &&
-          canNudgeByCooldown &&
-          !isAiCurrentlySpeaking &&
-          !aiRecentlyActive
+          shouldSendSilenceNudge({
+            aiRecentlyActive,
+            isAiCurrentlySpeaking,
+            lastBotEndAt: lastBotEndRef.current,
+            lastSilenceNudgeAt: lastSilenceNudgeAtRef.current,
+            lastUserSpeechAt: lastUserSpeechRef.current,
+            now,
+            silenceNudgeAfterMs,
+            silenceNudgeCooldownMs,
+          }) &&
+          silenceDuration !== null
         ) {
           const phrase = silencePhrases[silenceNudgeCountRef.current % silencePhrases.length];
           const nudgeText = buildSilenceNudgeText(

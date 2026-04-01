@@ -5,43 +5,10 @@ import { auth } from '@/auth';
 import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 
+import { normalizeProxyBaseUrl, resolveVoiceCallWsProxyUrl } from '../../_wsProxyConfig';
+
 const DEFAULT_MODEL = 'models/gemini-3.1-flash-live-preview';
 const DEFAULT_VOICE = 'Aoede';
-const PUBLIC_VOICE_PROXY_WS = 'wss://apidoirp.ru/voice-call-ws';
-
-const normalizeProxyBaseUrl = (url: string | null | undefined) => {
-  if (!url?.trim()) return null;
-
-  try {
-    const parsed = new URL(url.trim());
-    parsed.protocol = parsed.protocol === 'ws:' ? 'http:' : 'https:';
-    parsed.search = '';
-    parsed.hash = '';
-
-    return parsed.toString().replace(/\/$/, '');
-  } catch {
-    return null;
-  }
-};
-
-const normalizeVoiceProxyUrl = (url: string | null | undefined) => {
-  if (!url?.trim()) return null;
-
-  try {
-    const parsed = new URL(url.trim());
-    const path = parsed.pathname.replace(/\/+$/, '');
-    const isAuthProtectedProxy =
-      parsed.hostname === 'doirp-ai.vercel.app' && path === '/voice-call-ws';
-
-    if (isAuthProtectedProxy) {
-      return PUBLIC_VOICE_PROXY_WS;
-    }
-
-    return parsed.toString();
-  } catch {
-    return url.trim();
-  }
-};
 
 export async function GET() {
   try {
@@ -63,15 +30,11 @@ export async function GET() {
       );
     }
 
-    const DEV_DEFAULT_VOICE_WS = PUBLIC_VOICE_PROXY_WS;
-    const explicitProxyUrl = process.env.VOICE_CALL_WS_PROXY_URL?.trim() || null;
-    const rawProxyUrl =
-      (process.env.NODE_ENV === 'development'
-        ? normalizeVoiceProxyUrl(explicitProxyUrl)
-        : explicitProxyUrl) ||
-      (process.env.NODE_ENV === 'development'
-        ? normalizeVoiceProxyUrl(process.env.VOICE_CALL_WS_PROXY_DEV) || DEV_DEFAULT_VOICE_WS
-        : null);
+    const rawProxyUrl = resolveVoiceCallWsProxyUrl({
+      devProxyUrl: process.env.VOICE_CALL_WS_PROXY_DEV,
+      explicitProxyUrl: process.env.VOICE_CALL_WS_PROXY_URL,
+      nodeEnv: process.env.NODE_ENV,
+    });
 
     return NextResponse.json({
       apiKey,

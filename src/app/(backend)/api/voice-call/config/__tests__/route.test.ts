@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
 
+import { PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
@@ -151,6 +152,34 @@ describe('GET /api/voice-call/config', () => {
     expect(body.roundEndingPrompt).toBe(DEFAULT_TRAINING_ROUND_ENDING_PROMPT);
   });
 
+  it('sanitizes planner meta tag instructions in voice system prompt', async () => {
+    mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      scenario: {
+        contextWindow: 5,
+        goals: [],
+        systemPrompt: [
+          'Первая реплика: Представься как журналистка-блогер канала на VK Видео.',
+          '',
+          'Техническое требование: В САМЫЙ КОНЕЦ своей реплики добавляй служебные теги для UI.',
+          'Пример: [weaknessCode: direct_answer_missing, responseMode: press_for_direct_answer]',
+        ].join('\n'),
+        voiceName: 'Sulafat',
+      },
+      knowledgeEntries: [],
+    });
+
+    const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { systemInstruction?: string | null };
+    expect(body.systemInstruction).toContain('Представься как журналистка-блогер');
+    expect(body.systemInstruction).not.toContain('[weaknessCode:');
+    expect(body.systemInstruction).not.toContain('[responseMode:');
+    expect(body.systemInstruction).not.toContain('служебные теги');
+    expect(body.systemInstruction).toContain('Не добавляй в ответ служебные поля');
+  });
+
   it('returns Gemini 3.1 model for the dedicated Google Live trainer', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       scenario: {
@@ -179,5 +208,24 @@ describe('GET /api/voice-call/config', () => {
     const res = await GET(req);
 
     expect(res.status).toBe(404);
+  });
+
+  it('returns the public proxy websocket URL by default', async () => {
+    mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      scenario: {
+        contextWindow: 5,
+        goals: [],
+        systemPrompt: 'System prompt from DB',
+        voiceName: 'Sulafat',
+      },
+      knowledgeEntries: [],
+    });
+
+    const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { geminiWsUrl?: string | null };
+    expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 });

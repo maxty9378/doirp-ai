@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { PUBLIC_VOICE_PROXY_WS } from '../../../_wsProxyConfig';
 import { GET } from '../route';
 
 const DEFAULT_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
@@ -61,7 +62,7 @@ describe('GET /api/voice-call/beta/config', () => {
     expect(res.status).toBe(503);
   });
 
-  it('returns direct-mode payload without proxyBaseUrl', async () => {
+  it('returns proxy-mode payload with the public fallback proxyBaseUrl by default', async () => {
     const res = await GET();
     const body = (await res.json()) as {
       apiKey: string;
@@ -74,7 +75,7 @@ describe('GET /api/voice-call/beta/config', () => {
     expect(body.apiKey).toBe('test-key');
     expect(body.defaultModel).toBe(DEFAULT_LIVE_MODEL);
     expect(body.defaultVoice).toBe('Aoede');
-    expect(body.proxyBaseUrl).toBeNull();
+    expect(body.proxyBaseUrl).toBe('https://apidoirp.ru/voice-call-ws');
   });
 
   it('returns proxy-mode payload with normalized proxyBaseUrl', async () => {
@@ -85,5 +86,16 @@ describe('GET /api/voice-call/beta/config', () => {
 
     expect(res.status).toBe(200);
     expect(body.proxyBaseUrl).toBe('https://voice-proxy.example.com/voice-call-ws');
+  });
+
+  it('normalizes the legacy protected proxy URL to the public fallback', async () => {
+    vi.stubEnv('VOICE_CALL_WS_PROXY_URL', 'wss://doirp-ai.vercel.app/voice-call-ws');
+
+    const res = await GET();
+    const body = (await res.json()) as { proxyBaseUrl: string | null };
+
+    expect(res.status).toBe(200);
+    expect(body.proxyBaseUrl).toBe('https://apidoirp.ru/voice-call-ws');
+    expect(PUBLIC_VOICE_PROXY_WS).toBe('wss://apidoirp.ru/voice-call-ws');
   });
 });

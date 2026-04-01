@@ -18,6 +18,9 @@ import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
 import { getTrainingScenarioWithKnowledge } from '@/server/services/training';
 
+import { sanitizeVoiceSystemInstruction } from '../../../../../utils/voiceCallSystemText';
+import { resolveVoiceCallWsProxyUrl } from '../_wsProxyConfig';
+
 const DEFAULT_CONTEXT_WINDOW = 5;
 const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
 const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
@@ -81,27 +84,6 @@ const LIVE_VOICES = new Set([
   'Vindemiatrix',
   'Sulafat',
 ]);
-
-const PUBLIC_VOICE_PROXY_WS = 'wss://apidoirp.ru/voice-call-ws';
-
-const normalizeVoiceProxyUrl = (url: string | null | undefined) => {
-  if (!url?.trim()) return null;
-
-  try {
-    const parsed = new URL(url.trim());
-    const path = parsed.pathname.replace(/\/+$/, '');
-    const isAuthProtectedProxy =
-      parsed.hostname === 'doirp-ai.vercel.app' && path === '/voice-call-ws';
-
-    if (isAuthProtectedProxy) {
-      return PUBLIC_VOICE_PROXY_WS;
-    }
-
-    return parsed.toString();
-  } catch {
-    return url.trim();
-  }
-};
 
 const TP_PRICE_SYSTEM_LINES = [
   '\u0422\u044B \u2014 \u041C\u0430\u0440\u0438\u043D\u0430 \u0418\u0432\u0430\u043D\u043E\u0432\u043D\u0430, \u0434\u0438\u0440\u0435\u043A\u0442\u043E\u0440 \u043C\u0430\u0433\u0430\u0437\u0438\u043D\u0430 \u00AB\u0423 \u0434\u043E\u043C\u0430\u00BB.',
@@ -212,7 +194,9 @@ export async function GET(request: Request) {
 
     const baseSystemInstruction =
       isTpPrice && preset ? buildTpPriceVoiceSystem(preset) : (preset?.systemRole ?? '');
-    const systemInstructionBase = trainingScenario?.scenario.systemPrompt || baseSystemInstruction;
+    const systemInstructionBase = sanitizeVoiceSystemInstruction(
+      trainingScenario?.scenario.systemPrompt || baseSystemInstruction,
+    );
 
     const userContextLines = [
       USER_CONTEXT_HEADER,
@@ -235,15 +219,11 @@ export async function GET(request: Request) {
     const userLabel =
       trainingScenario?.scenario.userLabel || (isTpPrice ? SALES_REP_LABEL : YOU_LABEL);
 
-    const DEV_DEFAULT_VOICE_WS = PUBLIC_VOICE_PROXY_WS;
-    const explicitProxyUrl = process.env.VOICE_CALL_WS_PROXY_URL?.trim() || null;
-    const rawProxyUrl =
-      (process.env.NODE_ENV === 'development'
-        ? normalizeVoiceProxyUrl(explicitProxyUrl)
-        : explicitProxyUrl) ||
-      (process.env.NODE_ENV === 'development'
-        ? normalizeVoiceProxyUrl(process.env.VOICE_CALL_WS_PROXY_DEV) || DEV_DEFAULT_VOICE_WS
-        : null);
+    const rawProxyUrl = resolveVoiceCallWsProxyUrl({
+      devProxyUrl: process.env.VOICE_CALL_WS_PROXY_DEV,
+      explicitProxyUrl: process.env.VOICE_CALL_WS_PROXY_URL,
+      nodeEnv: process.env.NODE_ENV,
+    });
     const geminiWsUrl = rawProxyUrl ? rawProxyUrl.replace(/^http/, 'ws') : null;
 
     const liveModel = resolveVoiceCallLiveModel(agentId);

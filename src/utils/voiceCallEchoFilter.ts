@@ -1,4 +1,4 @@
-import { stripEnglishReasoning } from './stripEnglishReasoning';
+import { cleanVoiceAiText } from './voiceCallSystemText';
 
 export interface VoiceCallTranscriptEntry {
   role: 'ai' | 'user';
@@ -16,13 +16,7 @@ export const normalizeEchoText = (text: string) =>
 const tokenize = (text: string) => normalizeEchoText(text).split(' ').filter(Boolean);
 
 const cleanAiTextForStore = (text: string, options?: { stripEnglishReasoning?: boolean }) => {
-  let cleaned = text;
-  cleaned = cleaned.replaceAll(/<think>[\s\S]*?<\/think>/gi, '');
-  cleaned = cleaned.replaceAll(/(?:\[\s*SCORE\s*:|SCORE\s*:)\s*(?:[-+]\s*)?\d+\s*\]?/gi, '');
-  cleaned = cleaned.replaceAll(/(?:\[\s*CHECKPOINT\s*:|CHECKPOINT\s*:)\s*[A-Z_]+\s*\]?/gi, '');
-  cleaned = cleaned.replaceAll(/\s+/g, ' ');
-  if (options?.stripEnglishReasoning !== false) cleaned = stripEnglishReasoning(cleaned);
-  return cleaned.trim();
+  return cleanVoiceAiText(text, options);
 };
 
 const USER_WORD_JOIN_STOPWORDS = new Set([
