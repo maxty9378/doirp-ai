@@ -33,6 +33,11 @@ import {
   DEFAULT_TRAINING_PROGRESS_TOOL_NAME,
   normalizeTrainingProgressArgs,
 } from '@/utils/voiceCallTraining';
+import {
+  buildFallbackVoiceCallTurnPlan,
+  type VoiceCallPlannerPlan,
+  type VoiceCallPlannerState,
+} from '@/utils/voiceCallTurnPlannerFallback';
 
 import { AudioRecorder } from '../../beta/console/lib/audio-recorder';
 import { AudioStreamer } from './AudioStreamer';
@@ -66,7 +71,7 @@ const DEFAULT_ASSISTANT_LABEL = 'ИИ-агент';
 const DEFAULT_USER_LABEL = 'Вы';
 const DEFAULT_VOICE_NAME = 'Sulafat';
 const AI_VOLUME_FPS = 12;
-const TURN_PLANNER_TIMEOUT_MS = 800;
+const TURN_PLANNER_TIMEOUT_MS = 2000;
 const NUDGE_AI_QUIET_WINDOW_MS = 1800;
 const MAX_SESSION_RESUME_ATTEMPTS = 3;
 const SESSION_RESUME_RETRY_DELAY_MS = 250;
@@ -317,7 +322,8 @@ export function useGeminiLiveOfficial({
   const awaitingFinalAiTurnRef = useRef(false);
   const finalPromptSentAtRef = useRef<number | null>(null);
   const deductedSessionRef = useRef(false);
-  const plannerStateRef = useRef<Record<string, unknown> | null>(null);
+  const plannerStateRef = useRef<VoiceCallPlannerState | null>(null);
+  const lastTurnPlanRef = useRef<VoiceCallPlannerPlan | null>(null);
   const connectRef = useRef<() => Promise<void> | void>(() => {});
   const disconnectRef = useRef<() => void>(() => {});
   const lastAiVolumeAtRef = useRef(0);
@@ -328,6 +334,7 @@ export function useGeminiLiveOfficial({
   const resumeTimerRef = useRef<number | null>(null);
   const resumeOnCloseRef = useRef(false);
   const isResumingSessionRef = useRef(false);
+  const deferredClientTextRef = useRef<string | null>(null);
 
   const prewarmAudio = useCallback(() => {
     const Ctx =
@@ -409,6 +416,7 @@ export function useGeminiLiveOfficial({
     isResumingSessionRef.current = false;
     sessionResumeHandleRef.current = null;
     sessionResumeAttemptsRef.current = 0;
+    deferredClientTextRef.current = null;
 
     try {
       audioRecorderRef.current?.stop();
@@ -430,7 +438,7 @@ export function useGeminiLiveOfficial({
     freqDataRef.current = null;
   }, [clearResumeTimer]);
 
-  const requestTurnPlan = useCallback(async () => {
+  const requestTurnPlan = useCallback(async (): Promise<VoiceCallPlannerPlan> => {
     const transcript = [...transcriptRef.current];
 
     try {
@@ -454,31 +462,71 @@ export function useGeminiLiveOfficial({
         throw new Error(payload.error || `Planner request failed: ${response.status}`);
       }
 
-      const plan = (await response.json()) as { state?: Record<string, unknown> } & Record<
-        string,
-        unknown
-      >;
+      const plan = (await response.json()) as VoiceCallPlannerPlan;
       plannerStateRef.current = plan.state ?? null;
-      pushDebugEvent('turn-plan', plan);
+      lastTurnPlanRef.current = plan;
+      pushDebugEvent('turn-plan', {
+        currentTopic: plan.currentTopic,
+        pressureLevel: plan.pressureLevel,
+        responseMode: plan.responseMode,
+        weaknessCode: plan.reasoning.weaknessCode,
+      });
 
       return plan;
     } catch (error) {
-      console.error('[GeminiLiveOfficial] turn planner failed:', error);
-      pushDebugEvent('turn-plan-error', {
-        message: error instanceof Error ? error.message : 'unknown planner error',
+      const fallbackPlan = buildFallbackVoiceCallTurnPlan({
+        previousPlan: lastTurnPlanRef.current,
+        previousState: plannerStateRef.current,
+        transcript,
       });
 
-      return null;
+      plannerStateRef.current = fallbackPlan.state;
+      lastTurnPlanRef.current = fallbackPlan;
+      console.error('[GeminiLiveOfficial] turn planner failed:', error);
+      pushDebugEvent('turn-plan-error', {
+        fallbackResponseMode: fallbackPlan.responseMode,
+        message: error instanceof Error ? error.message : 'unknown planner error',
+        weaknessCode: fallbackPlan.reasoning.weaknessCode,
+      });
+
+      return fallbackPlan;
     }
   }, [agentId, pushDebugEvent]);
 
-  const sendRealtimeText = useCallback(
-    (text: string) => {
-      const session = sessionRef.current;
-      if (!session || !text.trim()) return;
+  const flushDeferredClientText = useCallback(
+    (targetSession?: Session | null) => {
+      const session = targetSession ?? sessionRef.current;
+      const deferredText = deferredClientTextRef.current?.trim();
+      if (!session || !deferredText) return false;
 
-      pushDebugEvent('client-text', { text: text.slice(0, 200) });
-      session.sendRealtimeInput({ text });
+      deferredClientTextRef.current = null;
+      pushDebugEvent('client-text', { deferred: true, text: deferredText.slice(0, 200) });
+      session.sendRealtimeInput({ text: deferredText });
+
+      return true;
+    },
+    [pushDebugEvent],
+  );
+
+  const sendRealtimeText = useCallback(
+    (text: string, options?: { deferUntilSessionReady?: boolean }) => {
+      const nextText = text.trim();
+      const session = sessionRef.current;
+      if (!nextText) return false;
+
+      if (!session) {
+        if (options?.deferUntilSessionReady) {
+          deferredClientTextRef.current = nextText;
+          pushDebugEvent('client-text-deferred', { text: nextText.slice(0, 200) });
+        }
+
+        return false;
+      }
+
+      pushDebugEvent('client-text', { text: nextText.slice(0, 200) });
+      session.sendRealtimeInput({ text: nextText });
+
+      return true;
     },
     [pushDebugEvent],
   );
@@ -602,6 +650,7 @@ export function useGeminiLiveOfficial({
 
     transcriptRef.current = [];
     plannerStateRef.current = null;
+    lastTurnPlanRef.current = null;
     recordedUserPcmChunksRef.current = [];
     recordedUserPcmBytesRef.current = 0;
     lastAiActivityAtRef.current = 0;
@@ -687,6 +736,7 @@ export function useGeminiLiveOfficial({
     const preservedLastBotEndAt = isResumeAttempt ? lastBotEndRef.current : 0;
     const preservedLastSilenceNudgeAt = isResumeAttempt ? lastSilenceNudgeAtRef.current : 0;
     const preservedLastUserSpeechAt = isResumeAttempt ? lastUserSpeechRef.current : 0;
+    const preservedLastTurnPlan = isResumeAttempt ? lastTurnPlanRef.current : null;
     const preservedPlannerState = isResumeAttempt ? plannerStateRef.current : null;
     const preservedRecordedUserPcmBytes = isResumeAttempt ? recordedUserPcmBytesRef.current : 0;
     const preservedRecordedUserPcmChunks = isResumeAttempt
@@ -759,9 +809,11 @@ export function useGeminiLiveOfficial({
       clearResumeTimer();
 
       plannerStateRef.current = null;
+      lastTurnPlanRef.current = null;
       transcriptRef.current = [];
       currentAiTurnTextRef.current = '';
       currentAiTurnMetaTextRef.current = '';
+      deferredClientTextRef.current = null;
       lastAiActivityAtRef.current = 0;
       recordedUserPcmChunksRef.current = [];
       recordedUserPcmBytesRef.current = 0;
@@ -792,6 +844,7 @@ export function useGeminiLiveOfficial({
         lastBotEndRef.current = preservedLastBotEndAt;
         lastSilenceNudgeAtRef.current = preservedLastSilenceNudgeAt;
         lastUserSpeechRef.current = preservedLastUserSpeechAt;
+        lastTurnPlanRef.current = preservedLastTurnPlan;
         plannerStateRef.current = preservedPlannerState;
         recordedUserPcmBytesRef.current = preservedRecordedUserPcmBytes;
         recordedUserPcmChunksRef.current = preservedRecordedUserPcmChunks;
@@ -993,7 +1046,7 @@ export function useGeminiLiveOfficial({
               .replaceAll('{{speakerInstruction}}', nameLine)
           : defaultOpeningText;
 
-        sendRealtimeText(startText);
+        sendRealtimeText(startText, { deferUntilSessionReady: true });
       };
 
       const buildSessionConfig = (resumeHandle?: string) => ({
@@ -1169,31 +1222,7 @@ export function useGeminiLiveOfficial({
               return {
                 id: toolCall.id,
                 name: toolName,
-                response:
-                  plan ??
-                  ({
-                    currentTopic: null,
-                    lastUserClaim: null,
-                    openLoops: [],
-                    pressureLevel: 1,
-                    reasoning: {
-                      factualStrength: 'low',
-                      responseGap: 'partial',
-                      userTone: 'neutral',
-                      weaknessCode: 'follow_up_open',
-                    },
-                    relevantKnowledge: [],
-                    relevantKnowledgeIds: [],
-                    responseMode: 'answer_then_probe',
-                    state: plannerStateRef.current ?? {
-                      currentTopic: null,
-                      evidenceUsed: [],
-                      lastKnowledgeIds: [],
-                      lastUserClaim: null,
-                      openLoops: [],
-                      pressureLevel: 1,
-                    },
-                  } satisfies Record<string, unknown>),
+                response: plan as unknown as Record<string, unknown>,
               };
             }),
           );
@@ -1329,6 +1358,7 @@ export function useGeminiLiveOfficial({
         }
       }
       sessionRef.current = session;
+      flushDeferredClientText(session);
 
       await startAudioRecorderIfNeeded();
     } catch (error) {
@@ -1362,6 +1392,7 @@ export function useGeminiLiveOfficial({
     syncDebugSnapshot,
     systemInstruction,
     voiceName,
+    flushDeferredClientText,
   ]);
 
   connectRef.current = connect;
