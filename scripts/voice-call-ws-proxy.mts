@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bun
+#!/usr/bin/env bun
 /**
  * WebSocket-прокси для голосового звонка (Gemini Live).
  * Принимает подключения от браузера и проксирует их к Google через HTTPS_PROXY или SOCKS.
@@ -22,16 +22,17 @@ const PORT = Number(process.env.VOICE_CALL_WS_PROXY_PORT || '3011');
 
 /** Список прокси host:port:user:pass; при отсутствии HTTPS_PROXY используется первый */
 const FALLBACK_PROXY_LIST = [
-  '31.59.20.176:6754:xlvhmzvz:fdtx2d20nj7f',
-  '23.95.150.145:6114:xlvhmzvz:fdtx2d20nj7f',
-  '198.23.239.134:6540:xlvhmzvz:fdtx2d20nj7f',
-  '45.38.107.97:6014:xlvhmzvz:fdtx2d20nj7f',
-  '107.172.163.27:6543:xlvhmzvz:fdtx2d20nj7f',
-  '198.105.121.200:6462:xlvhmzvz:fdtx2d20nj7f',
-  '64.137.96.74:6641:xlvhmzvz:fdtx2d20nj7f',
-  '216.10.27.159:6837:xlvhmzvz:fdtx2d20nj7f',
-  '142.111.67.146:5611:xlvhmzvz:fdtx2d20nj7f',
-  '191.96.254.138:6185:xlvhmzvz:fdtx2d20nj7f',
+  '95.81.98.243:20818:gemini:gBOiFtedtz2SHEVNtTqi',
+  '31.59.20.176:6754:cddtxqdm:kcqr3pqna7ja',
+  '23.95.150.145:6114:cddtxqdm:kcqr3pqna7ja',
+  '198.23.239.134:6540:cddtxqdm:kcqr3pqna7ja',
+  '45.38.107.97:6014:cddtxqdm:kcqr3pqna7ja',
+  '107.172.163.27:6543:cddtxqdm:kcqr3pqna7ja',
+  '198.105.121.200:6462:cddtxqdm:kcqr3pqna7ja',
+  '216.10.27.159:6837:cddtxqdm:kcqr3pqna7ja',
+  '142.111.67.146:5611:cddtxqdm:kcqr3pqna7ja',
+  '191.96.254.138:6185:cddtxqdm:kcqr3pqna7ja',
+  '31.58.9.4:6077:cddtxqdm:kcqr3pqna7ja',
 ];
 
 function parseProxyEntry(entry: string): string {
@@ -39,7 +40,7 @@ function parseProxyEntry(entry: string): string {
   if (parts.length < 4) return '';
   const [host, port, user, ...passParts] = parts;
   const password = passParts.join(':');
-  return `http://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}`;
+  return `socks5h://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}`;
 }
 
 const envProxy =
