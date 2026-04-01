@@ -26,12 +26,10 @@ import {
 import { resolveVoiceCallWsProxyUrl } from '../_wsProxyConfig';
 
 const DEFAULT_CONTEXT_WINDOW = 5;
-const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
-const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
+const DEFAULT_SILENCE_NUDGE_AFTER_MS = 0;
+const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 0;
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 180_000;
-const DEFAULT_SILENCE_NUDGE_PHRASES = [
-  '\u0410\u043B\u043B\u043E, \u0432\u044B \u043C\u0435\u043D\u044F \u0432\u043E\u043E\u0431\u0449\u0435 \u0441\u043B\u044B\u0448\u0438\u0442\u0435?',
-];
+const DEFAULT_SILENCE_NUDGE_PHRASES: string[] = [];
 const DEFAULT_LIVE_VOICE = 'Sulafat';
 const TRAINING_TURN_TOOL_NAME = 'get_training_turn_context';
 const INTERVIEW_DURATION_OPTIONS_MS = new Set([2 * 60_000, 5 * 60_000, 10 * 60_000]);
@@ -269,13 +267,11 @@ export async function GET(request: Request) {
         selectedDurationMs ??
         trainingScenario?.scenario.silenceHardHangupMs ??
         DEFAULT_SILENCE_HARD_HANGUP_MS,
-      silenceNudgeAfterMs:
-        trainingScenario?.scenario.silenceNudgeAfterMs ?? DEFAULT_SILENCE_NUDGE_AFTER_MS,
-      silenceNudgeCooldownMs:
-        trainingScenario?.scenario.silenceNudgeCooldownMs ?? DEFAULT_SILENCE_NUDGE_COOLDOWN_MS,
-      silenceNudgePhrases: trainingScenario?.scenario.silenceNudgePhrases?.length
-        ? trainingScenario.scenario.silenceNudgePhrases
-        : DEFAULT_SILENCE_NUDGE_PHRASES,
+      // Silence nudges are disabled globally in voice trainers: they sound unnatural and
+      // were repeatedly interrupting the interview flow.
+      silenceNudgeAfterMs: DEFAULT_SILENCE_NUDGE_AFTER_MS,
+      silenceNudgeCooldownMs: DEFAULT_SILENCE_NUDGE_COOLDOWN_MS,
+      silenceNudgePhrases: DEFAULT_SILENCE_NUDGE_PHRASES,
       speakerName: speakerName || undefined,
       liveModel,
       systemInstruction,

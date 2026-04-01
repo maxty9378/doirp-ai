@@ -21,6 +21,12 @@ import {
 } from '@/const/voiceCall';
 import { useUserStore } from '@/store/user';
 import { type VoiceCallDebugEvent, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
+import {
+  buildVoiceCallContextWindowCompression,
+  buildVoiceCallSessionResumptionConfig,
+  parseLiveServerDurationMs,
+  shouldResumeVoiceCallSession,
+} from '@/utils/voiceCallLiveSession';
 import { cleanVoiceAiText } from '@/utils/voiceCallSystemText';
 import {
   applyTrainingProgress,
@@ -47,10 +53,10 @@ const USER_VOLUME_SCALE = 500;
 const MAX_DEBUG_EVENTS = 200;
 const PATIENCE_INITIAL = 100;
 const DEFAULT_CONTEXT_WINDOW = 5;
-const DEFAULT_SILENCE_NUDGE_AFTER_MS = 15_000;
-const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 15_000;
+const DEFAULT_SILENCE_NUDGE_AFTER_MS = 0;
+const DEFAULT_SILENCE_NUDGE_COOLDOWN_MS = 0;
 const DEFAULT_SILENCE_HARD_HANGUP_MS = 300_000;
-const DEFAULT_SILENCE_NUDGE_PHRASES = ['Алло, вы меня вообще слышите?'];
+const DEFAULT_SILENCE_NUDGE_PHRASES: string[] = [];
 /** После отправки финального промпта ждём ответ модели не дольше (защита от зависания). */
 const FINAL_AI_RESPONSE_ABSOLUTE_MAX_MS = 120_000;
 /** Небольшая пауза после окончания воспроизведения PCM, чтобы не обрезать хвост. */
@@ -62,6 +68,8 @@ const DEFAULT_VOICE_NAME = 'Sulafat';
 const AI_VOLUME_FPS = 12;
 const TURN_PLANNER_TIMEOUT_MS = 800;
 const NUDGE_AI_QUIET_WINDOW_MS = 1800;
+const MAX_SESSION_RESUME_ATTEMPTS = 3;
+const SESSION_RESUME_RETRY_DELAY_MS = 250;
 
 const log = debug('lobe-client:voice-call:live-official');
 
@@ -310,10 +318,16 @@ export function useGeminiLiveOfficial({
   const finalPromptSentAtRef = useRef<number | null>(null);
   const deductedSessionRef = useRef(false);
   const plannerStateRef = useRef<Record<string, unknown> | null>(null);
+  const connectRef = useRef<() => Promise<void> | void>(() => {});
   const disconnectRef = useRef<() => void>(() => {});
   const lastAiVolumeAtRef = useRef(0);
   const lastAiVolumeValueRef = useRef(0);
   const lastAiActivityAtRef = useRef(0);
+  const sessionResumeHandleRef = useRef<string | null>(null);
+  const sessionResumeAttemptsRef = useRef(0);
+  const resumeTimerRef = useRef<number | null>(null);
+  const resumeOnCloseRef = useRef(false);
+  const isResumingSessionRef = useRef(false);
 
   const prewarmAudio = useCallback(() => {
     const Ctx =
@@ -327,6 +341,13 @@ export function useGeminiLiveOfficial({
       void playContextRef.current.resume().catch((error) => {
         console.error('[GeminiLiveOfficial] audio resume failed:', error);
       });
+    }
+  }, []);
+
+  const clearResumeTimer = useCallback(() => {
+    if (resumeTimerRef.current !== null) {
+      window.clearTimeout(resumeTimerRef.current);
+      resumeTimerRef.current = null;
     }
   }, []);
 
@@ -383,6 +404,12 @@ export function useGeminiLiveOfficial({
   );
 
   const cleanupMedia = useCallback(() => {
+    clearResumeTimer();
+    resumeOnCloseRef.current = false;
+    isResumingSessionRef.current = false;
+    sessionResumeHandleRef.current = null;
+    sessionResumeAttemptsRef.current = 0;
+
     try {
       audioRecorderRef.current?.stop();
       audioRecorderRef.current?.audioContext?.close?.();
@@ -401,7 +428,7 @@ export function useGeminiLiveOfficial({
     streamerRef.current?.stop();
     analyserRef.current = null;
     freqDataRef.current = null;
-  }, []);
+  }, [clearResumeTimer]);
 
   const requestTurnPlan = useCallback(async () => {
     const transcript = [...transcriptRef.current];
@@ -634,28 +661,61 @@ export function useGeminiLiveOfficial({
   }, [finalizeCall]);
 
   const clearError = useCallback(() => {
+    clearResumeTimer();
     connectionLockRef.current = false;
+    resumeOnCloseRef.current = false;
+    isResumingSessionRef.current = false;
+    sessionResumeHandleRef.current = null;
+    sessionResumeAttemptsRef.current = 0;
     setStatus('idle');
     setErrorMessage(null);
     pushDebugEvent('clear-error');
-  }, [pushDebugEvent]);
+  }, [clearResumeTimer, pushDebugEvent]);
 
   const connect = useCallback(async () => {
     if (connectionLockRef.current) return;
     connectionLockRef.current = true;
     manualDisconnectRef.current = false;
+    const isResumeAttempt = isResumingSessionRef.current;
+    const preservedCheckpoints = isResumeAttempt ? [...checkpointsRef.current] : null;
+    const preservedCurrentAiTurnMetaText = isResumeAttempt ? currentAiTurnMetaTextRef.current : '';
+    const preservedCurrentAiTurnText = isResumeAttempt ? currentAiTurnTextRef.current : '';
+    const preservedDebugEvents = isResumeAttempt ? [...debugEventsRef.current] : null;
+    const preservedDeductedSession = isResumeAttempt ? deductedSessionRef.current : false;
+    const preservedFinalPromptSentAt = isResumeAttempt ? finalPromptSentAtRef.current : null;
+    const preservedLastAiActivityAt = isResumeAttempt ? lastAiActivityAtRef.current : 0;
+    const preservedLastBotEndAt = isResumeAttempt ? lastBotEndRef.current : 0;
+    const preservedLastSilenceNudgeAt = isResumeAttempt ? lastSilenceNudgeAtRef.current : 0;
+    const preservedLastUserSpeechAt = isResumeAttempt ? lastUserSpeechRef.current : 0;
+    const preservedPlannerState = isResumeAttempt ? plannerStateRef.current : null;
+    const preservedRecordedUserPcmBytes = isResumeAttempt ? recordedUserPcmBytesRef.current : 0;
+    const preservedRecordedUserPcmChunks = isResumeAttempt
+      ? [...recordedUserPcmChunksRef.current]
+      : [];
+    const preservedRoundStartAt = isResumeAttempt ? roundStartRef.current : null;
+    const preservedRoundVerdictTriggered = isResumeAttempt
+      ? roundVerdictTriggeredRef.current
+      : false;
+    const preservedScore = isResumeAttempt ? scoreRef.current : 0;
+    const preservedSessionResumeAttempts = isResumeAttempt ? sessionResumeAttemptsRef.current : 0;
+    const preservedSessionResumeHandle = isResumeAttempt ? sessionResumeHandleRef.current : null;
+    const preservedSilenceNudgeCount = isResumeAttempt ? silenceNudgeCountRef.current : 0;
+    const preservedTranscript = isResumeAttempt ? [...transcriptRef.current] : [];
+    const preservedAwaitingFinalAiTurn = isResumeAttempt ? awaitingFinalAiTurnRef.current : false;
 
     try {
       // До любых await: Safari/iOS требует resume AudioContext строго из пользовательского действия.
       prewarmAudio();
 
-      const startRes = await fetch('/api/voice-call/start', {
-        credentials: 'include',
-        method: 'POST',
-      });
-      if (!startRes.ok) {
-        const startPayload = (await startRes.json().catch(() => ({}))) as { error?: string };
-        throw new Error(startPayload.error || 'Запуск тренажёра недоступен');
+      if (!isResumeAttempt) {
+        const startRes = await fetch('/api/voice-call/start', {
+          credentials: 'include',
+          method: 'POST',
+        });
+        if (!startRes.ok) {
+          const startPayload = (await startRes.json().catch(() => ({}))) as { error?: string };
+          throw new Error(startPayload.error || 'Запуск тренажёра недоступен');
+        }
       }
 
       const trimmedName = speakerNameRef.current;
@@ -680,6 +740,7 @@ export function useGeminiLiveOfficial({
 
       const nextUiConfig = normalizeUiConfig(config);
       const nextCheckpoints = toInitialCheckpoints(nextUiConfig);
+      const liveModel = config.liveModel?.trim() || GEMINI_31_FLASH_LIVE_MODEL;
       uiConfigRef.current = nextUiConfig;
       checkpointsRef.current = nextCheckpoints;
 
@@ -690,6 +751,12 @@ export function useGeminiLiveOfficial({
       setScore(0);
       setHangUpByAi(false);
       setHangUpReason(null);
+
+      sessionResumeHandleRef.current = null;
+      sessionResumeAttemptsRef.current = 0;
+      resumeOnCloseRef.current = false;
+      isResumingSessionRef.current = false;
+      clearResumeTimer();
 
       plannerStateRef.current = null;
       transcriptRef.current = [];
@@ -713,7 +780,34 @@ export function useGeminiLiveOfficial({
       debugEventsRef.current = [];
       syncDebugSnapshot();
 
-      pushDebugEvent('connect-start', { agentId });
+      if (isResumeAttempt) {
+        isResumingSessionRef.current = true;
+        checkpointsRef.current = preservedCheckpoints ?? [];
+        currentAiTurnMetaTextRef.current = preservedCurrentAiTurnMetaText;
+        currentAiTurnTextRef.current = preservedCurrentAiTurnText;
+        debugEventsRef.current = preservedDebugEvents ?? [];
+        deductedSessionRef.current = preservedDeductedSession;
+        finalPromptSentAtRef.current = preservedFinalPromptSentAt;
+        lastAiActivityAtRef.current = preservedLastAiActivityAt;
+        lastBotEndRef.current = preservedLastBotEndAt;
+        lastSilenceNudgeAtRef.current = preservedLastSilenceNudgeAt;
+        lastUserSpeechRef.current = preservedLastUserSpeechAt;
+        plannerStateRef.current = preservedPlannerState;
+        recordedUserPcmBytesRef.current = preservedRecordedUserPcmBytes;
+        recordedUserPcmChunksRef.current = preservedRecordedUserPcmChunks;
+        roundStartRef.current = preservedRoundStartAt;
+        roundVerdictTriggeredRef.current = preservedRoundVerdictTriggered;
+        setCheckpoints(preservedCheckpoints ?? []);
+        setScore(preservedScore);
+        sessionResumeAttemptsRef.current = preservedSessionResumeAttempts;
+        sessionResumeHandleRef.current = preservedSessionResumeHandle;
+        silenceNudgeCountRef.current = preservedSilenceNudgeCount;
+        transcriptRef.current = preservedTranscript;
+        awaitingFinalAiTurnRef.current = preservedAwaitingFinalAiTurn;
+        syncDebugSnapshot();
+      }
+
+      pushDebugEvent(isResumeAttempt ? 'connect-resume-start' : 'connect-start', { agentId });
       // Контекст уже "застолбили" в prewarmAudio; здесь просто гарантируем, что он есть.
       prewarmAudio();
 
@@ -727,13 +821,14 @@ export function useGeminiLiveOfficial({
         );
       }
 
-      const liveModel = config.liveModel?.trim() || GEMINI_31_FLASH_LIVE_MODEL;
       pushDebugEvent('live-model-selected', { liveModel });
-      pushDebugEvent('recording-started', {
-        format: 'wav',
-        mimeType: 'audio/wav',
-        sampleRate: PCM_IN_SAMPLE_RATE,
-      });
+      if (!audioRecorderRef.current) {
+        pushDebugEvent('recording-started', {
+          format: 'wav',
+          mimeType: 'audio/wav',
+          sampleRate: PCM_IN_SAMPLE_RATE,
+        });
+      }
 
       const extraSpeakerLine = trimmedName
         ? `\n- На вопросы сейчас отвечает сотрудник: ${trimmedName}. Обращайся к нему по имени.`
@@ -757,7 +852,7 @@ export function useGeminiLiveOfficial({
         (extraSpeakerLine ? `\n\n${extraSpeakerLine}` : '') +
         russianSpeechStyle;
 
-      const liveConfig: LiveConnectConfig = {
+      const baseLiveConfig: LiveConnectConfig = {
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         realtimeInputConfig: {
@@ -781,7 +876,7 @@ export function useGeminiLiveOfficial({
       };
 
       if (config.enableTurnPlanner) {
-        liveConfig.tools = [
+        baseLiveConfig.tools = [
           {
             functionDeclarations: [
               {
@@ -798,7 +893,7 @@ export function useGeminiLiveOfficial({
         ];
       }
       if (config.trainingProgressToolName) {
-        const tools = (liveConfig.tools as
+        const tools = (baseLiveConfig.tools as
           | Array<{
               functionDeclarations?: Array<Record<string, unknown>>;
             }>
@@ -829,7 +924,7 @@ export function useGeminiLiveOfficial({
           ...tools[0],
           functionDeclarations: existingDeclarations,
         };
-        liveConfig.tools = tools as LiveConnectConfig['tools'];
+        baseLiveConfig.tools = tools as LiveConnectConfig['tools'];
       }
 
       const proxyBaseUrl = buildProxyBaseUrl(config.geminiWsUrl);
@@ -843,18 +938,6 @@ export function useGeminiLiveOfficial({
       });
 
       const OriginalWebSocket = window.WebSocket;
-      if (config.geminiWsUrl) {
-        const proxyWsUrl = config.geminiWsUrl;
-        (window as any).WebSocket = class extends OriginalWebSocket {
-          constructor(url: string | URL, protocols?: string | string[]) {
-            let finalUrl = url.toString();
-            if (finalUrl.includes('BidiGenerateContent')) {
-              finalUrl = `${proxyWsUrl}${proxyWsUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(config.apiKey)}`;
-            }
-            super(finalUrl, protocols);
-          }
-        };
-      }
 
       const flushInterruptedAiTurn = () => {
         // Поведение ближе к официальным Live API примерам:
@@ -913,6 +996,82 @@ export function useGeminiLiveOfficial({
         sendRealtimeText(startText);
       };
 
+      const buildSessionConfig = (resumeHandle?: string) => ({
+        ...baseLiveConfig,
+        contextWindowCompression: buildVoiceCallContextWindowCompression(),
+        sessionResumption: buildVoiceCallSessionResumptionConfig(resumeHandle),
+      });
+
+      const scheduleSessionResume = (
+        reason: 'close' | 'connect-error' | 'go-away',
+        details?: Record<string, unknown>,
+      ) => {
+        const shouldResume = shouldResumeVoiceCallSession({
+          attempts: sessionResumeAttemptsRef.current,
+          hasResumeHandle: !!sessionResumeHandleRef.current,
+          hasSessionState: roundStartRef.current !== null,
+          isHangupScheduled: hangupScheduledRef.current,
+          isManualDisconnect: manualDisconnectRef.current,
+          isResumingConnection: isResumingSessionRef.current,
+          maxAttempts: MAX_SESSION_RESUME_ATTEMPTS,
+        });
+
+        if (!shouldResume) return false;
+        if (resumeTimerRef.current !== null) return true;
+
+        const attempt = sessionResumeAttemptsRef.current + 1;
+        sessionResumeAttemptsRef.current = attempt;
+        connectionLockRef.current = false;
+        isSetupCompleteRef.current = false;
+        resumeOnCloseRef.current = false;
+        isResumingSessionRef.current = true;
+        setStatus('connecting');
+        setErrorMessage(null);
+        pushDebugEvent(
+          'session-resume-scheduled',
+          details ? { attempt, reason, ...details } : { attempt, reason },
+        );
+
+        resumeTimerRef.current = window.setTimeout(() => {
+          resumeTimerRef.current = null;
+          void connectRef.current?.();
+        }, SESSION_RESUME_RETRY_DELAY_MS);
+
+        return true;
+      };
+
+      const startAudioRecorderIfNeeded = async () => {
+        if (audioRecorderRef.current) return;
+
+        const recorder = new AudioRecorder(PCM_IN_SAMPLE_RATE);
+        recorder
+          .on('data', (base64: string) => {
+            const chunk = base64ToBytes(base64);
+            recordedUserPcmChunksRef.current.push(chunk);
+            recordedUserPcmBytesRef.current += chunk.byteLength;
+
+            const activeSession = sessionRef.current;
+            if (!activeSession || !isSetupCompleteRef.current) return;
+
+            activeSession.sendRealtimeInput({
+              audio: {
+                data: base64,
+                mimeType: 'audio/pcm;rate=16000',
+              },
+            });
+          })
+          .on('volume', (volume: number) => {
+            setUserVolume(Math.min(100, volume * USER_VOLUME_SCALE));
+          });
+        await recorder.start();
+        audioRecorderRef.current = recorder;
+
+        const track = recorder.stream?.getAudioTracks()?.[0];
+        if (track) {
+          pushDebugEvent('microphone-acquired', { settings: track.getSettings() });
+        }
+      };
+
       const onmessage = async (message: LiveServerMessage) => {
         const payloadWithError = message as LiveServerMessage & { error?: { message?: string } };
         if (payloadWithError.error?.message) {
@@ -924,16 +1083,52 @@ export function useGeminiLiveOfficial({
           return;
         }
 
+        if (message.goAway) {
+          const timeLeft = message.goAway.timeLeft ?? null;
+          const timeLeftMs = parseLiveServerDurationMs(timeLeft);
+          resumeOnCloseRef.current = true;
+          pushDebugEvent('server-go-away', {
+            ...(timeLeft ? { timeLeft } : {}),
+            ...(timeLeftMs !== null ? { timeLeftMs } : {}),
+          });
+        }
+
+        if (message.sessionResumptionUpdate) {
+          const { lastConsumedClientMessageIndex, newHandle, resumable } =
+            message.sessionResumptionUpdate;
+
+          if (resumable && newHandle?.trim()) {
+            sessionResumeHandleRef.current = newHandle.trim();
+            sessionResumeAttemptsRef.current = 0;
+          }
+
+          pushDebugEvent('server-session-resumption', {
+            hasHandle: !!newHandle,
+            lastConsumedClientMessageIndex: lastConsumedClientMessageIndex ?? null,
+            resumable: resumable ?? false,
+          });
+        }
+
         if (message.setupComplete) {
+          const resumedSession = isResumingSessionRef.current;
+          isResumingSessionRef.current = false;
+          resumeOnCloseRef.current = false;
           isSetupCompleteRef.current = true;
           connectionLockRef.current = false;
           setStatus('ready');
-          const now = Date.now();
-          roundStartRef.current = now;
-          lastBotEndRef.current = 0;
-          lastUserSpeechRef.current = 0;
-          pushDebugEvent('setup-complete');
-          sendStartTrigger();
+
+          if (resumedSession) {
+            pushDebugEvent('setup-complete-resumed', {
+              attempt: sessionResumeAttemptsRef.current,
+            });
+          } else {
+            const now = Date.now();
+            roundStartRef.current = now;
+            lastBotEndRef.current = 0;
+            lastUserSpeechRef.current = 0;
+            pushDebugEvent('setup-complete');
+            sendStartTrigger();
+          }
           return;
         }
 
@@ -1049,17 +1244,48 @@ export function useGeminiLiveOfficial({
         }
       };
 
+      const resumeHandle = isResumeAttempt
+        ? sessionResumeHandleRef.current?.trim() || undefined
+        : undefined;
+
+      if (config.geminiWsUrl) {
+        const proxyWsUrl = config.geminiWsUrl;
+        (window as any).WebSocket = class extends OriginalWebSocket {
+          constructor(url: string | URL, protocols?: string | string[]) {
+            let finalUrl = url.toString();
+            if (finalUrl.includes('BidiGenerateContent')) {
+              finalUrl = `${proxyWsUrl}${proxyWsUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(config.apiKey)}`;
+            }
+            super(finalUrl, protocols);
+          }
+        };
+      }
+
       let session;
       try {
         session = await client.live.connect({
           callbacks: {
             onclose: (event) => {
-              pushDebugEvent('ws-close', { code: event.code, reason: event.reason || '' });
+              pushDebugEvent('ws-close', {
+                code: event.code,
+                hasResumeHandle: !!sessionResumeHandleRef.current,
+                reason: event.reason || '',
+                resumeRequested: resumeOnCloseRef.current,
+              });
               sessionRef.current = null;
               connectionLockRef.current = false;
 
               if (manualDisconnectRef.current || hangupScheduledRef.current) {
                 setStatus('idle');
+                return;
+              }
+
+              if (
+                scheduleSessionResume(resumeOnCloseRef.current ? 'go-away' : 'close', {
+                  code: event.code,
+                  reason: event.reason || '',
+                })
+              ) {
                 return;
               }
 
@@ -1094,7 +1320,7 @@ export function useGeminiLiveOfficial({
               pushDebugEvent('ws-open');
             },
           },
-          config: liveConfig,
+          config: buildSessionConfig(resumeHandle),
           model: liveModel || DEFAULT_VOICE_CALL_LIVE_MODEL,
         });
       } finally {
@@ -1104,33 +1330,7 @@ export function useGeminiLiveOfficial({
       }
       sessionRef.current = session;
 
-      const recorder = new AudioRecorder(PCM_IN_SAMPLE_RATE);
-      recorder
-        .on('data', (base64: string) => {
-          const chunk = base64ToBytes(base64);
-          recordedUserPcmChunksRef.current.push(chunk);
-          recordedUserPcmBytesRef.current += chunk.byteLength;
-
-          const activeSession = sessionRef.current;
-          if (!activeSession || !isSetupCompleteRef.current) return;
-
-          activeSession.sendRealtimeInput({
-            audio: {
-              data: base64,
-              mimeType: 'audio/pcm;rate=16000',
-            },
-          });
-        })
-        .on('volume', (volume: number) => {
-          setUserVolume(Math.min(100, volume * USER_VOLUME_SCALE));
-        });
-      await recorder.start();
-      audioRecorderRef.current = recorder;
-
-      const track = recorder.stream?.getAudioTracks()?.[0];
-      if (track) {
-        pushDebugEvent('microphone-acquired', { settings: track.getSettings() });
-      }
+      await startAudioRecorderIfNeeded();
     } catch (error) {
       connectionLockRef.current = false;
       if (sessionRef.current) {
@@ -1149,6 +1349,7 @@ export function useGeminiLiveOfficial({
     }
   }, [
     agentId,
+    clearResumeTimer,
     interviewDurationMs,
     cleanupMedia,
     finalizeCall,
@@ -1162,6 +1363,8 @@ export function useGeminiLiveOfficial({
     systemInstruction,
     voiceName,
   ]);
+
+  connectRef.current = connect;
 
   useEffect(() => {
     if (status !== 'ready') return;

@@ -158,6 +158,35 @@ describe('GET /api/voice-call/config', () => {
     expect(body.roundEndingPrompt).toBe(DEFAULT_TRAINING_ROUND_ENDING_PROMPT);
   });
 
+  it('disables silence nudge phrases even if they are configured in the scenario', async () => {
+    mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
+      scenario: {
+        contextWindow: 5,
+        goals: [],
+        silenceNudgeAfterMs: 5000,
+        silenceNudgeCooldownMs: 15000,
+        silenceNudgePhrases: ['Алло?', 'Вы на связи?'],
+        systemPrompt: 'System',
+        title: 'T',
+        voiceName: 'Sulafat',
+      },
+    });
+
+    const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      silenceNudgeAfterMs?: number;
+      silenceNudgeCooldownMs?: number;
+      silenceNudgePhrases?: string[];
+    };
+    expect(body.silenceNudgeAfterMs).toBe(0);
+    expect(body.silenceNudgeCooldownMs).toBe(0);
+    expect(body.silenceNudgePhrases).toEqual([]);
+  });
+
   it('sanitizes planner and score tag instructions in voice system prompt', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       knowledgeEntries: [],
