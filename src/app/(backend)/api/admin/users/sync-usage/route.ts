@@ -1,20 +1,11 @@
-import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { auth } from '@/auth';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { ensureUserCodesSchema } from '@/server/services/admin/ensureUserCodesSchema';
 import { syncUserCodesUsage } from '@/server/services/admin/syncUserCodesUsage';
+import { getSessionAdminUser } from '@/server/utils/admin';
 
 async function ensureAdmin() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-  const user = session?.user as { email?: string; username?: string } | undefined;
-  const byUsername = user?.username === ADMIN_USERNAME;
-  const byEmail = ADMIN_EMAIL && user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-  if (!byUsername && !byEmail) return null;
-  return session;
+  return getSessionAdminUser();
 }
 
 /**
@@ -22,8 +13,8 @@ async function ensureAdmin() {
  * GET /api/admin/users already runs sync automatically; this endpoint is for manual trigger.
  */
 export async function POST() {
-  const session = await ensureAdmin();
-  if (!session) {
+  const admin = await ensureAdmin();
+  if (!admin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

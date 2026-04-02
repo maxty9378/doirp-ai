@@ -90,8 +90,17 @@ async function buildProxyUrls(): Promise<string[]> {
 function agentForUrl(
   url: string,
 ): InstanceType<typeof HttpsProxyAgent> | InstanceType<typeof SocksProxyAgent> {
-  if (url.startsWith('socks')) return new SocksProxyAgent(url);
-  return new HttpsProxyAgent(url);
+  let u = url.trim();
+
+  if (u.startsWith('http://') || u.startsWith('https://')) {
+    u = u.replace(/^https?:\/\//, 'socks5://');
+  }
+  if (u.startsWith('socks5h://')) {
+    u = u.replace('socks5h://', 'socks5://');
+  }
+
+  if (u.startsWith('socks')) return new SocksProxyAgent(u);
+  return new HttpsProxyAgent(u);
 }
 
 /** Блокировка по региону/гео в ответе Google Generative Language API. */

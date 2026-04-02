@@ -10,10 +10,9 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import fetch from 'node-fetch';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
-import { auth } from '@/auth';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { getLLMConfig } from '@/envs/llm';
 import apiKeyManager from '@/server/modules/ModelRuntime/apiKeyManager';
+import { getSessionAdminUser } from '@/server/utils/admin';
 
 const getProxyAgent = (): any | undefined => {
   const url =
@@ -91,20 +90,7 @@ const toMp3 = async (input: Buffer, inputExt = 'wav') => {
 };
 
 const ensureAdmin = async () => {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  const user = session?.user as { email?: string; username?: string } | undefined;
-  const username = user?.username;
-  const email = user?.email?.toLowerCase();
-
-  const byUsername = username === ADMIN_USERNAME;
-  const byEmail = ADMIN_EMAIL && email === ADMIN_EMAIL.toLowerCase();
-
-  if (!byUsername && !byEmail) return null;
-
-  return session;
+  return getSessionAdminUser();
 };
 
 export const runtime = 'nodejs';
@@ -120,8 +106,8 @@ export const POST = async (req: Request) => {
     const allowLocalBypass =
       process.env.NODE_ENV !== 'production' && isLocalHost && process.env.LOCAL_TTS_BYPASS !== '0';
 
-    const session = await ensureAdmin();
-    if (!session && !allowLocalBypass) {
+    const admin = await ensureAdmin();
+    if (!admin && !allowLocalBypass) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 

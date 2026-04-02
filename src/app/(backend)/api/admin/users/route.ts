@@ -2,13 +2,11 @@ import { createNanoId, idGenerator } from '@lobechat/database';
 import { account, DEFAULT_USER_TOKEN_QUOTA, userCodes, users } from '@lobechat/database/schemas';
 import { hashPassword } from 'better-auth/crypto';
 import { desc, eq } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { type NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { auth } from '@/auth';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { getSessionAdminUser } from '@/server/utils/admin';
 import { ensureUserCodesSchema } from '@/server/services/admin/ensureUserCodesSchema';
 import { syncUserCodesUsage } from '@/server/services/admin/syncUserCodesUsage';
 import { UserService } from '@/server/services/user';
@@ -18,24 +16,15 @@ function generateCode(): string {
 }
 
 async function ensureAdmin() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-  const user = session?.user as { email?: string; username?: string } | undefined;
-  const username = user?.username;
-  const email = user?.email?.toLowerCase();
-  const byUsername = username === ADMIN_USERNAME;
-  const byEmail = ADMIN_EMAIL && email === ADMIN_EMAIL.toLowerCase();
-  if (!byUsername && !byEmail) return null;
-  return session;
+  return getSessionAdminUser();
 }
 
 /**
  * GET /api/admin/users — list all user codes (admin only).
  */
 export async function GET() {
-  const session = await ensureAdmin();
-  if (!session) {
+  const admin = await ensureAdmin();
+  if (!admin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   try {
@@ -89,8 +78,8 @@ type UserAccountType = (typeof USER_ACCOUNT_TYPES)[number];
  * Returns: { email: string, tokenQuota: number, accountType: string }
  */
 export async function POST(req: NextRequest) {
-  const session = await ensureAdmin();
-  if (!session) {
+  const admin = await ensureAdmin();
+  if (!admin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   try {

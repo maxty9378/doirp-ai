@@ -38,6 +38,7 @@ export async function GET() {
       devProxyUrl: process.env.VOICE_CALL_WS_PROXY_DEV,
       explicitProxyUrl: process.env.VOICE_CALL_WS_PROXY_URL,
       nodeEnv: process.env.NODE_ENV,
+      useAppTunnelInProduction: process.env.VOICE_CALL_WS_USE_TUNNEL === '1',
     });
 
     return NextResponse.json({

@@ -21,6 +21,18 @@ export class AudioStreamer {
     this.analyser.connect(this.context.destination);
   }
 
+  getDebugState(): Record<string, number | boolean | string> {
+    return {
+      activeNodes: this.activeNodes.length,
+      contextState: this.context.state,
+      isPlaying: this.isPlaying,
+      nextPlayTime: this.nextPlayTime,
+      prebufferFilled: this.prebufferFilled,
+      prebufferSamples: this.prebufferSamples.length,
+      sampleRate: this.sampleRate,
+    };
+  }
+
   addPCM16(base64Data: string): void {
     try {
       const binary = atob(base64Data);
@@ -31,7 +43,7 @@ export class AudioStreamer {
       const pcm16 = new Int16Array(bytes.buffer, 0, numSamples);
       const samples: number[] = [];
       for (let i = 0; i < pcm16.length; i++) {
-        samples.push(pcm16[i] / 32768.0);
+        samples.push(pcm16[i] / 32768);
       }
 
       if (!this.prebufferFilled) {
@@ -89,13 +101,26 @@ export class AudioStreamer {
     this.nextPlayTime += buffer.duration;
   }
 
+  flushPending(): boolean {
+    if (this.prebufferFilled || this.prebufferSamples.length === 0) return false;
+
+    const bufferedSamples = [...this.prebufferSamples];
+    this.prebufferSamples = [];
+    this.prebufferFilled = true;
+    this.scheduleBuffer(this.samplesToBuffer(bufferedSamples));
+
+    return true;
+  }
+
   stop(): void {
     this.prebufferSamples = [];
     this.prebufferFilled = false;
     this.activeNodes.forEach((node) => {
       try {
         node.stop();
-      } catch (_) {}
+      } catch {
+        // ignore stop errors for already finished nodes
+      }
     });
     this.activeNodes = [];
     this.nextPlayTime = 0;

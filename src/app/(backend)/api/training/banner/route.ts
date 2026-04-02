@@ -1,4 +1,4 @@
-import { users, userSettings } from '@lobechat/database/schemas';
+import { userSettings } from '@lobechat/database/schemas';
 import { eq } from 'drizzle-orm';
 import { type NextRequest, NextResponse } from 'next/server';
 
@@ -6,8 +6,8 @@ import {
   TRAINING_HN_BANNER_URL,
   TRAINING_TP_BANNER_URL,
 } from '@/config/voiceCallTrainer';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { getPrimaryAdminId } from '@/server/utils/admin';
 
 const TRAINING_TP_BANNER_KEY = 'trainingTpBannerUrl';
 const TRAINING_HN_BANNER_KEY = 'trainingHnBannerUrl';
@@ -26,27 +26,19 @@ const readBannerFromGeneral = (general: unknown, bannerKey: string): string | nu
 };
 
 export async function GET(req: NextRequest) {
+  const responseHeaders = {
+    'Cache-Control': 'private, max-age=120, stale-while-revalidate=600',
+    Vary: 'Cookie',
+  };
+
   try {
     const key = (req.nextUrl.searchParams.get('key') || 'tp') as BannerKey;
     const { key: storageKey, defaultUrl } = BANNER_KEYS[key] ?? BANNER_KEYS.tp;
 
-    const adminByUsername = await serverDB.query.users.findFirst({
-      columns: { id: true },
-      where: eq(users.username, ADMIN_USERNAME),
-    });
-
-    const adminByEmail =
-      ADMIN_EMAIL && !adminByUsername
-        ? await serverDB.query.users.findFirst({
-            columns: { id: true },
-            where: eq(users.email, ADMIN_EMAIL.toLowerCase()),
-          })
-        : null;
-
-    const adminId = adminByUsername?.id || adminByEmail?.id;
+    const adminId = await getPrimaryAdminId();
 
     if (!adminId) {
-      return NextResponse.json({ url: defaultUrl });
+      return NextResponse.json({ url: defaultUrl }, { headers: responseHeaders });
     }
 
     const settings = await serverDB.query.userSettings.findFirst({
@@ -55,11 +47,11 @@ export async function GET(req: NextRequest) {
     });
 
     const dbUrl = readBannerFromGeneral(settings?.general, storageKey);
-    return NextResponse.json({ url: dbUrl || defaultUrl });
+    return NextResponse.json({ url: dbUrl || defaultUrl }, { headers: responseHeaders });
   } catch {
     const key = (req.nextUrl.searchParams.get('key') || 'tp') as BannerKey;
     const { defaultUrl } = BANNER_KEYS[key] ?? BANNER_KEYS.tp;
-    return NextResponse.json({ url: defaultUrl });
+    return NextResponse.json({ url: defaultUrl }, { headers: responseHeaders });
   }
 }
 

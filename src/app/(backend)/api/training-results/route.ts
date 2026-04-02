@@ -6,13 +6,11 @@ import {
   voiceCallSessions,
 } from '@lobechat/database/schemas';
 import { and, desc, eq, ilike, isNotNull } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 
-import { auth } from '@/auth';
 import { VOICE_CALL_PRESETS } from '@/config/initialAgents';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { getSessionAdminUser } from '@/server/utils/admin';
 
 interface TrainingResultItem {
   agentId: string;
@@ -51,20 +49,7 @@ const setLatestTrainingResult = (
 };
 
 const ensureAdmin = async () => {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  const user = session?.user as { email?: string; username?: string } | undefined;
-  const username = user?.username;
-  const email = user?.email?.toLowerCase();
-
-  const byUsername = username === ADMIN_USERNAME;
-  const byEmail = ADMIN_EMAIL && email === ADMIN_EMAIL.toLowerCase();
-
-  if (!byUsername && !byEmail) return null;
-
-  return session;
+  return getSessionAdminUser();
 };
 
 /**
@@ -74,8 +59,8 @@ const ensureAdmin = async () => {
  * assistant messages with [CURRENT_SCORE: X].
  */
 export async function GET() {
-  const session = await ensureAdmin();
-  if (!session) {
+  const admin = await ensureAdmin();
+  if (!admin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

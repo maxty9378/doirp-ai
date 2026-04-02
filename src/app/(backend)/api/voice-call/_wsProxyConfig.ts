@@ -66,6 +66,7 @@ interface ResolveVoiceCallWsProxyUrlOptions {
   devProxyUrl?: string | null;
   explicitProxyUrl?: string | null;
   nodeEnv?: string;
+  useAppTunnelInProduction?: boolean;
 }
 
 export const resolveVoiceCallWsProxyUrl = ({
@@ -73,6 +74,7 @@ export const resolveVoiceCallWsProxyUrl = ({
   devProxyUrl,
   explicitProxyUrl,
   nodeEnv = process.env.NODE_ENV,
+  useAppTunnelInProduction = false,
 }: ResolveVoiceCallWsProxyUrlOptions = {}) => {
   const normalizedExplicit = normalizeVoiceProxyUrl(explicitProxyUrl);
   if (normalizedExplicit) return normalizedExplicit;
@@ -82,5 +84,9 @@ export const resolveVoiceCallWsProxyUrl = ({
     return normalizeVoiceProxyUrl(devProxyUrl) || PUBLIC_VOICE_PROXY_WS;
   }
 
-  return buildAppVoiceProxyWsUrl(appUrl) || PUBLIC_VOICE_PROXY_WS;
+  if (useAppTunnelInProduction) {
+    return buildAppVoiceProxyWsUrl(appUrl) || PUBLIC_VOICE_PROXY_WS;
+  }
+
+  return PUBLIC_VOICE_PROXY_WS;
 };

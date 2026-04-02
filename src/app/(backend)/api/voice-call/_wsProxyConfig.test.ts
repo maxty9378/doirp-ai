@@ -50,11 +50,21 @@ describe('voice call ws proxy config', () => {
     expect(resolveVoiceCallWsProxyUrl({ nodeEnv: 'development' })).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 
-  it('uses the same-origin tunnel endpoint in production when APP_URL is available', () => {
+  it('uses the public proxy endpoint in production by default', () => {
     expect(
       resolveVoiceCallWsProxyUrl({
         appUrl: 'https://doirp-ai.vercel.app',
         nodeEnv: 'production',
+      }),
+    ).toBe(PUBLIC_VOICE_PROXY_WS);
+  });
+
+  it('can use same-origin tunnel endpoint in production when explicitly enabled', () => {
+    expect(
+      resolveVoiceCallWsProxyUrl({
+        appUrl: 'https://doirp-ai.vercel.app',
+        nodeEnv: 'production',
+        useAppTunnelInProduction: true,
       }),
     ).toBe(`wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
   });

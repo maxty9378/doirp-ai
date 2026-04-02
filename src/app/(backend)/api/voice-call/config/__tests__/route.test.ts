@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
 
-import { APP_VOICE_PROXY_PATH } from '../../_wsProxyConfig';
+import { APP_VOICE_PROXY_PATH, PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
@@ -263,6 +263,26 @@ describe('GET /api/voice-call/config', () => {
   });
 
   it('returns the public proxy websocket URL by default', async () => {
+    mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
+      scenario: {
+        contextWindow: 5,
+        goals: [],
+        systemPrompt: 'System prompt from DB',
+        voiceName: 'Sulafat',
+      },
+    });
+
+    const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { geminiWsUrl?: string | null };
+    expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
+  });
+
+  it('uses app tunnel URL in production when explicitly enabled', async () => {
+    vi.stubEnv('VOICE_CALL_WS_USE_TUNNEL', '1');
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       knowledgeEntries: [],
       scenario: {

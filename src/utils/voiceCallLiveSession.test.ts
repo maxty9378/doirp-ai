@@ -3,7 +3,10 @@ import { describe, expect, it } from 'vitest';
 import {
   buildVoiceCallContextWindowCompression,
   buildVoiceCallSessionResumptionConfig,
+  finalizeAudibleAiTurnText,
   parseLiveServerDurationMs,
+  resolveInitialAiTurnMicHoldDurations,
+  shouldKeepInitialAiTurnMicGate,
   shouldResumeVoiceCallSession,
 } from './voiceCallLiveSession';
 
@@ -109,5 +112,101 @@ describe('voiceCallLiveSession', () => {
         maxAttempts: 3,
       }),
     ).toBe(false);
+  });
+
+  it('keeps the initial AI mic gate during the soft hold window', () => {
+    expect(
+      shouldKeepInitialAiTurnMicGate({
+        hardGateUntil: 8000,
+        hasAnyAiSignal: false,
+        now: 2000,
+        softGateUntil: 2500,
+      }),
+    ).toBe(true);
+  });
+
+  it('extends the initial AI mic gate until the hard timeout when the model stays silent', () => {
+    expect(
+      shouldKeepInitialAiTurnMicGate({
+        hardGateUntil: 8000,
+        hasAnyAiSignal: false,
+        now: 4000,
+        softGateUntil: 2500,
+      }),
+    ).toBe(true);
+  });
+
+  it('releases the initial AI mic gate after the soft window if the model has already started responding', () => {
+    expect(
+      shouldKeepInitialAiTurnMicGate({
+        hardGateUntil: 8000,
+        hasAnyAiSignal: true,
+        now: 4000,
+        softGateUntil: 2500,
+      }),
+    ).toBe(false);
+  });
+
+  it('releases the initial AI mic gate after the hard timeout even if the model stayed silent', () => {
+    expect(
+      shouldKeepInitialAiTurnMicGate({
+        hardGateUntil: 8000,
+        hasAnyAiSignal: false,
+        now: 8100,
+        softGateUntil: 2500,
+      }),
+    ).toBe(false);
+  });
+
+  it('extends the initial hard mic hold for scenarios with training progress tools', () => {
+    expect(
+      resolveInitialAiTurnMicHoldDurations({
+        hasTrainingProgressTool: true,
+      }),
+    ).toEqual({
+      hardHoldMs: 15000,
+      softHoldMs: 2500,
+    });
+  });
+
+  it('keeps the default initial hard mic hold for simple live scenarios', () => {
+    expect(
+      resolveInitialAiTurnMicHoldDurations({
+        hasTrainingProgressTool: false,
+      }),
+    ).toEqual({
+      hardHoldMs: 8000,
+      softHoldMs: 2500,
+    });
+  });
+
+  it('does not turn meta-only model text into a heard AI reply without audible signal', () => {
+    expect(
+      finalizeAudibleAiTurnText({
+        hasAudibleSignal: false,
+        metaText: 'Скрытый вопрос, который пользователь не слышал',
+        spokenText: '',
+      }),
+    ).toBe('');
+  });
+
+  it('prefers spoken transcription when it exists', () => {
+    expect(
+      finalizeAudibleAiTurnText({
+        hasAudibleSignal: true,
+        metaText: 'Служебный текст',
+        spokenText: 'Первый слышимый вопрос',
+      }),
+    ).toBe('Первый слышимый вопрос');
+  });
+
+  it('allows meta text only as a fallback for turns that had audible output', () => {
+    expect(
+      finalizeAudibleAiTurnText({
+        hasAudibleSignal: true,
+        metaText: 'Резервный текст озвученной реплики',
+        spokenText: '',
+      }),
+    ).toBe('Резервный текст озвученной реплики');
   });
 });

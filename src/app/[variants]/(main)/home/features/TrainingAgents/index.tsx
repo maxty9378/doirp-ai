@@ -5,7 +5,7 @@ import { Avatar, Block, Flexbox, Text } from '@lobehub/ui';
 import { message, Modal } from 'antd';
 import { cssVar } from 'antd-style';
 import { BotIcon } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import GroupBlock from '@/app/[variants]/(main)/home/features/components/GroupBlock';
@@ -14,25 +14,19 @@ import { HARD_NEGOTIATIONS_PRESETS, type InitialTrainingAgentPreset } from '@/co
 import { DEFAULT_AVATAR } from '@/const/meta';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { emitTrainingBannerUpdated, useTrainingBannerUrl } from '@/hooks/useTrainingBannerUrl';
-import { agentService } from '@/services/agent';
+import { emitTrainingBannerUpdated } from '@/hooks/useTrainingBannerUrl';
+import { useTrainingScenarios } from '@/hooks/useTrainingScenarios';
 import { uploadService } from '@/services/upload';
 import { getAgentStoreState } from '@/store/agent';
 import { useSessionStore } from '@/store/session';
+import { prefetchVoiceCallConfig } from '@/utils/voiceCallConfigCache';
 
 import { compressImageForBanner } from './compressBannerImage';
-import TrainingScenarioCard, { type TrainingScenarioFromApi } from './TrainingScenarioCard';
+import TrainingScenarioCard from './TrainingScenarioCard';
 
 interface TrainingAgentsProps {
   compact?: boolean;
 }
-
-const FIELD_FIGHTER_MARKET_ID = 'training-tp-price-objection';
-const FIELD_FIGHTER_AGENT_ID = 'training-tp-price-objection';
-
-const TRAINING_CARD_WIDTH = 380;
-const TRAINING_CARD_WITH_BANNER_MIN_HEIGHT = 320;
-const TRAINING_BANNER_FALLBACK_COVER = '/images/voice-call/field-fighter-cover.svg';
 
 const toTrainingBannerUrl = (path: string) => {
   const normalizedPath = path.replace(/^\/+/, '').trim();
@@ -52,77 +46,56 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
   const isMobile = useIsMobile();
   const isCompact = compact ?? isMobile;
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [activePresetKey, setActivePresetKey] = useState<string | null>(null);
-  const [isBannerUploading, setIsBannerUploading] = useState(false);
-  const [hardNegotiationsModalOpen, setHardNegotiationsModalOpen] = useState(false);
-  const [hardNegotiationsLoadingKey, setHardNegotiationsLoadingKey] = useState<string | null>(null);
-  const createSession = useSessionStore((s) => s.createSession);
   const hnBannerFileInputRef = useRef<HTMLInputElement | null>(null);
-  const [isHnBannerUploading, setIsHnBannerUploading] = useState(false);
-  const hnBannerUrl = useTrainingBannerUrl('hn');
-  const [voiceScenarios, setVoiceScenarios] = useState<TrainingScenarioFromApi[]>([]);
-  const [voiceScenariosLoading, setVoiceScenariosLoading] = useState(true);
+  const warmedVoiceScenariosRef = useRef(new Set<string>());
+  const [hardNegotiationsModalOpen, setHardNegotiationsModalOpen] = useState(false);
+  const [hardNegotiationsLoadingKey, setHardNegotiationsLoadingKey] = useState<string | null>(
+    null,
+  );
+  const { isLoading: voiceScenariosLoading, scenarios: voiceScenarios } = useTrainingScenarios();
   const [voiceScenarioStartingKey, setVoiceScenarioStartingKey] = useState<string | null>(null);
+  const createSession = useSessionStore((s) => s.createSession);
 
-  useEffect(() => {
-    let cancelled = false;
-    setVoiceScenariosLoading(true);
-    fetch('/api/training/scenarios', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : { scenarios: [] }))
-      .then((data) => {
-        if (!cancelled && Array.isArray(data?.scenarios)) {
-          setVoiceScenarios(
-            data.scenarios.map(
-              (s: {
-                key: string;
-                title: string;
-                description?: string;
-                bannerUrl?: string;
-                avatarUrl?: string;
-              }) => ({
-                key: s.key,
-                title: s.title,
-                description: s.description ?? null,
-                bannerUrl: s.bannerUrl ?? null,
-                avatarUrl: s.avatarUrl ?? null,
-              }),
-            ),
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setVoiceScenariosLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+  const warmVoiceScenario = useCallback((key: string) => {
+    const trimmedKey = key.trim();
+    if (!trimmedKey || warmedVoiceScenariosRef.current.has(trimmedKey)) return;
+
+    warmedVoiceScenariosRef.current.add(trimmedKey);
+
+    void import('../../../voice-call');
+    void import('../../../voice-call/_layout');
+    void import('../../../voice-call/features/GeminiLiveCall');
+    void prefetchVoiceCallConfig(trimmedKey);
   }, []);
 
   const openVoiceScenario = useCallback(
     (key: string, avatarUrl?: string | null) => {
       if (voiceScenarioStartingKey) return;
+
       setVoiceScenarioStartingKey(key);
+      warmVoiceScenario(key);
       navigate(`/voice-call?agentId=${encodeURIComponent(key)}`, {
         state: { trainerAvatarUrl: avatarUrl || null },
       });
       setVoiceScenarioStartingKey(null);
     },
-    [navigate, voiceScenarioStartingKey],
+    [navigate, voiceScenarioStartingKey, warmVoiceScenario],
   );
 
   const openHardNegotiationSession = useCallback(
     async (preset: InitialTrainingAgentPreset) => {
       if (hardNegotiationsLoadingKey) return;
+
       setHardNegotiationsLoadingKey(preset.key);
 
       try {
         const sessionId = await createSession({
           config: {
-            systemRole: preset.systemRole,
-            model: preset.model || 'gemini-2.5-flash',
-            provider: preset.provider || 'google',
-            openingMessage: preset.openingMessage,
             chatConfig: { enableAutoCreateTopic: true },
+            model: preset.model || 'gemini-2.5-flash',
+            openingMessage: preset.openingMessage,
+            provider: preset.provider || 'google',
+            systemRole: preset.systemRole,
           },
           meta: {
             avatar: preset.avatar,
@@ -134,14 +107,14 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
 
         // Сразу подставляем конфиг в store, чтобы чат не показывал пустое состояние до ответа API.
         getAgentStoreState().internal_dispatchAgentMap(sessionId, {
-          id: sessionId,
-          systemRole: preset.systemRole,
-          model: preset.model || 'gemini-2.5-flash',
-          provider: preset.provider || 'google',
-          openingMessage: preset.openingMessage ?? undefined,
-          chatConfig: { enableAutoCreateTopic: true },
           avatar: preset.avatar,
           backgroundColor: preset.backgroundColor,
+          chatConfig: { enableAutoCreateTopic: true },
+          id: sessionId,
+          model: preset.model || 'gemini-2.5-flash',
+          openingMessage: preset.openingMessage ?? undefined,
+          provider: preset.provider || 'google',
+          systemRole: preset.systemRole,
           title: preset.title,
         });
 
@@ -149,119 +122,85 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
         navigate(SESSION_CHAT_URL(sessionId, false));
       } catch (error) {
         console.error('Failed to start hard negotiations agent:', error);
-        message.error('Не удалось запустить тренажёр');
+        message.error('Не удалось запустить тренажер');
       } finally {
         setHardNegotiationsLoadingKey(null);
       }
     },
-    [hardNegotiationsLoadingKey, message, navigate, createSession],
+    [createSession, hardNegotiationsLoadingKey, navigate],
   );
 
-  const openOrCreateAgent = useCallback(
-    async (preset: InitialTrainingAgentPreset) => {
-      if (activePresetKey) return;
+  const onSelectBannerFile = useCallback(async (file?: File | null) => {
+    if (!file) return;
 
-      setActivePresetKey(preset.key);
-      try {
-        if (preset.marketIdentifier) {
-          const legacyAgentId = await agentService.getAgentByMarketIdentifier(
-            preset.marketIdentifier,
-          );
-          if (legacyAgentId) {
-            await agentService.removeAgent(legacyAgentId);
-          }
-        }
+    if (!file.type.startsWith('image/')) {
+      message.error('Нужно выбрать файл изображения');
+      return;
+    }
 
-        navigate(`/voice-call?agentId=${FIELD_FIGHTER_AGENT_ID}`);
-      } catch (error) {
-        console.error('Failed to start training agent:', error);
-        message.error('Не удалось запустить тренажёр');
-      } finally {
-        setActivePresetKey(null);
-      }
-    },
-    [activePresetKey, message, navigate],
-  );
+    try {
+      const compressed = await compressImageForBanner(file);
+      const { data } = await uploadService.uploadFileToS3(compressed, {
+        directory: 'voice-call/trainer-banner',
+      });
+      const uploadedUrl = toTrainingBannerUrl(data.path);
 
-  const onSelectBannerFile = useCallback(
-    async (file?: File | null) => {
-      if (!file) return;
-      if (!file.type.startsWith('image/')) {
-        message.error('Нужно выбрать файл изображения');
-        return;
+      const res = await fetch('/api/admin/training-banner', {
+        body: JSON.stringify({ url: uploadedUrl }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || 'Не удалось сохранить баннер');
       }
 
-      setIsBannerUploading(true);
-      try {
-        const compressed = await compressImageForBanner(file);
-        const { data } = await uploadService.uploadFileToS3(compressed, {
-          directory: 'voice-call/trainer-banner',
-        });
-        const uploadedUrl = toTrainingBannerUrl(data.path);
+      emitTrainingBannerUpdated(uploadedUrl);
+      message.success('Баннер успешно обновлен');
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : 'Ошибка загрузки баннера';
+      message.error(errorText);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }, []);
 
-        const res = await fetch('/api/admin/training-banner', {
-          body: JSON.stringify({ url: uploadedUrl }),
-          headers: { 'Content-Type': 'application/json' },
-          method: 'POST',
-        });
+  const onSelectHnBannerFile = useCallback(async (file?: File | null) => {
+    if (!file) return;
 
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error || 'Не удалось сохранить баннер');
-        }
+    if (!file.type.startsWith('image/')) {
+      message.error('Нужно выбрать файл изображения');
+      return;
+    }
 
-        emitTrainingBannerUpdated(uploadedUrl);
-        message.success('Баннер успешно обновлён');
-      } catch (error) {
-        const errorText = error instanceof Error ? error.message : 'Ошибка загрузки баннера';
-        message.error(errorText);
-      } finally {
-        setIsBannerUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-      }
-    },
-    [message],
-  );
+    try {
+      const compressed = await compressImageForBanner(file);
+      const { data } = await uploadService.uploadFileToS3(compressed, {
+        directory: 'voice-call/trainer-banner',
+      });
+      const uploadedUrl = toTrainingBannerUrl(data.path);
 
-  const onSelectHnBannerFile = useCallback(
-    async (file?: File | null) => {
-      if (!file) return;
-      if (!file.type.startsWith('image/')) {
-        message.error('Нужно выбрать файл изображения');
-        return;
+      const res = await fetch('/api/admin/training-banner', {
+        body: JSON.stringify({ key: 'hn', url: uploadedUrl }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || 'Не удалось сохранить баннер');
       }
 
-      setIsHnBannerUploading(true);
-      try {
-        const compressed = await compressImageForBanner(file);
-        const { data } = await uploadService.uploadFileToS3(compressed, {
-          directory: 'voice-call/trainer-banner',
-        });
-        const uploadedUrl = toTrainingBannerUrl(data.path);
-
-        const res = await fetch('/api/admin/training-banner', {
-          body: JSON.stringify({ key: 'hn', url: uploadedUrl }),
-          headers: { 'Content-Type': 'application/json' },
-          method: 'POST',
-        });
-
-        if (!res.ok) {
-          const payload = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(payload.error || 'Не удалось сохранить баннер');
-        }
-
-        emitTrainingBannerUpdated(uploadedUrl, 'hn');
-        message.success('Баннер успешно обновлён');
-      } catch (error) {
-        const errorText = error instanceof Error ? error.message : 'Ошибка загрузки баннера';
-        message.error(errorText);
-      } finally {
-        setIsHnBannerUploading(false);
-        if (hnBannerFileInputRef.current) hnBannerFileInputRef.current.value = '';
-      }
-    },
-    [message],
-  );
+      emitTrainingBannerUpdated(uploadedUrl, 'hn');
+      message.success('Баннер успешно обновлен');
+    } catch (error) {
+      const errorText = error instanceof Error ? error.message : 'Ошибка загрузки баннера';
+      message.error(errorText);
+    } finally {
+      if (hnBannerFileInputRef.current) hnBannerFileInputRef.current.value = '';
+    }
+  }, []);
 
   const scenarioCards = voiceScenarios.map((scenario) => (
     <TrainingScenarioCard
@@ -270,6 +209,7 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
       loading={voiceScenarioStartingKey === scenario.key}
       scenario={scenario}
       onClick={() => openVoiceScenario(scenario.key, scenario.avatarUrl)}
+      onWarmUp={() => warmVoiceScenario(scenario.key)}
     />
   ));
 
@@ -278,12 +218,12 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
       align="center"
       justify="center"
       style={{
-        padding: 24,
         color: 'var(--colorTextSecondary)',
+        padding: 24,
         width: isCompact ? '100%' : undefined,
       }}
     >
-      <Text>Нет доступных тренажёров</Text>
+      <Text>Нет доступных тренажеров</Text>
     </Flexbox>
   );
 
@@ -383,9 +323,12 @@ const TrainingAgents = memo<TrainingAgentsProps>(({ compact }) => {
   }
 
   return (
-    <GroupBlock icon={BotIcon} title="Тренажёры">
+    <GroupBlock icon={BotIcon} title="Тренажеры">
       {content}
     </GroupBlock>
   );
 });
+
+TrainingAgents.displayName = 'TrainingAgents';
+
 export default TrainingAgents;

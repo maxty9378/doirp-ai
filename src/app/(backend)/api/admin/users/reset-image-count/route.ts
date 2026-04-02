@@ -1,24 +1,13 @@
 import { users } from '@lobechat/database/schemas';
 import { eq } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { type NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-import { auth } from '@/auth';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { getSessionAdminUser } from '@/server/utils/admin';
 
 async function ensureAdmin() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-  const user = session?.user as { email?: string; username?: string } | undefined;
-  const username = user?.username;
-  const email = user?.email?.toLowerCase();
-  const byUsername = username === ADMIN_USERNAME;
-  const byEmail = ADMIN_EMAIL && email === ADMIN_EMAIL.toLowerCase();
-  if (!byUsername && !byEmail) return null;
-  return session;
+  return getSessionAdminUser();
 }
 
 /**
@@ -26,8 +15,8 @@ async function ensureAdmin() {
  * Body: { userId: string }
  */
 export async function POST(req: NextRequest) {
-  const session = await ensureAdmin();
-  if (!session) {
+  const admin = await ensureAdmin();
+  if (!admin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   try {

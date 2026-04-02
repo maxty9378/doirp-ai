@@ -1,27 +1,19 @@
 import { eq } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { NextResponse, type NextRequest } from 'next/server';
 
-import { auth } from '@/auth';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { getSessionUser } from '@/server/utils/admin';
+import { isAdminUser } from '@/helpers/isAdmin';
 import { voiceCallProxies } from '@lobechat/database/schemas';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import fetch from 'node-fetch';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 
 const ensureAdminSession = async () => {
-  const session = await auth.api.getSession({ headers: await headers() });
-  const user = session?.user as
-    | { email?: string; id?: string; role?: string; username?: string; isAdmin?: boolean }
-    | undefined;
-  const username = user?.username;
-  const email = user?.email?.toLowerCase();
-  const byUsername = username === ADMIN_USERNAME;
-  const byEmail = ADMIN_EMAIL && email === ADMIN_EMAIL.toLowerCase();
-  const byRole = user?.role === 'admin' || user?.isAdmin === true;
+  const user = await getSessionUser();
   const devBypass = process.env.NODE_ENV !== 'production';
-  if (!user?.id || (!byUsername && !byEmail && !byRole && !devBypass)) return null;
+  if (!user?.id) return null;
+  if (!isAdminUser(user) && !devBypass) return null;
   return user;
 };
 
@@ -100,4 +92,3 @@ export async function POST(req: NextRequest) {
 }
 
 export const runtime = 'nodejs';
-

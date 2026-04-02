@@ -7,11 +7,17 @@ import dynamic from 'next/dynamic';
 import { memo, useCallback, useEffect, useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
+import Loading from '@/components/Loading/BrandTextLoading';
 import WideScreenButton from '@/features/WideScreenContainer/WideScreenButton';
 import { useIsAdmin } from '@/hooks/useIsAdmin';
 import { useUserStore } from '@/store/user';
 import { authSelectors } from '@/store/user/slices/auth/selectors';
 import { mobileHeaderSticky } from '@/styles/mobileHeader';
+import {
+  getCachedVoiceCallConfig,
+  setCachedVoiceCallConfig,
+  type VoiceCallConfigPreviewPayload,
+} from '@/utils/voiceCallConfigCache';
 
 import VoiceCallOnboarding from '../agent/features/Conversation/AgentWelcome/VoiceCallOnboarding';
 import TrainingScenarioEditor from '../training/features/TrainingScenarioEditor';
@@ -91,6 +97,45 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
     padding-inline: 16px;
     color: ${cssVar.colorTextSecondary};
   `,
+  loadingScreen: css`
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: min(72vh, 680px);
+    padding: 24px;
+  `,
+  loadingCard: css`
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+    justify-content: center;
+
+    width: min(100%, 520px);
+    min-height: 320px;
+    padding: 32px 28px;
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: 24px;
+
+    background:
+      radial-gradient(circle at top, rgba(34, 197, 94, 0.12), transparent 42%),
+      ${cssVar.colorBgContainer};
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.08);
+    text-align: center;
+  `,
+  loadingTitle: css`
+    margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    color: ${cssVar.colorText};
+  `,
+  loadingDesc: css`
+    max-width: 360px;
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.7;
+    color: ${cssVar.colorTextSecondary};
+  `,
   reportScreen: css`
     position: absolute;
     z-index: 10;
@@ -159,7 +204,7 @@ const styles = createStaticStyles(({ css, cssVar }) => ({
   `,
 }));
 
-interface VoiceCallConfigPayload {
+interface VoiceCallConfigPayload extends VoiceCallConfigPreviewPayload {
   goals?: string[];
   legend?: string | null;
   showLegend?: boolean;
@@ -173,28 +218,6 @@ export interface VoiceCallPageProps {
 interface VoiceCallRouteState {
   trainerAvatarUrl?: string | null;
 }
-
-const LEGEND_CACHE_PREFIX = 'voice-call-config:';
-
-const getCachedConfig = (agentId: string): VoiceCallConfigPayload | null => {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.sessionStorage.getItem(`${LEGEND_CACHE_PREFIX}${agentId}`);
-    if (!raw) return null;
-    return JSON.parse(raw) as VoiceCallConfigPayload;
-  } catch {
-    return null;
-  }
-};
-
-const setCachedConfig = (agentId: string, payload: VoiceCallConfigPayload) => {
-  if (typeof window === 'undefined') return;
-  try {
-    window.sessionStorage.setItem(`${LEGEND_CACHE_PREFIX}${agentId}`, JSON.stringify(payload));
-  } catch {
-    // ignore cache failures
-  }
-};
 
 export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' }) => {
   const [searchParams] = useSearchParams();
@@ -247,7 +270,7 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
     }
 
     let cancelled = false;
-    const cached = getCachedConfig(agentId);
+    const cached = getCachedVoiceCallConfig(agentId);
     if (cached) {
       const show =
         cached.showLegend === true &&
@@ -271,7 +294,7 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
           payload.showLegend === true &&
           typeof payload.legend === 'string' &&
           payload.legend.trim().length > 0;
-        setCachedConfig(agentId, payload);
+        setCachedVoiceCallConfig(agentId, payload);
         setLegendState({ show, config: payload, loading: false });
       })
       .catch(() => {
@@ -353,7 +376,7 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
             size="small"
             style={{ marginRight: 'auto' }}
             type="text"
-            onClick={() => navigate(isMobileLayout ? '/training' : '/')}
+            onClick={backToTraining}
           >
             ← Выход
           </Button>
@@ -378,7 +401,16 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
         ) : isFieldFighter ? (
           <VoiceCallOnboarding />
         ) : legendState.loading ? (
-          <div className={styles.infoText}>Загрузка...</div>
+          <div className={styles.loadingScreen}>
+            <div className={styles.loadingCard}>
+              <Loading debugId="VoiceCallPage" fullscreen={false} />
+              <h2 className={styles.loadingTitle}>Подготавливаем тренажёр</h2>
+              <p className={styles.loadingDesc}>
+                Загружаем сценарий, голосовой контур и параметры интервью. Обычно это занимает
+                пару секунд.
+              </p>
+            </div>
+          </div>
         ) : legendState.show && legendState.config?.legend ? (
           <TrainingLegendScreen
             goals={legendState.config.goals ?? []}
@@ -450,10 +482,11 @@ export const VoiceCallPage = memo<VoiceCallPageProps>(({ layoutMode = 'desktop' 
             )}
             <GeminiLiveCall
               agentId={agentId}
+              key={agentId}
               layoutMode={layoutMode}
               trainerAvatarUrl={trainerAvatarUrl}
               onEnd={handleCallEnd}
-              onExit={() => (isMobileLayout ? backToTraining() : navigate(-1))}
+              onExit={backToTraining}
             />
           </>
         )}

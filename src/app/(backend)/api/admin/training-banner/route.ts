@@ -1,11 +1,9 @@
-import { users, userSettings } from '@lobechat/database/schemas';
+import { userSettings } from '@lobechat/database/schemas';
 import { eq } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { auth } from '@/auth';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { getPrimaryAdminId, getSessionAdminUser } from '@/server/utils/admin';
 
 const TRAINING_TP_BANNER_KEY = 'trainingTpBannerUrl';
 const TRAINING_HN_BANNER_KEY = 'trainingHnBannerUrl';
@@ -21,41 +19,8 @@ const isAllowedBannerUrl = (url: string): boolean => {
 };
 
 async function ensureAdminSession() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  const user = session?.user as { email?: string; id?: string; username?: string } | undefined;
-  const username = user?.username;
-  const email = user?.email?.toLowerCase();
-  const byUsername = username === ADMIN_USERNAME;
-  const byEmail = ADMIN_EMAIL && email === ADMIN_EMAIL.toLowerCase();
-  if (!user?.id || (!byUsername && !byEmail)) return null;
-
-  return user;
+  return getSessionAdminUser();
 }
-
-const getPrimaryAdminId = async () => {
-  try {
-    const adminByUsername = await serverDB.query.users.findFirst({
-      columns: { id: true },
-      where: eq(users.username, ADMIN_USERNAME),
-    });
-
-    const adminByEmail =
-      ADMIN_EMAIL && !adminByUsername
-        ? await serverDB.query.users.findFirst({
-            columns: { id: true },
-            where: eq(users.email, ADMIN_EMAIL.toLowerCase()),
-          })
-        : null;
-
-    return adminByUsername?.id || adminByEmail?.id || null;
-  } catch (error) {
-    console.error('[training-banner] failed to resolve primary admin id:', error);
-    return null;
-  }
-};
 
 export async function POST(req: NextRequest) {
   try {

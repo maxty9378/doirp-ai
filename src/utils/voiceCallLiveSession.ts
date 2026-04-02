@@ -21,6 +21,27 @@ interface ResumeDecisionParams {
   maxAttempts: number;
 }
 
+interface InitialAiTurnMicGateParams {
+  hardGateUntil: number;
+  hasAnyAiSignal: boolean;
+  now: number;
+  softGateUntil: number;
+}
+
+interface InitialAiTurnMicHoldDurationsParams {
+  hasTrainingProgressTool: boolean;
+}
+
+interface FinalizeAiTurnTextParams {
+  hasAudibleSignal: boolean;
+  metaText: string;
+  spokenText: string;
+}
+
+const DEFAULT_INITIAL_AI_TURN_MIC_HOLD_MS = 2500;
+const DEFAULT_INITIAL_AI_TURN_MIC_HARD_HOLD_MS = 8000;
+const TRAINING_PROGRESS_INITIAL_AI_TURN_MIC_HARD_HOLD_MS = 15000;
+
 export const buildVoiceCallContextWindowCompression = (): ContextWindowCompressionConfig => ({
   ...DEFAULT_VOICE_CALL_CONTEXT_WINDOW_COMPRESSION,
 });
@@ -58,4 +79,37 @@ export const shouldResumeVoiceCallSession = ({
   if (!hasResumeHandle || attempts >= maxAttempts) return false;
 
   return hasSessionState || isResumingConnection;
+};
+
+export const shouldKeepInitialAiTurnMicGate = ({
+  hardGateUntil,
+  hasAnyAiSignal,
+  now,
+  softGateUntil,
+}: InitialAiTurnMicGateParams) => {
+  if (now < softGateUntil) return true;
+  if (!hasAnyAiSignal && now < hardGateUntil) return true;
+
+  return false;
+};
+
+export const resolveInitialAiTurnMicHoldDurations = ({
+  hasTrainingProgressTool,
+}: InitialAiTurnMicHoldDurationsParams) => ({
+  hardHoldMs: hasTrainingProgressTool
+    ? TRAINING_PROGRESS_INITIAL_AI_TURN_MIC_HARD_HOLD_MS
+    : DEFAULT_INITIAL_AI_TURN_MIC_HARD_HOLD_MS,
+  softHoldMs: DEFAULT_INITIAL_AI_TURN_MIC_HOLD_MS,
+});
+
+export const finalizeAudibleAiTurnText = ({
+  hasAudibleSignal,
+  metaText,
+  spokenText,
+}: FinalizeAiTurnTextParams) => {
+  const cleanSpokenText = spokenText.trim();
+  if (cleanSpokenText) return cleanSpokenText;
+  if (!hasAudibleSignal) return '';
+
+  return metaText.trim();
 };

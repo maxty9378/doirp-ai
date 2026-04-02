@@ -1,11 +1,9 @@
 import { trainingKnowledgeEntries } from '@lobechat/database/schemas';
 import { eq } from 'drizzle-orm';
-import { headers } from 'next/headers';
 import { type NextRequest, NextResponse } from 'next/server';
 
-import { auth } from '@/auth';
-import { ADMIN_EMAIL, ADMIN_USERNAME } from '@/const/admin';
 import { serverDB } from '@/database/server';
+import { getSessionAdminUser } from '@/server/utils/admin';
 
 interface KnowledgePayload {
   attackMyth?: string | null;
@@ -16,18 +14,7 @@ interface KnowledgePayload {
 }
 
 const ensureAdminSession = async () => {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  });
-
-  const user = session?.user as { email?: string; id?: string; username?: string } | undefined;
-  const username = user?.username;
-  const email = user?.email?.toLowerCase();
-  const byUsername = username === ADMIN_USERNAME;
-  const byEmail = ADMIN_EMAIL && email === ADMIN_EMAIL.toLowerCase();
-  if (!user?.id || (!byUsername && !byEmail)) return null;
-
-  return user;
+  return getSessionAdminUser();
 };
 
 const requireText = (value: unknown, field: string) => {

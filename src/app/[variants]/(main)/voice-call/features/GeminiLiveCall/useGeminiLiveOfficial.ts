@@ -21,11 +21,18 @@ import {
   GEMINI_31_FLASH_LIVE_MODEL,
 } from '@/const/voiceCall';
 import { useUserStore } from '@/store/user';
-import { type VoiceCallDebugEvent, type VoiceCallDebugSnapshot } from '@/utils/voiceCallDebug';
+import {
+  persistVoiceCallDebugSnapshot,
+  type VoiceCallDebugEvent,
+  type VoiceCallDebugSnapshot,
+} from '@/utils/voiceCallDebug';
 import {
   buildVoiceCallContextWindowCompression,
   buildVoiceCallSessionResumptionConfig,
+  finalizeAudibleAiTurnText,
   parseLiveServerDurationMs,
+  resolveInitialAiTurnMicHoldDurations,
+  shouldKeepInitialAiTurnMicGate,
   shouldResumeVoiceCallSession,
 } from '@/utils/voiceCallLiveSession';
 import { cleanVoiceAiText } from '@/utils/voiceCallSystemText';
@@ -76,7 +83,6 @@ const TURN_PLANNER_TIMEOUT_MS = 2000;
 const NUDGE_AI_QUIET_WINDOW_MS = 1800;
 const MAX_SESSION_RESUME_ATTEMPTS = 3;
 const SESSION_RESUME_RETRY_DELAY_MS = 250;
-const INITIAL_AI_TURN_MIC_HOLD_MS = 2500;
 
 const log = debug('lobe-client:voice-call:live-official');
 
@@ -307,6 +313,9 @@ export function useGeminiLiveOfficial({
   const transcriptRef = useRef<TranscriptEntry[]>([]);
   const currentAiTurnTextRef = useRef('');
   const currentAiTurnMetaTextRef = useRef('');
+  const currentAiTurnHasAudibleSignalRef = useRef(false);
+  const allowTrainingProgressToolRef = useRef(true);
+  const pendingProgressReportsRef = useRef<unknown[]>([]);
   const recordedUserPcmChunksRef = useRef<Uint8Array[]>([]);
   const recordedUserPcmBytesRef = useRef(0);
   const lastBotEndRef = useRef(0);
@@ -340,6 +349,7 @@ export function useGeminiLiveOfficial({
   const deferredClientTextRef = useRef<string | null>(null);
   const waitingForInitialAiTurnRef = useRef(false);
   const initialAiTurnMicGateUntilRef = useRef(0);
+  const initialAiTurnMicHardGateUntilRef = useRef(0);
 
   const prewarmAudio = useCallback(() => {
     const Ctx =
@@ -366,11 +376,11 @@ export function useGeminiLiveOfficial({
   const syncDebugSnapshot = useCallback(() => {
     if (typeof window === 'undefined') return;
 
-    window.__voiceCallDebug = {
+    persistVoiceCallDebugSnapshot({
       agentId,
       events: [...debugEventsRef.current],
       status: statusRef.current,
-    };
+    });
   }, [agentId]);
 
   useEffect(() => {
@@ -416,11 +426,12 @@ export function useGeminiLiveOfficial({
   );
 
   const markInitialAiTurnStarted = useCallback(
-    (source: 'audio' | 'text' | 'transcription' | 'turn-complete') => {
+    (source: 'audio') => {
       if (!waitingForInitialAiTurnRef.current) return;
 
       waitingForInitialAiTurnRef.current = false;
       initialAiTurnMicGateUntilRef.current = 0;
+      initialAiTurnMicHardGateUntilRef.current = 0;
       pushDebugEvent('initial-ai-turn-started', { source });
     },
     [pushDebugEvent],
@@ -435,6 +446,10 @@ export function useGeminiLiveOfficial({
     deferredClientTextRef.current = null;
     waitingForInitialAiTurnRef.current = false;
     initialAiTurnMicGateUntilRef.current = 0;
+    initialAiTurnMicHardGateUntilRef.current = 0;
+    currentAiTurnHasAudibleSignalRef.current = false;
+    allowTrainingProgressToolRef.current = !configRef.current?.trainingProgressToolName;
+    pendingProgressReportsRef.current = [];
 
     try {
       audioRecorderRef.current?.stop();
@@ -641,12 +656,18 @@ export function useGeminiLiveOfficial({
     const rawPendingAiText =
       `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
     const pendingSpokenText = cleanAiText(currentAiTurnTextRef.current.trim());
-    const pendingAiText =
-      pendingSpokenText || (rawPendingAiText ? cleanAiText(rawPendingAiText) : '');
+    const pendingAiText = finalizeAudibleAiTurnText({
+      hasAudibleSignal: currentAiTurnHasAudibleSignalRef.current,
+      metaText: rawPendingAiText ? cleanAiText(rawPendingAiText) : '',
+      spokenText: pendingSpokenText,
+    });
     if (pendingAiText) transcriptRef.current.push({ role: 'ai', text: pendingAiText });
 
     currentAiTurnTextRef.current = '';
     currentAiTurnMetaTextRef.current = '';
+    currentAiTurnHasAudibleSignalRef.current = false;
+    allowTrainingProgressToolRef.current = !configRef.current?.trainingProgressToolName;
+    pendingProgressReportsRef.current = [];
 
     const transcript = [...transcriptRef.current];
     const userAudioBlob = buildWavBlobFromPcmChunks(
@@ -669,6 +690,9 @@ export function useGeminiLiveOfficial({
     transcriptRef.current = [];
     plannerStateRef.current = null;
     lastTurnPlanRef.current = null;
+    currentAiTurnHasAudibleSignalRef.current = false;
+    allowTrainingProgressToolRef.current = !configRef.current?.trainingProgressToolName;
+    pendingProgressReportsRef.current = [];
     recordedUserPcmChunksRef.current = [];
     recordedUserPcmBytesRef.current = 0;
     lastAiActivityAtRef.current = 0;
@@ -747,6 +771,12 @@ export function useGeminiLiveOfficial({
     const preservedCheckpoints = isResumeAttempt ? [...checkpointsRef.current] : null;
     const preservedCurrentAiTurnMetaText = isResumeAttempt ? currentAiTurnMetaTextRef.current : '';
     const preservedCurrentAiTurnText = isResumeAttempt ? currentAiTurnTextRef.current : '';
+    const preservedCurrentAiTurnHasAudibleSignal = isResumeAttempt
+      ? currentAiTurnHasAudibleSignalRef.current
+      : false;
+    const preservedAllowTrainingProgressTool = isResumeAttempt
+      ? allowTrainingProgressToolRef.current
+      : !configRef.current?.trainingProgressToolName;
     const preservedDebugEvents = isResumeAttempt ? [...debugEventsRef.current] : null;
     const preservedDeductedSession = isResumeAttempt ? deductedSessionRef.current : false;
     const preservedFinalPromptSentAt = isResumeAttempt ? finalPromptSentAtRef.current : null;
@@ -756,6 +786,9 @@ export function useGeminiLiveOfficial({
     const preservedLastUserSpeechAt = isResumeAttempt ? lastUserSpeechRef.current : 0;
     const preservedLastTurnPlan = isResumeAttempt ? lastTurnPlanRef.current : null;
     const preservedPlannerState = isResumeAttempt ? plannerStateRef.current : null;
+    const preservedPendingProgressReports = isResumeAttempt
+      ? [...pendingProgressReportsRef.current]
+      : [];
     const preservedRecordedUserPcmBytes = isResumeAttempt ? recordedUserPcmBytesRef.current : 0;
     const preservedRecordedUserPcmChunks = isResumeAttempt
       ? [...recordedUserPcmChunksRef.current]
@@ -835,9 +868,13 @@ export function useGeminiLiveOfficial({
       transcriptRef.current = [];
       currentAiTurnTextRef.current = '';
       currentAiTurnMetaTextRef.current = '';
+      currentAiTurnHasAudibleSignalRef.current = false;
+      allowTrainingProgressToolRef.current = !config.trainingProgressToolName;
+      pendingProgressReportsRef.current = [];
       deferredClientTextRef.current = null;
       waitingForInitialAiTurnRef.current = false;
       initialAiTurnMicGateUntilRef.current = 0;
+      initialAiTurnMicHardGateUntilRef.current = 0;
       lastAiActivityAtRef.current = 0;
       recordedUserPcmChunksRef.current = [];
       recordedUserPcmBytesRef.current = 0;
@@ -861,6 +898,8 @@ export function useGeminiLiveOfficial({
         checkpointsRef.current = preservedCheckpoints ?? [];
         currentAiTurnMetaTextRef.current = preservedCurrentAiTurnMetaText;
         currentAiTurnTextRef.current = preservedCurrentAiTurnText;
+        currentAiTurnHasAudibleSignalRef.current = preservedCurrentAiTurnHasAudibleSignal;
+        allowTrainingProgressToolRef.current = preservedAllowTrainingProgressTool;
         debugEventsRef.current = preservedDebugEvents ?? [];
         deductedSessionRef.current = preservedDeductedSession;
         finalPromptSentAtRef.current = preservedFinalPromptSentAt;
@@ -870,6 +909,7 @@ export function useGeminiLiveOfficial({
         lastUserSpeechRef.current = preservedLastUserSpeechAt;
         lastTurnPlanRef.current = preservedLastTurnPlan;
         plannerStateRef.current = preservedPlannerState;
+        pendingProgressReportsRef.current = preservedPendingProgressReports;
         recordedUserPcmBytesRef.current = preservedRecordedUserPcmBytes;
         recordedUserPcmChunksRef.current = preservedRecordedUserPcmChunks;
         roundStartRef.current = preservedRoundStartAt;
@@ -892,6 +932,12 @@ export function useGeminiLiveOfficial({
         const playContext = playContextRef.current;
         if (!playContext) throw new Error('Аудиоконтекст недоступен.');
         streamerRef.current = new AudioStreamer(playContext);
+        streamerRef.current.onPlayStateChange = (playing) => {
+          pushDebugEvent('playback-state', {
+            playing,
+            ...streamerRef.current?.getDebugState(),
+          });
+        };
         analyserRef.current = streamerRef.current.analyser;
         freqDataRef.current = new Uint8Array(
           new ArrayBuffer(streamerRef.current.analyser.frequencyBinCount),
@@ -1022,13 +1068,15 @@ export function useGeminiLiveOfficial({
         // при interrupted не фиксируем "обрезанный" turn в историю.
         currentAiTurnTextRef.current = '';
         currentAiTurnMetaTextRef.current = '';
+        currentAiTurnHasAudibleSignalRef.current = false;
+        allowTrainingProgressToolRef.current = !config.trainingProgressToolName;
+        pendingProgressReportsRef.current = [];
       };
 
       const appendAiSpokenTranscription = (text: unknown) => {
         const next = typeof text === 'string' ? text.trim() : '';
         if (!next) return;
         lastAiActivityAtRef.current = Date.now();
-        markInitialAiTurnStarted('transcription');
 
         currentAiTurnTextRef.current = mergeLiveTranscriptionText(
           currentAiTurnTextRef.current,
@@ -1060,21 +1108,34 @@ export function useGeminiLiveOfficial({
 
       const sendStartTrigger = () => {
         const assistantLabel = uiConfigRef.current.assistantLabel || DEFAULT_ASSISTANT_LABEL;
+        const progressToolName =
+          config.trainingProgressToolName || DEFAULT_TRAINING_PROGRESS_TOOL_NAME;
+        const { hardHoldMs, softHoldMs } = resolveInitialAiTurnMicHoldDurations({
+          hasTrainingProgressTool: Boolean(config.trainingProgressToolName),
+        });
         const nameLine = trimmedName
           ? `Собеседника зовут ${trimmedName}. Обязательно обратись к нему по имени в первой реплике.`
           : 'Обратись к собеседнику вежливо на «вы» в первой реплике.';
         const customOpening = config.openingInstruction?.trim();
         const defaultOpeningText = `Начинай интервью. Представься коротко как ${assistantLabel} и произнеси первую реплику в прямой речи. ${nameLine} Сразу задай первый уточняющий вопрос в формате живого эфира для зрителей.`;
-        const startText = customOpening
-          ? customOpening
-              .replaceAll('{{assistantLabel}}', assistantLabel)
-              .replaceAll('{{nameLine}}', nameLine)
-              .replaceAll('{{speakerInstruction}}', nameLine)
-          : defaultOpeningText;
+        const firstTurnProgressRule = config.trainingProgressToolName
+          ? `\n\n[FIRST TURN RULE]\n- In your opening reply, do not call ${progressToolName}.\n- First speak your introduction and your first question aloud.\n- Only from your next completed assistant turn onward may you call ${progressToolName}.`
+          : '';
+        const startText =
+          (customOpening
+            ? customOpening
+                .replaceAll('{{assistantLabel}}', assistantLabel)
+                .replaceAll('{{nameLine}}', nameLine)
+                .replaceAll('{{speakerInstruction}}', nameLine)
+            : defaultOpeningText) + firstTurnProgressRule;
 
         waitingForInitialAiTurnRef.current = true;
-        initialAiTurnMicGateUntilRef.current = Date.now() + INITIAL_AI_TURN_MIC_HOLD_MS;
-        pushDebugEvent('initial-ai-turn-armed', { holdMs: INITIAL_AI_TURN_MIC_HOLD_MS });
+        initialAiTurnMicGateUntilRef.current = Date.now() + softHoldMs;
+        initialAiTurnMicHardGateUntilRef.current = Date.now() + hardHoldMs;
+        pushDebugEvent('initial-ai-turn-armed', {
+          hardHoldMs,
+          holdMs: softHoldMs,
+        });
         sendRealtimeText(startText, { deferUntilSessionReady: true });
       };
 
@@ -1137,12 +1198,26 @@ export function useGeminiLiveOfficial({
 
             if (waitingForInitialAiTurnRef.current) {
               const now = Date.now();
+              const hasAnyAiSignal =
+                currentAiTurnHasAudibleSignalRef.current ||
+                transcriptRef.current.some((entry) => entry.role === 'ai' && entry.text.trim().length > 0);
 
-              if (now < initialAiTurnMicGateUntilRef.current) return;
+              if (
+                shouldKeepInitialAiTurnMicGate({
+                  hardGateUntil: initialAiTurnMicHardGateUntilRef.current,
+                  hasAnyAiSignal,
+                  now,
+                  softGateUntil: initialAiTurnMicGateUntilRef.current,
+                })
+              )
+                return;
 
               waitingForInitialAiTurnRef.current = false;
               initialAiTurnMicGateUntilRef.current = 0;
-              pushDebugEvent('initial-ai-turn-mic-gate-released', { reason: 'timeout' });
+              initialAiTurnMicHardGateUntilRef.current = 0;
+              pushDebugEvent('initial-ai-turn-mic-gate-released', {
+                reason: hasAnyAiSignal ? 'soft-timeout' : 'hard-timeout',
+              });
             }
 
             activeSession.sendRealtimeInput({
@@ -1239,19 +1314,38 @@ export function useGeminiLiveOfficial({
                 config.trainingProgressToolName || DEFAULT_TRAINING_PROGRESS_TOOL_NAME;
 
               if (config.trainingProgressToolName && toolName === progressToolName) {
-                const progress = applyTrainingProgressReport(
+                if (!allowTrainingProgressToolRef.current) {
+                  pushDebugEvent('training-progress-blocked-before-first-audible-turn', {
+                    toolName,
+                  });
+
+                  return {
+                    id: toolCall.id,
+                    name: toolName,
+                    response: {
+                      accepted: false,
+                      error: 'Call this tool only after the first spoken reply has finished.',
+                    },
+                  };
+                }
+
+                pendingProgressReportsRef.current = [
+                  ...pendingProgressReportsRef.current,
                   toolCall.args as Record<string, unknown> | undefined,
-                );
+                ];
+                pushDebugEvent('training-progress-queued', {
+                  queued: pendingProgressReportsRef.current.length,
+                });
 
                 return {
                   id: toolCall.id,
                   name: toolName,
                   response: {
                     accepted: true,
-                    checkpointIds: progress.nextCheckpoints
+                    checkpointIds: checkpointsRef.current
                       .filter((checkpoint) => checkpoint.done)
                       .map((checkpoint) => checkpoint.id),
-                    score: progress.nextScore,
+                    score: scoreRef.current,
                   },
                 };
               }
@@ -1306,27 +1400,62 @@ export function useGeminiLiveOfficial({
           const audioB64 = part.inlineData?.data;
           if (audioB64) {
             lastAiActivityAtRef.current = Date.now();
+            currentAiTurnHasAudibleSignalRef.current = true;
+            pushDebugEvent('ai-audio-chunk', {
+              bytesBase64: audioB64.length,
+              ...streamerRef.current?.getDebugState(),
+            });
             markInitialAiTurnStarted('audio');
             streamerRef.current?.addPCM16(audioB64);
           }
           if (part.text) {
-            markInitialAiTurnStarted('text');
             currentAiTurnMetaTextRef.current += `${part.text} `;
           }
         }
 
         if (serverContent.turnComplete) {
-          const rawTurnText =
-            `${currentAiTurnMetaTextRef.current} ${currentAiTurnTextRef.current}`.trim();
+          const flushedPendingAudio = streamerRef.current?.flushPending() ?? false;
+          if (flushedPendingAudio) {
+            pushDebugEvent('audio-prebuffer-flushed', {
+              reason: 'turn-complete',
+              ...streamerRef.current?.getDebugState(),
+            });
+          }
+
           const spokenText = cleanAiText(currentAiTurnTextRef.current.trim());
-          const fallbackText = spokenText ? '' : cleanAiText(rawTurnText);
-          const storeText = spokenText || fallbackText;
+          const metaText = cleanAiText(currentAiTurnMetaTextRef.current.trim());
+          const storeText = finalizeAudibleAiTurnText({
+            hasAudibleSignal: currentAiTurnHasAudibleSignalRef.current,
+            metaText,
+            spokenText,
+          });
+          pushDebugEvent('ai-turn-complete', {
+            flushedPendingAudio,
+            hasAudibleSignal: currentAiTurnHasAudibleSignalRef.current,
+            metaTextLength: metaText.length,
+            spokenTextLength: spokenText.length,
+            storedTextLength: storeText.length,
+            ...streamerRef.current?.getDebugState(),
+          });
           if (storeText) transcriptRef.current.push({ role: 'ai', text: storeText });
           lastBotEndRef.current = Date.now();
-          markInitialAiTurnStarted('turn-complete');
+
+          if (currentAiTurnHasAudibleSignalRef.current) {
+            allowTrainingProgressToolRef.current = true;
+            for (const pendingReport of pendingProgressReportsRef.current) {
+              applyTrainingProgressReport(pendingReport);
+            }
+          } else if (pendingProgressReportsRef.current.length > 0) {
+            pushDebugEvent('training-progress-discarded', {
+              reason: 'inaudible-ai-turn',
+              reports: pendingProgressReportsRef.current.length,
+            });
+          }
 
           currentAiTurnTextRef.current = '';
           currentAiTurnMetaTextRef.current = '';
+          currentAiTurnHasAudibleSignalRef.current = false;
+          pendingProgressReportsRef.current = [];
 
           if (awaitingFinalAiTurnRef.current) {
             finalizeAfterFinalPlaybackRef.current();

@@ -12,8 +12,8 @@ import WebSocket, { WebSocketServer } from 'ws';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import { asc, desc, eq } from 'drizzle-orm';
 
-import { serverDB } from '@/database/server';
-import { voiceCallProxies } from '@lobechat/database/schemas';
+// import { serverDB } from '../src/database/server';
+// import { voiceCallProxies } from '../src/database/schemas/voiceCallProxies';
 
 const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
@@ -49,9 +49,23 @@ const envProxy =
   process.env.HTTP_PROXY ||
   process.env.http_proxy;
 
-const fallbackUrls = FALLBACK_PROXY_LIST.map(parseProxyEntry).filter(Boolean);
+function ensureProxyUrl(url: string): string {
+  const u = url.trim();
+  if (!u) return '';
+  if (u.startsWith('http://') || u.startsWith('https://')) {
+    return u.replace(/^https?:\/\//, 'socks5h://');
+  }
+  if (u.startsWith('socks5://')) {
+    return u.replace('socks5://', 'socks5h://');
+  }
+  return u;
+}
+
+// const fallbackUrls = FALLBACK_PROXY_LIST.map(parseProxyEntry).filter(Boolean);
 /** Список URL прокси для перебора (при отказе Google по региону пробуем следующий) */
-let PROXY_URLS: string[] = envProxy?.trim() ? [envProxy.trim(), ...fallbackUrls] : fallbackUrls;
+let PROXY_URLS: string[] = envProxy?.trim()
+  ? [ensureProxyUrl(envProxy.trim())]
+  : [];
 
 function mergeUniqueProxyUrls(urls: Array<string | null | undefined>): string[] {
   const result: string[] = [];
@@ -59,8 +73,10 @@ function mergeUniqueProxyUrls(urls: Array<string | null | undefined>): string[] 
   for (const item of urls) {
     const normalized = typeof item === 'string' ? item.trim() : '';
     if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    result.push(normalized);
+    const finalUrl = ensureProxyUrl(normalized);
+    if (!finalUrl || seen.has(finalUrl)) continue;
+    seen.add(finalUrl);
+    result.push(finalUrl);
   }
   return result;
 }
@@ -84,7 +100,13 @@ function getProxyAgentForUrl(
   url: string,
 ): InstanceType<typeof HttpsProxyAgent> | InstanceType<typeof SocksProxyAgent> | undefined {
   if (!url?.trim()) return undefined;
-  const u = url.trim();
+  let u = url.trim();
+
+  // Возвращаем принудительное использование socks5h для обхода утечек DNS
+  if (u.startsWith('socks5://') || u.startsWith('http://') || u.startsWith('https://')) {
+    u = u.replace(/^(socks5|https?):\/\//, 'socks5h://');
+  }
+
   if (u.startsWith('socks')) return new SocksProxyAgent(u);
   return new HttpsProxyAgent(u);
 }
@@ -93,6 +115,8 @@ function isRetriableCloseReason(reason: string, code: number): boolean {
   const r = reason.toLowerCase();
   return (
     code === 1006 ||
+    code === 1007 ||
+    code === 1008 ||
     /location|region|not supported|restricted|country|geo/i.test(r) ||
     /connection ended|connection closed|econnreset|socket hang up|network/i.test(r) ||
     r.includes('403') ||
@@ -100,21 +124,23 @@ function isRetriableCloseReason(reason: string, code: number): boolean {
   );
 }
 
-const server = http.createServer((_req, res) => {
+process.on('uncaughtException', (err) => {
+  console.error('[voice-call-ws-proxy] Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[voice-call-ws-proxy] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+
+const server = http.createServer((req, res) => {
+  console.log(`[voice-call-ws-proxy] HTTP request: ${req.method} ${req.url}`);
   res.writeHead(200, { 'Content-Type': 'text/plain' });
   res.end('Voice call WebSocket proxy. Connect via WebSocket with ?key=YOUR_GOOGLE_API_KEY');
 });
 
 const wss = new WebSocketServer({ server });
 
-const getDataByteLength = (data: Buffer | ArrayBuffer | Buffer[]): number => {
-  if (Buffer.isBuffer(data)) return data.length;
-  if (data instanceof ArrayBuffer) return data.byteLength;
-  if (Array.isArray(data)) return Buffer.concat(data).length;
-  return 0;
-};
-
 wss.on('connection', (clientWs, req) => {
+  console.log(`[voice-call-ws-proxy] New client connection from ${req.socket.remoteAddress}`);
   const url = req.url ? new URL(req.url, 'http://localhost') : null;
   const key = url?.searchParams.get('key');
   if (!key) {
@@ -127,16 +153,25 @@ wss.on('connection', (clientWs, req) => {
   const clientToUpstreamBuffer: { data: Buffer | ArrayBuffer | Buffer[]; isBinary: boolean }[] = [];
   const currentUpstreamRef: { current: WebSocket | null } = { current: null };
 
+  const toBuffer = (data: Buffer | ArrayBuffer | Buffer[]): Buffer => {
+    if (Buffer.isBuffer(data)) return data;
+    if (data instanceof ArrayBuffer) return Buffer.from(data);
+    if (Array.isArray(data)) return Buffer.concat(data);
+    return Buffer.alloc(0);
+  };
+
   clientWs.on('message', (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
     const up = currentUpstreamRef.current;
+    const buf = toBuffer(data);
     if (up?.readyState === WebSocket.OPEN) {
-      const bytes = getDataByteLength(data);
-      console.log(
-        `[voice-call-ws-proxy] client -> upstream (${bytes} bytes, isBinary=${isBinary})`,
-      );
-      up.send(data, { binary: isBinary });
+      console.log(`[voice-call-ws-proxy] client -> upstream (${buf.length} bytes, isBinary=${isBinary})`);
+      try {
+        up.send(buf);
+      } catch (err) {
+        console.error('[voice-call-ws-proxy] Send error:', err);
+      }
     } else {
-      clientToUpstreamBuffer.push({ data, isBinary });
+      clientToUpstreamBuffer.push({ data: buf, isBinary });
     }
   });
   clientWs.on('close', () => {
@@ -167,28 +202,52 @@ wss.on('connection', (clientWs, req) => {
     const upstream = new WebSocket(upstreamUrl, {
       agent,
       handshakeTimeout: 25_000,
+      headers: {
+        'Origin': 'https://aistudio.google.com',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
+
+    upstream.on('unexpected-response', (req, res) => {
+      console.error(`[voice-call-ws-proxy] Google rejected with status: ${res.statusCode}`);
+      let data = '';
+      res.on('data', (chunk) => (data += chunk));
+      res.on('end', () => console.error(`[voice-call-ws-proxy] Response body: ${data}`));
     });
 
     upstream.on('open', () => {
       currentUpstreamRef.current = upstream;
       console.log(`[voice-call-ws-proxy] Upstream connected (proxy ${proxyIndex + 1})`);
-      setTimeout(() => { for (const { data, isBinary } of clientToUpstreamBuffer) {
-        const bytes = getDataByteLength(data);
-        console.log(
-          `[voice-call-ws-proxy] client -> upstream buffered (${bytes} bytes, isBinary=${isBinary})`,
-        );
-        if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary: isBinary });
-      } }, 50);
-      // Не очищаем буфер, чтобы при закрытии по location error и переходе на следующий прокси
-      // первоначальное сообщение (setupMsg) отправлялось заново.
+
+      // Отправляем накопленный буфер. Используем setTimeout(0), чтобы не блокировать текущий цикл.
+      setTimeout(() => {
+        if (upstream.readyState !== WebSocket.OPEN) return;
+        for (const { data, isBinary } of clientToUpstreamBuffer) {
+          const buf = toBuffer(data);
+          console.log(
+            `[voice-call-ws-proxy] client -> upstream buffered (${buf.length} bytes, isBinary=${isBinary})`,
+          );
+          try {
+            upstream.send(buf);
+          } catch (err) {
+            console.error('[voice-call-ws-proxy] Buffered send error:', err);
+          }
+        }
+      }, 0);
     });
 
     upstream.on('message', (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
-      const bytes = getDataByteLength(data);
+      const buf = toBuffer(data);
       console.log(
-        `[voice-call-ws-proxy] upstream -> client (${bytes} bytes, isBinary=${isBinary})`,
+        `[voice-call-ws-proxy] upstream -> client (${buf.length} bytes, isBinary=${isBinary})`,
       );
-      if (clientWs.readyState === WebSocket.OPEN) clientWs.send(data, { binary: isBinary });
+      try {
+        if (clientWs.readyState === WebSocket.OPEN) {
+          clientWs.send(buf);
+        }
+      } catch (err) {
+        console.error('[voice-call-ws-proxy] Upstream response error:', err);
+      }
     });
 
     upstream.on('close', (code: number, reason: Buffer) => {
