@@ -1,12 +1,14 @@
 import { HttpsProxyAgent } from 'https-proxy-agent';
-import { SocksProxyAgent } from 'socks-proxy-agent';
 import WebSocket from 'ws';
 
 // const proxy = 'socks5h://cddtxqdm:kcqr3pqna7ja@31.59.20.176:6754';
 const proxy = 'http://cddtxqdm:kcqr3pqna7ja@31.59.20.176:6754';
 const agent = new HttpsProxyAgent(proxy);
 
-const key = process.env.GOOGLE_API_KEY || 'AIzaSyDSMWTyCWsaiC2lfAxpNgAkIupf-4IUeA0';
+const key = process.env.GOOGLE_API_KEY;
+if (!key) {
+  throw new Error('Set GOOGLE_API_KEY in the environment before running this script');
+}
 const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${key}`;
 
 console.log('Connecting to', proxy);

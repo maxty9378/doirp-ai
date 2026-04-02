@@ -59,19 +59,22 @@ describe('GET /api/voice-call/beta/config', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 503 when GOOGLE_API_KEY is not configured', async () => {
+  it('does not expose GOOGLE_API_KEY when a proxyBaseUrl is available', async () => {
     mockGetLLMConfig.mockReturnValueOnce({});
     mockApiKeyManagerPick.mockReturnValueOnce(null);
 
     const res = await GET();
 
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { apiKey?: string; proxyBaseUrl: string | null };
+    expect(body.apiKey).toBeUndefined();
+    expect(body.proxyBaseUrl).toBe(PUBLIC_VOICE_PROXY_WS.replace(/^wss:/, 'https:'));
   });
 
   it('returns proxy-mode payload with the public fallback proxyBaseUrl by default', async () => {
     const res = await GET();
     const body = (await res.json()) as {
-      apiKey: string;
+      apiKey?: string;
       defaultConfig: {
         contextWindowCompression?: {
           slidingWindow?: { targetTokens?: string };
@@ -85,7 +88,7 @@ describe('GET /api/voice-call/beta/config', () => {
     };
 
     expect(res.status).toBe(200);
-    expect(body.apiKey).toBe('test-key');
+    expect(body.apiKey).toBeUndefined();
     expect(body.defaultConfig.contextWindowCompression).toEqual({
       slidingWindow: { targetTokens: '52428' },
       triggerTokens: '104857',

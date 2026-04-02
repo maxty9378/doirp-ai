@@ -841,7 +841,8 @@ export function useGeminiLiveOfficial({
       }
 
       const config = configRef.current;
-      if (!config?.apiKey) throw new Error('Нет API-ключа Google.');
+      if (!config) throw new Error('Не удалось загрузить конфиг звонка.');
+      if (!config.geminiWsUrl && !config.apiKey) throw new Error('Нет API-ключа Google.');
 
       const nextUiConfig = normalizeUiConfig(config);
       const nextCheckpoints = toInitialCheckpoints(nextUiConfig);
@@ -1054,7 +1055,7 @@ export function useGeminiLiveOfficial({
       const proxyBaseUrl = buildProxyBaseUrl(config.geminiWsUrl);
 
       const client = new GoogleGenAI({
-        apiKey: config.apiKey,
+        apiKey: config.apiKey || 'voice-call-proxy',
         httpOptions: {
           ...(proxyBaseUrl ? { baseUrl: proxyBaseUrl } : {}),
           apiVersion: 'v1beta',
@@ -1473,7 +1474,7 @@ export function useGeminiLiveOfficial({
           constructor(url: string | URL, protocols?: string | string[]) {
             let finalUrl = url.toString();
             if (finalUrl.includes('BidiGenerateContent')) {
-              finalUrl = `${proxyWsUrl}${proxyWsUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(config.apiKey)}`;
+              finalUrl = proxyWsUrl;
             }
             super(finalUrl, protocols);
           }

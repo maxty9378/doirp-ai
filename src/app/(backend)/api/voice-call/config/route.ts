@@ -175,16 +175,6 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: TRAINING_NOT_FOUND_ERROR }, { status: 404 });
     }
 
-    const { GOOGLE_API_KEY } = getLLMConfig();
-    const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'GOOGLE_API_KEY is not configured. Add it in .env or server settings.' },
-        { status: 503 },
-      );
-    }
-
     const isTpPrice = agentId === TP_PRICE_VOICE_AGENT_ID;
     const sessionUser = (session as any)?.user || {};
     const rawFullName: string | undefined =
@@ -251,11 +241,21 @@ export async function GET(request: Request) {
     });
     const geminiWsUrl = rawProxyUrl ? rawProxyUrl.replace(/^http/, 'ws') : null;
 
+    const { GOOGLE_API_KEY } = getLLMConfig();
+    const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
+
+    if (!geminiWsUrl && !apiKey) {
+      return NextResponse.json(
+        { error: 'GOOGLE_API_KEY is not configured. Add it in .env or server settings.' },
+        { status: 503 },
+      );
+    }
+
     const liveModel = resolveVoiceCallLiveModel(agentId);
 
     const payload: Record<string, unknown> = {
-      apiKey,
       ...(geminiWsUrl ? { geminiWsUrl } : {}),
+      ...(geminiWsUrl ? {} : { apiKey }),
       assistantLabel,
       contextWindow: trainingScenario?.scenario.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       enableCheckpoints,

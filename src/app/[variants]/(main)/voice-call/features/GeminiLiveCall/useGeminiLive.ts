@@ -43,7 +43,7 @@ const resolveVoiceCallLiveModel = (agentId: string) => {
 };
 
 export interface GeminiLiveConfig {
-  apiKey: string;
+  apiKey?: string;
   assistantLabel?: string;
   autoSuccessPrompt?: string | null;
   /** ID чекпоинтов сценария для tool-based отчёта о прогрессе */

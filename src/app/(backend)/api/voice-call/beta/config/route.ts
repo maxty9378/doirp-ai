@@ -23,16 +23,6 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { GOOGLE_API_KEY } = getLLMConfig();
-    const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
-
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'GOOGLE_API_KEY is not configured. Add it in .env or server settings.' },
-        { status: 503 },
-      );
-    }
-
     const rawProxyUrl = resolveVoiceCallWsProxyUrl({
       appUrl: appEnv.APP_URL,
       devProxyUrl: process.env.VOICE_CALL_WS_PROXY_DEV,
@@ -40,9 +30,19 @@ export async function GET() {
       nodeEnv: process.env.NODE_ENV,
       useAppTunnelInProduction: process.env.VOICE_CALL_WS_USE_TUNNEL === '1',
     });
+    const proxyBaseUrl = normalizeProxyBaseUrl(rawProxyUrl);
+    const { GOOGLE_API_KEY } = getLLMConfig();
+    const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
+
+    if (!proxyBaseUrl && !apiKey) {
+      return NextResponse.json(
+        { error: 'GOOGLE_API_KEY is not configured. Add it in .env or server settings.' },
+        { status: 503 },
+      );
+    }
 
     return NextResponse.json({
-      apiKey,
+      ...(proxyBaseUrl ? {} : { apiKey }),
       defaultConfig: {
         contextWindowCompression: buildVoiceCallContextWindowCompression(),
         mediaResolution: DEFAULT_MEDIA_RESOLUTION,
@@ -57,7 +57,7 @@ export async function GET() {
       },
       defaultModel: DEFAULT_MODEL,
       defaultVoice: DEFAULT_VOICE,
-      proxyBaseUrl: normalizeProxyBaseUrl(rawProxyUrl),
+      proxyBaseUrl,
     });
   } catch (error) {
     console.error('[voice-call/beta/config] error', error);

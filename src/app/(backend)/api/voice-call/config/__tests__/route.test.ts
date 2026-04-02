@@ -85,7 +85,7 @@ describe('GET /api/voice-call/config', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns 503 when GOOGLE_API_KEY is not configured', async () => {
+  it('does not expose GOOGLE_API_KEY when a websocket proxy is available', async () => {
     mockGetLLMConfig.mockReturnValueOnce({});
     mockApiKeyManagerPick.mockReturnValueOnce(null);
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
@@ -102,7 +102,10 @@ describe('GET /api/voice-call/config', () => {
     const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
     const res = await GET(req);
 
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { apiKey?: string; geminiWsUrl?: string | null };
+    expect(body.apiKey).toBeUndefined();
+    expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 
   it('returns scoreDisplayLabel and progress tool config from DB scenario', async () => {
@@ -277,7 +280,8 @@ describe('GET /api/voice-call/config', () => {
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { geminiWsUrl?: string | null };
+    const body = (await res.json()) as { apiKey?: string; geminiWsUrl?: string | null };
+    expect(body.apiKey).toBeUndefined();
     expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 
@@ -297,7 +301,8 @@ describe('GET /api/voice-call/config', () => {
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { geminiWsUrl?: string | null };
+    const body = (await res.json()) as { apiKey?: string; geminiWsUrl?: string | null };
+    expect(body.apiKey).toBeUndefined();
     expect(body.geminiWsUrl).toBe(`wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
   });
 });

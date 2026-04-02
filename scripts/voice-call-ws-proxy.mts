@@ -19,6 +19,7 @@ const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 
 const PORT = Number(process.env.VOICE_CALL_WS_PROXY_PORT || '3011');
+const SERVER_GOOGLE_API_KEY = process.env.GOOGLE_API_KEY?.trim() || '';
 
 /** Список прокси host:port:user:pass; при отсутствии HTTPS_PROXY используется первый */
 const FALLBACK_PROXY_LIST = [
@@ -134,7 +135,9 @@ process.on('unhandledRejection', (reason, promise) => {
 const server = http.createServer((req, res) => {
   console.log(`[voice-call-ws-proxy] HTTP request: ${req.method} ${req.url}`);
   res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Voice call WebSocket proxy. Connect via WebSocket with ?key=YOUR_GOOGLE_API_KEY');
+  res.end(
+    'Voice call WebSocket proxy. Connect via WebSocket. Query ?key=... is optional when GOOGLE_API_KEY is configured on the server.',
+  );
 });
 
 const wss = new WebSocketServer({ server });
@@ -142,7 +145,7 @@ const wss = new WebSocketServer({ server });
 wss.on('connection', (clientWs, req) => {
   console.log(`[voice-call-ws-proxy] New client connection from ${req.socket.remoteAddress}`);
   const url = req.url ? new URL(req.url, 'http://localhost') : null;
-  const key = url?.searchParams.get('key');
+  const key = url?.searchParams.get('key')?.trim() || SERVER_GOOGLE_API_KEY;
   if (!key) {
     clientWs.close(4000, 'Missing key');
     return;
