@@ -21,13 +21,9 @@ export interface TrainingScenarioWithKnowledge {
 const buildGoogleLiveScenarioVariant = (scenario: TrainingScenarioItem): TrainingScenarioItem => ({
   ...scenario,
   description:
-    'Отдельная версия стресс-интервью на официальном Google Gemini Live API с live-расшифровкой речи.',
-  enableCheckpoints: false,
-  enableScoring: false,
+    'РћС‚РґРµР»СЊРЅР°СЏ РІРµСЂСЃРёСЏ СЃС‚СЂРµСЃСЃ-РёРЅС‚РµСЂРІСЊСЋ РЅР° РѕС„РёС†РёР°Р»СЊРЅРѕРј Google Gemini Live API СЃ live-СЂР°СЃС€РёС„СЂРѕРІРєРѕР№ СЂРµС‡Рё.',
   key: GFD_GOOGLE_LIVE_VOICE_AGENT_ID,
-  scoreDisplayLabel: null,
-  scoreLevelLabels: null,
-  title: 'GFD: Google Live + расшифровка',
+  title: 'GFD: Google Live + СЂР°СЃС€РёС„СЂРѕРІРєР°',
 });
 
 const withBuiltInScenarioVariants = (scenarios: TrainingScenarioItem[]): TrainingScenarioItem[] => {
@@ -65,9 +61,9 @@ export const listAllTrainingScenarios = async (): Promise<TrainingScenarioItem[]
 export const getTrainingScenarioByKey = async (
   key: string,
 ): Promise<TrainingScenarioItem | null> => {
-  // 1. Сначала ищем по точному ключу в БД
-  // Если пользователь изменил конкретную версию (например, -google-live),
-  // мы должны вернуть именно её.
+  // 1. РЎРЅР°С‡Р°Р»Р° РёС‰РµРј РїРѕ С‚РѕС‡РЅРѕРјСѓ РєР»СЋС‡Сѓ РІ Р‘Р”
+  // Р•СЃР»Рё РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РёР·РјРµРЅРёР» РєРѕРЅРєСЂРµС‚РЅСѓСЋ РІРµСЂСЃРёСЋ (РЅР°РїСЂРёРјРµСЂ, -google-live),
+  // РјС‹ РґРѕР»Р¶РЅС‹ РІРµСЂРЅСѓС‚СЊ РёРјРµРЅРЅРѕ РµС‘.
   const [exactScenario] = await serverDB
     .select()
     .from(trainingScenarios)
@@ -76,10 +72,10 @@ export const getTrainingScenarioByKey = async (
 
   if (exactScenario) return exactScenario;
 
-  // 2. Если по точному ключу не нашли, пробуем разрешить ключ (fallback)
+  // 2. Р•СЃР»Рё РїРѕ С‚РѕС‡РЅРѕРјСѓ РєР»СЋС‡Сѓ РЅРµ РЅР°С€Р»Рё, РїСЂРѕР±СѓРµРј СЂР°Р·СЂРµС€РёС‚СЊ РєР»СЋС‡ (fallback)
   const resolvedKey = resolveVoiceCallScenarioKey(key);
 
-  // Если это уже был разрешенный ключ и мы его не нашли выше, значит его нет в БД
+  // Р•СЃР»Рё СЌС‚Рѕ СѓР¶Рµ Р±С‹Р» СЂР°Р·СЂРµС€РµРЅРЅС‹Р№ РєР»СЋС‡ Рё РјС‹ РµРіРѕ РЅРµ РЅР°С€Р»Рё РІС‹С€Рµ, Р·РЅР°С‡РёС‚ РµРіРѕ РЅРµС‚ РІ Р‘Р”
   if (key === resolvedKey) return null;
 
   const [baseScenario] = await serverDB
@@ -90,7 +86,7 @@ export const getTrainingScenarioByKey = async (
 
   if (!baseScenario) return null;
 
-  // 3. Если нашли базовый сценарий для специального ключа (варианта), возвращаем вариант
+  // 3. Р•СЃР»Рё РЅР°С€Р»Рё Р±Р°Р·РѕРІС‹Р№ СЃС†РµРЅР°СЂРёР№ РґР»СЏ СЃРїРµС†РёР°Р»СЊРЅРѕРіРѕ РєР»СЋС‡Р° (РІР°СЂРёР°РЅС‚Р°), РІРѕР·РІСЂР°С‰Р°РµРј РІР°СЂРёР°РЅС‚
   if (key === GFD_GOOGLE_LIVE_VOICE_AGENT_ID) return buildGoogleLiveScenarioVariant(baseScenario);
 
   return baseScenario;

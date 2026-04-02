@@ -16,14 +16,14 @@ vi.mock('@/database/server', () => ({
 
 const baseScenario = {
   createdAt: new Date('2026-03-29T12:00:00.000Z'),
-  description: 'Базовая версия стресс-интервью.',
+  description: 'Р‘Р°Р·РѕРІР°СЏ РІРµСЂСЃРёСЏ СЃС‚СЂРµСЃСЃ-РёРЅС‚РµСЂРІСЊСЋ.',
   enableCheckpoints: true,
   enableScoring: true,
   id: 'trn_base_gfd',
   key: 'training-gfd-stress',
-  scoreDisplayLabel: 'РЕЗУЛЬТАТ',
-  scoreLevelLabels: { high: 'Высокий', low: 'Низкий', mid: 'Средний' },
-  title: 'GFD: Стресс-интервью',
+  scoreDisplayLabel: 'Р Р•Р—РЈР›Р¬РўРђРў',
+  scoreLevelLabels: { high: 'Р’С‹СЃРѕРєРёР№', low: 'РќРёР·РєРёР№', mid: 'РЎСЂРµРґРЅРёР№' },
+  title: 'GFD: РЎС‚СЂРµСЃСЃ-РёРЅС‚РµСЂРІСЊСЋ',
 } as const;
 
 describe('training scenario variants', () => {
@@ -41,17 +41,17 @@ describe('training scenario variants', () => {
     expect(scenarios).toHaveLength(2);
     expect(scenarios[0]).toMatchObject({
       key: 'training-gfd-stress',
-      title: 'GFD: Стресс-интервью',
+      title: 'GFD: РЎС‚СЂРµСЃСЃ-РёРЅС‚РµСЂРІСЊСЋ',
     });
     expect(scenarios[1]).toMatchObject({
       description:
-        'Отдельная версия стресс-интервью на официальном Google Gemini Live API с live-расшифровкой речи.',
-      enableCheckpoints: false,
-      enableScoring: false,
+        'РћС‚РґРµР»СЊРЅР°СЏ РІРµСЂСЃРёСЏ СЃС‚СЂРµСЃСЃ-РёРЅС‚РµСЂРІСЊСЋ РЅР° РѕС„РёС†РёР°Р»СЊРЅРѕРј Google Gemini Live API СЃ live-СЂР°СЃС€РёС„СЂРѕРІРєРѕР№ СЂРµС‡Рё.',
+      enableCheckpoints: true,
+      enableScoring: true,
       key: 'training-gfd-stress-google-live',
-      scoreDisplayLabel: null,
-      scoreLevelLabels: null,
-      title: 'GFD: Google Live + расшифровка',
+      scoreDisplayLabel: 'Р Р•Р—РЈР›Р¬РўРђРў',
+      scoreLevelLabels: { high: 'Р’С‹СЃРѕРєРёР№', low: 'РќРёР·РєРёР№', mid: 'РЎСЂРµРґРЅРёР№' },
+      title: 'GFD: Google Live + СЂР°СЃС€РёС„СЂРѕРІРєР°',
     });
     expect(scenarios[1]?.id).toBe(baseScenario.id);
   });
@@ -65,7 +65,6 @@ describe('training scenario variants', () => {
       title: 'Custom GFD: Google Live',
     } as const;
 
-    // Сначала ищем по точному ключу
     mockFrom.mockReturnValueOnce({ where: mockWhere });
     mockWhere.mockReturnValueOnce({ limit: mockLimit });
     mockLimit.mockResolvedValueOnce([customGoogleLiveScenario]);
@@ -81,12 +80,10 @@ describe('training scenario variants', () => {
   });
 
   it('resolves the dedicated Google Live key to the base scenario content but returns variant metadata', async () => {
-    // 1. По точному ключу не находим
     mockFrom.mockReturnValueOnce({ where: mockWhere });
     mockWhere.mockReturnValueOnce({ limit: mockLimit });
     mockLimit.mockResolvedValueOnce([]);
 
-    // 2. Fallback на базовый ключ
     mockFrom.mockReturnValueOnce({ where: mockWhere });
     mockWhere.mockReturnValueOnce({ limit: mockLimit });
     mockLimit.mockResolvedValueOnce([baseScenario]);
@@ -95,12 +92,24 @@ describe('training scenario variants', () => {
 
     expect(scenario).toMatchObject({
       description:
-        'Отдельная версия стресс-интервью на официальном Google Gemini Live API с live-расшифровкой речи.',
-      enableCheckpoints: false,
-      enableScoring: false,
+        'РћС‚РґРµР»СЊРЅР°СЏ РІРµСЂСЃРёСЏ СЃС‚СЂРµСЃСЃ-РёРЅС‚РµСЂРІСЊСЋ РЅР° РѕС„РёС†РёР°Р»СЊРЅРѕРј Google Gemini Live API СЃ live-СЂР°СЃС€РёС„СЂРѕРІРєРѕР№ СЂРµС‡Рё.',
+      enableCheckpoints: true,
+      enableScoring: true,
       id: baseScenario.id,
       key: 'training-gfd-stress-google-live',
-      title: 'GFD: Google Live + расшифровка',
+      scoreDisplayLabel: 'Р Р•Р—РЈР›Р¬РўРђРў',
+      scoreLevelLabels: { high: 'Р’С‹СЃРѕРєРёР№', low: 'РќРёР·РєРёР№', mid: 'РЎСЂРµРґРЅРёР№' },
+      title: 'GFD: Google Live + СЂР°СЃС€РёС„СЂРѕРІРєР°',
     });
+  });
+
+  it('does not resolve unrelated trainer keys to the base GFD scenario', async () => {
+    mockFrom.mockReturnValueOnce({ where: mockWhere });
+    mockWhere.mockReturnValueOnce({ limit: mockLimit });
+    mockLimit.mockResolvedValueOnce([]);
+
+    const scenario = await getTrainingScenarioByKey('training-tp-price-objection');
+
+    expect(scenario).toBeNull();
   });
 });

@@ -12,4 +12,4 @@ export const DEFAULT_TRAINING_ROUND_ENDING_PROMPT =
 export const isOfficialGoogleLiveTrainer = (_agentId: string) => true;
 
 export const resolveVoiceCallScenarioKey = (agentId: string) =>
-  isOfficialGoogleLiveTrainer(agentId) ? DEFAULT_VOICE_CALL_AGENT_ID : agentId;
+  agentId === GFD_GOOGLE_LIVE_VOICE_AGENT_ID ? DEFAULT_VOICE_CALL_AGENT_ID : agentId;

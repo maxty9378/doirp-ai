@@ -76,6 +76,7 @@ const TURN_PLANNER_TIMEOUT_MS = 2000;
 const NUDGE_AI_QUIET_WINDOW_MS = 1800;
 const MAX_SESSION_RESUME_ATTEMPTS = 3;
 const SESSION_RESUME_RETRY_DELAY_MS = 250;
+const INITIAL_AI_TURN_MIC_HOLD_MS = 2500;
 
 const log = debug('lobe-client:voice-call:live-official');
 
@@ -337,6 +338,8 @@ export function useGeminiLiveOfficial({
   const resumeOnCloseRef = useRef(false);
   const isResumingSessionRef = useRef(false);
   const deferredClientTextRef = useRef<string | null>(null);
+  const waitingForInitialAiTurnRef = useRef(false);
+  const initialAiTurnMicGateUntilRef = useRef(0);
 
   const prewarmAudio = useCallback(() => {
     const Ctx =
@@ -412,6 +415,17 @@ export function useGeminiLiveOfficial({
     [onError, pushDebugEvent],
   );
 
+  const markInitialAiTurnStarted = useCallback(
+    (source: 'audio' | 'text' | 'transcription' | 'turn-complete') => {
+      if (!waitingForInitialAiTurnRef.current) return;
+
+      waitingForInitialAiTurnRef.current = false;
+      initialAiTurnMicGateUntilRef.current = 0;
+      pushDebugEvent('initial-ai-turn-started', { source });
+    },
+    [pushDebugEvent],
+  );
+
   const cleanupMedia = useCallback(() => {
     clearResumeTimer();
     resumeOnCloseRef.current = false;
@@ -419,6 +433,8 @@ export function useGeminiLiveOfficial({
     sessionResumeHandleRef.current = null;
     sessionResumeAttemptsRef.current = 0;
     deferredClientTextRef.current = null;
+    waitingForInitialAiTurnRef.current = false;
+    initialAiTurnMicGateUntilRef.current = 0;
 
     try {
       audioRecorderRef.current?.stop();
@@ -771,7 +787,11 @@ export function useGeminiLiveOfficial({
       }
 
       const trimmedName = speakerNameRef.current;
-      const configCacheKey = `${agentId}::${trimmedName}`;
+      const durationCacheKey =
+        interviewDurationMs && Number.isFinite(interviewDurationMs)
+          ? String(interviewDurationMs)
+          : '';
+      const configCacheKey = `${agentId}::${trimmedName}::${durationCacheKey}`;
       if (configCacheKeyRef.current !== configCacheKey || !configRef.current) {
         const query = new URLSearchParams({ agentId });
         if (trimmedName) query.set('speakerName', trimmedName);
@@ -816,6 +836,8 @@ export function useGeminiLiveOfficial({
       currentAiTurnTextRef.current = '';
       currentAiTurnMetaTextRef.current = '';
       deferredClientTextRef.current = null;
+      waitingForInitialAiTurnRef.current = false;
+      initialAiTurnMicGateUntilRef.current = 0;
       lastAiActivityAtRef.current = 0;
       recordedUserPcmChunksRef.current = [];
       recordedUserPcmBytesRef.current = 0;
@@ -1006,6 +1028,7 @@ export function useGeminiLiveOfficial({
         const next = typeof text === 'string' ? text.trim() : '';
         if (!next) return;
         lastAiActivityAtRef.current = Date.now();
+        markInitialAiTurnStarted('transcription');
 
         currentAiTurnTextRef.current = mergeLiveTranscriptionText(
           currentAiTurnTextRef.current,
@@ -1049,6 +1072,9 @@ export function useGeminiLiveOfficial({
               .replaceAll('{{speakerInstruction}}', nameLine)
           : defaultOpeningText;
 
+        waitingForInitialAiTurnRef.current = true;
+        initialAiTurnMicGateUntilRef.current = Date.now() + INITIAL_AI_TURN_MIC_HOLD_MS;
+        pushDebugEvent('initial-ai-turn-armed', { holdMs: INITIAL_AI_TURN_MIC_HOLD_MS });
         sendRealtimeText(startText, { deferUntilSessionReady: true });
       };
 
@@ -1108,6 +1134,16 @@ export function useGeminiLiveOfficial({
 
             const activeSession = sessionRef.current;
             if (!activeSession || !isSetupCompleteRef.current) return;
+
+            if (waitingForInitialAiTurnRef.current) {
+              const now = Date.now();
+
+              if (now < initialAiTurnMicGateUntilRef.current) return;
+
+              waitingForInitialAiTurnRef.current = false;
+              initialAiTurnMicGateUntilRef.current = 0;
+              pushDebugEvent('initial-ai-turn-mic-gate-released', { reason: 'timeout' });
+            }
 
             activeSession.sendRealtimeInput({
               audio: {
@@ -1270,9 +1306,13 @@ export function useGeminiLiveOfficial({
           const audioB64 = part.inlineData?.data;
           if (audioB64) {
             lastAiActivityAtRef.current = Date.now();
+            markInitialAiTurnStarted('audio');
             streamerRef.current?.addPCM16(audioB64);
           }
-          if (part.text) currentAiTurnMetaTextRef.current += `${part.text} `;
+          if (part.text) {
+            markInitialAiTurnStarted('text');
+            currentAiTurnMetaTextRef.current += `${part.text} `;
+          }
         }
 
         if (serverContent.turnComplete) {
@@ -1283,6 +1323,7 @@ export function useGeminiLiveOfficial({
           const storeText = spokenText || fallbackText;
           if (storeText) transcriptRef.current.push({ role: 'ai', text: storeText });
           lastBotEndRef.current = Date.now();
+          markInitialAiTurnStarted('turn-complete');
 
           currentAiTurnTextRef.current = '';
           currentAiTurnMetaTextRef.current = '';
@@ -1413,6 +1454,7 @@ export function useGeminiLiveOfficial({
     systemInstruction,
     voiceName,
     flushDeferredClientText,
+    markInitialAiTurnStarted,
   ]);
 
   connectRef.current = connect;
