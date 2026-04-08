@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
 
-import { APP_VOICE_PROXY_PATH, PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
+import { PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
@@ -285,7 +285,7 @@ describe('GET /api/voice-call/config', () => {
     expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 
-  it('uses app tunnel URL in production when explicitly enabled', async () => {
+  it('keeps the public proxy URL in production when the app tunnel flag is enabled', async () => {
     vi.stubEnv('VOICE_CALL_WS_USE_TUNNEL', '1');
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       knowledgeEntries: [],
@@ -303,6 +303,6 @@ describe('GET /api/voice-call/config', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { apiKey?: string; geminiWsUrl?: string | null };
     expect(body.apiKey).toBeUndefined();
-    expect(body.geminiWsUrl).toBe(`wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
+    expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 });

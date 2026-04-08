@@ -14,6 +14,7 @@ import { parseBrowserLanguage } from '@/utils/locale';
 import { RouteVariants } from '@/utils/server/routeVariants';
 
 import { createRouteMatcher } from './createRouteMatcher';
+import { PUBLIC_ROUTE_PATTERNS } from './publicRoutes';
 
 // Create debug logger instances
 const logDefault = debug('middleware:default');
@@ -161,35 +162,7 @@ export function defineConfig() {
     return rewrite;
   };
 
-  const isPublicRoute = createRouteMatcher([
-    // backend api
-    '/api/auth(.*)',
-    '/api/webhooks(.*)',
-    '/api/workflows(.*)',
-    '/api/agent(.*)',
-    '/api/dev(.*)',
-    '/webapi(.*)',
-    '/trpc(.*)',
-    // version
-    '/api/version',
-    '/api/desktop/(.*)',
-    // better auth
-    '/signin',
-    '/signup',
-    '/auth-error',
-    '/verify-email',
-    '/reset-password',
-    // oauth
-    // Make only the consent view public (GET page), not other oauth paths
-    '/oauth/consent/(.*)',
-    '/oidc/handoff',
-    '/oidc/token',
-    // market
-    '/market-auth-callback',
-    // public share pages
-    '/share(.*)',
-  ]);
-
+  const isPublicRoute = createRouteMatcher([...PUBLIC_ROUTE_PATTERNS]);
   const betterAuthMiddleware = async (req: NextRequest) => {
     logBetterAuth('BetterAuth middleware processing request: %s %s', req.method, req.url);
 

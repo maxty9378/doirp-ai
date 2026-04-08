@@ -69,24 +69,9 @@ interface ResolveVoiceCallWsProxyUrlOptions {
   useAppTunnelInProduction?: boolean;
 }
 
-export const resolveVoiceCallWsProxyUrl = ({
-  appUrl,
-  devProxyUrl,
-  explicitProxyUrl,
-  nodeEnv = process.env.NODE_ENV,
-  useAppTunnelInProduction = false,
-}: ResolveVoiceCallWsProxyUrlOptions = {}) => {
-  const normalizedExplicit = normalizeVoiceProxyUrl(explicitProxyUrl);
+export const resolveVoiceCallWsProxyUrl = (options: ResolveVoiceCallWsProxyUrlOptions = {}) => {
+  const normalizedExplicit = normalizeVoiceProxyUrl(options.explicitProxyUrl);
   if (normalizedExplicit) return normalizedExplicit;
-
-  if (nodeEnv === 'development') {
-    // In local dev, respect VOICE_CALL_WS_PROXY_DEV when set; otherwise use the public proxy.
-    return normalizeVoiceProxyUrl(devProxyUrl) || PUBLIC_VOICE_PROXY_WS;
-  }
-
-  if (useAppTunnelInProduction) {
-    return buildAppVoiceProxyWsUrl(appUrl) || PUBLIC_VOICE_PROXY_WS;
-  }
 
   return PUBLIC_VOICE_PROXY_WS;
 };

@@ -14,11 +14,11 @@ export async function GET(request: NextRequest) {
   }
 
   const includeInactive = request.nextUrl.searchParams.get('includeInactive') === 'true';
-  const headersByMode = includeInactive
+  const headersByMode: Record<string, string> = includeInactive
     ? { 'Cache-Control': 'no-store' }
     : {
         'Cache-Control': 'private, max-age=120, stale-while-revalidate=600',
-        Vary: 'Cookie',
+        'Vary': 'Cookie',
       };
 
   try {

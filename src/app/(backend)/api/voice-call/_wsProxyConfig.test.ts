@@ -37,17 +37,12 @@ describe('voice call ws proxy config', () => {
     ).toBe('wss://voice-proxy.example.com/voice-call-ws');
   });
 
-  it('uses the development proxy override before the public fallback', () => {
+  it('uses the public proxy endpoint in development by default', () => {
     expect(
       resolveVoiceCallWsProxyUrl({
-        devProxyUrl: 'ws://localhost:3011',
         nodeEnv: 'development',
       }),
-    ).toBe('ws://localhost:3011');
-  });
-
-  it('falls back to the public proxy endpoint in development when env is empty', () => {
-    expect(resolveVoiceCallWsProxyUrl({ nodeEnv: 'development' })).toBe(PUBLIC_VOICE_PROXY_WS);
+    ).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 
   it('uses the public proxy endpoint in production by default', () => {
@@ -59,14 +54,14 @@ describe('voice call ws proxy config', () => {
     ).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 
-  it('can use same-origin tunnel endpoint in production when explicitly enabled', () => {
+  it('ignores the app tunnel flag and keeps the public proxy in production', () => {
     expect(
       resolveVoiceCallWsProxyUrl({
         appUrl: 'https://doirp-ai.vercel.app',
         nodeEnv: 'production',
         useAppTunnelInProduction: true,
       }),
-    ).toBe(`wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
+    ).toBe(PUBLIC_VOICE_PROXY_WS);
   });
 
   it('falls back to the public proxy endpoint in production when APP_URL is empty', () => {

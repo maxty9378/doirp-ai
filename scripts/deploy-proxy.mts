@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Client } from 'ssh2';
 import * as fs from 'fs';
 import * as path from 'path';

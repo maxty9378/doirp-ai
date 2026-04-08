@@ -38,7 +38,7 @@ const dev = spawn(exec, ['run', 'dev:next'], {
   stdio: 'inherit',
   env: {
     ...process.env,
-    ...(shouldRunLocalProxy ? { VOICE_CALL_WS_PROXY_DEV: 'ws://localhost:3011' } : {}),
+    ...(shouldRunLocalProxy ? { VOICE_CALL_WS_PROXY_URL: 'ws://localhost:3011' } : {}),
   },
 });
 
