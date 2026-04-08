@@ -272,28 +272,22 @@ async function handleClientConnection(clientWs: WebSocket, req: http.IncomingMes
   console.log(`[voice-call-ws-proxy] New client connection from ${req.socket.remoteAddress}`);
 
   const url = req.url ? new URL(req.url, 'http://localhost') : null;
-  const { key, source } = await resolveGoogleApiKey(url);
-
-  if (!key) {
-    clientWs.close(4000, 'Missing key');
-    return;
-  }
-
-  console.log(`[voice-call-ws-proxy] Using Google API key from ${source}`);
-
-  const upstreamUrl = `${GEMINI_LIVE_WS}?key=${encodeURIComponent(key)}`;
   const clientToUpstreamBuffer: { data: Buffer | ArrayBuffer | Buffer[]; isBinary: boolean }[] =
     [];
   const currentUpstreamRef: { current: WebSocket | null } = { current: null };
 
-  const toBuffer = (data: Buffer | ArrayBuffer | Buffer[]): Buffer => {
+  const toBuffer = (data: Buffer | ArrayBuffer | Buffer[] | ArrayBufferView | string): Buffer => {
     if (Buffer.isBuffer(data)) return data;
+    if (typeof data === 'string') return Buffer.from(data, 'utf8');
     if (data instanceof ArrayBuffer) return Buffer.from(data);
+    if (ArrayBuffer.isView(data)) {
+      return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+    }
     if (Array.isArray(data)) return Buffer.concat(data);
     return Buffer.alloc(0);
   };
 
-  clientWs.on('message', (data: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
+  clientWs.on('message', (data: Buffer | ArrayBuffer | Buffer[] | ArrayBufferView | string, isBinary: boolean) => {
     const upstream = currentUpstreamRef.current;
     const buffer = toBuffer(data);
 
@@ -308,6 +302,9 @@ async function handleClientConnection(clientWs: WebSocket, req: http.IncomingMes
       }
     } else {
       clientToUpstreamBuffer.push({ data: buffer, isBinary });
+      console.log(
+        `[voice-call-ws-proxy] client buffered (${buffer.length} bytes, isBinary=${isBinary}, queued=${clientToUpstreamBuffer.length})`,
+      );
     }
   });
 
@@ -322,6 +319,17 @@ async function handleClientConnection(clientWs: WebSocket, req: http.IncomingMes
     console.error('[voice-call-ws-proxy] Client error:', error);
     currentUpstreamRef.current?.close();
   });
+
+  const { key, source } = await resolveGoogleApiKey(url);
+
+  if (!key) {
+    clientWs.close(4000, 'Missing key');
+    return;
+  }
+
+  console.log(`[voice-call-ws-proxy] Using Google API key from ${source}`);
+
+  const upstreamUrl = `${GEMINI_LIVE_WS}?key=${encodeURIComponent(key)}`;
 
   function tryUpstream(proxyIndex: number) {
     if (clientWs.readyState !== WebSocket.OPEN) return;

@@ -61,6 +61,7 @@ export interface GeminiLiveConfig {
   introDialogHint?: string | null;
   introDialogPlaceholder?: string | null;
   introDialogTitle?: string | null;
+  liveAuthTokenUrl?: string | null;
   liveModel?: string | null;
   openingInstruction?: string | null;
   quietSpeakerNudge?: string | null;

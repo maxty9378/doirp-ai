@@ -234,6 +234,33 @@ const buildProxyBaseUrl = (url: string | null | undefined) => {
   }
 };
 
+const createLiveAuthToken = async (url: string) => {
+  const response = await fetch(url, {
+    cache: 'no-store',
+    credentials: 'include',
+    method: 'POST',
+  });
+  const payload = (await response.json().catch(() => null)) as {
+    apiVersion?: string;
+    authToken?: string;
+    error?: string;
+  } | null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error || `Live auth token request failed: ${response.status}`);
+  }
+
+  const authToken = payload?.authToken?.trim() || '';
+  if (!authToken) {
+    throw new Error('Live auth token is empty.');
+  }
+
+  return {
+    apiVersion: payload?.apiVersion?.trim() || 'v1alpha',
+    authToken,
+  };
+};
+
 const resolveVoiceConnectErrorMessage = (error: unknown) => {
   const raw = error instanceof Error ? error.message : String(error || '');
   const normalized = raw.toLowerCase();
@@ -842,7 +869,9 @@ export function useGeminiLiveOfficial({
 
       const config = configRef.current;
       if (!config) throw new Error('Не удалось загрузить конфиг звонка.');
-      if (!config.geminiWsUrl && !config.apiKey) throw new Error('Нет API-ключа Google.');
+      if (!config.geminiWsUrl && !config.apiKey && !config.liveAuthTokenUrl) {
+        throw new Error('Нет API-ключа Google.');
+      }
 
       const nextUiConfig = normalizeUiConfig(config);
       const nextCheckpoints = toInitialCheckpoints(nextUiConfig);
@@ -1052,13 +1081,36 @@ export function useGeminiLiveOfficial({
         baseLiveConfig.tools = tools as LiveConnectConfig['tools'];
       }
 
-      const proxyBaseUrl = buildProxyBaseUrl(config.geminiWsUrl);
+      let liveAuthToken = '';
+      let liveApiVersion = 'v1beta';
+
+      if (config.liveAuthTokenUrl) {
+        try {
+          const authTokenPayload = await createLiveAuthToken(config.liveAuthTokenUrl);
+          liveAuthToken = authTokenPayload.authToken;
+          liveApiVersion = authTokenPayload.apiVersion;
+          pushDebugEvent('live-auth-token-created', {
+            apiVersion: liveApiVersion,
+          });
+        } catch (error) {
+          pushDebugEvent('live-auth-token-failed', {
+            message: error instanceof Error ? error.message : String(error || 'Unknown error'),
+          });
+
+          if (!config.geminiWsUrl && !config.apiKey) {
+            throw error;
+          }
+        }
+      }
+
+      const proxyBaseUrl = liveAuthToken ? undefined : buildProxyBaseUrl(config.geminiWsUrl);
+      const usesProxyTransport = !!proxyBaseUrl;
 
       const client = new GoogleGenAI({
-        apiKey: config.apiKey || 'voice-call-proxy',
+        apiKey: liveAuthToken || config.apiKey || 'voice-call-proxy',
         httpOptions: {
           ...(proxyBaseUrl ? { baseUrl: proxyBaseUrl } : {}),
-          apiVersion: 'v1beta',
+          apiVersion: liveApiVersion,
         },
       });
 
@@ -1201,7 +1253,9 @@ export function useGeminiLiveOfficial({
               const now = Date.now();
               const hasAnyAiSignal =
                 currentAiTurnHasAudibleSignalRef.current ||
-                transcriptRef.current.some((entry) => entry.role === 'ai' && entry.text.trim().length > 0);
+                transcriptRef.current.some(
+                  (entry) => entry.role === 'ai' && entry.text.trim().length > 0,
+                );
 
               if (
                 shouldKeepInitialAiTurnMicGate({
@@ -1468,8 +1522,8 @@ export function useGeminiLiveOfficial({
         ? sessionResumeHandleRef.current?.trim() || undefined
         : undefined;
 
-      if (config.geminiWsUrl) {
-        const proxyWsUrl = config.geminiWsUrl;
+      if (usesProxyTransport) {
+        const proxyWsUrl = config.geminiWsUrl!;
         (window as any).WebSocket = class extends OriginalWebSocket {
           constructor(url: string | URL, protocols?: string | string[]) {
             let finalUrl = url.toString();
@@ -1544,7 +1598,7 @@ export function useGeminiLiveOfficial({
           model: liveModel || DEFAULT_VOICE_CALL_LIVE_MODEL,
         });
       } finally {
-        if (config.geminiWsUrl) {
+        if (usesProxyTransport) {
           window.WebSocket = OriginalWebSocket;
         }
       }

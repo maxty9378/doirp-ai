@@ -243,6 +243,7 @@ export async function GET(request: Request) {
 
     const { GOOGLE_API_KEY } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
+    const liveAuthTokenUrl = apiKey ? '/api/voice-call/auth-token' : null;
 
     if (!geminiWsUrl && !apiKey) {
       return NextResponse.json(
@@ -256,6 +257,7 @@ export async function GET(request: Request) {
     const payload: Record<string, unknown> = {
       ...(geminiWsUrl ? { geminiWsUrl } : {}),
       ...(geminiWsUrl ? {} : { apiKey }),
+      ...(liveAuthTokenUrl ? { liveAuthTokenUrl } : {}),
       assistantLabel,
       contextWindow: trainingScenario?.scenario.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
       enableCheckpoints,

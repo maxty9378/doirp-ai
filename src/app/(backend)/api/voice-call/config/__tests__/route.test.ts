@@ -7,8 +7,8 @@ import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
 const GFD_GOOGLE_LIVE_KEY = 'training-gfd-stress-google-live';
-const DEFAULT_LIVE_MODEL = 'gemini-3.1-flash-live-preview';
-const GFD_GOOGLE_LIVE_MODEL = 'gemini-3.1-flash-live-preview';
+const DEFAULT_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
+const GFD_GOOGLE_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
 const SCORE_LABEL_GFD = 'РЕЗУЛЬТАТ';
 
 const mockGetSession = vi.fn();
@@ -103,9 +103,14 @@ describe('GET /api/voice-call/config', () => {
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { apiKey?: string; geminiWsUrl?: string | null };
+    const body = (await res.json()) as {
+      apiKey?: string;
+      geminiWsUrl?: string | null;
+      liveAuthTokenUrl?: string | null;
+    };
     expect(body.apiKey).toBeUndefined();
     expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
+    expect(body.liveAuthTokenUrl).toBeUndefined();
   });
 
   it('returns scoreDisplayLabel and progress tool config from DB scenario', async () => {
@@ -280,9 +285,14 @@ describe('GET /api/voice-call/config', () => {
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { apiKey?: string; geminiWsUrl?: string | null };
+    const body = (await res.json()) as {
+      apiKey?: string;
+      geminiWsUrl?: string | null;
+      liveAuthTokenUrl?: string | null;
+    };
     expect(body.apiKey).toBeUndefined();
     expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
+    expect(body.liveAuthTokenUrl).toBe('/api/voice-call/auth-token');
   });
 
   it('keeps the public proxy URL in production when the app tunnel flag is enabled', async () => {
@@ -301,8 +311,13 @@ describe('GET /api/voice-call/config', () => {
     const res = await GET(req);
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { apiKey?: string; geminiWsUrl?: string | null };
+    const body = (await res.json()) as {
+      apiKey?: string;
+      geminiWsUrl?: string | null;
+      liveAuthTokenUrl?: string | null;
+    };
     expect(body.apiKey).toBeUndefined();
     expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
+    expect(body.liveAuthTokenUrl).toBe('/api/voice-call/auth-token');
   });
 });
