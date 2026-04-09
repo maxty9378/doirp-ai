@@ -5,7 +5,7 @@
  * Exposes local /api/voice-call/proxy-key to the remote proxy host without exposing GOOGLE_API_KEY to the browser.
  *
  * Example:
- * VOICE_CALL_PROXY_TUNNEL_HOST=45.91.238.46 \
+ * VOICE_CALL_PROXY_TUNNEL_HOST=<remote-host> \
  * VOICE_CALL_PROXY_TUNNEL_USER=root \
  * VOICE_CALL_PROXY_TUNNEL_PASSWORD=*** \
  * bun run scripts/voice-call-key-tunnel.mts

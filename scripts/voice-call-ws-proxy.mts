@@ -12,6 +12,11 @@ import http from 'node:http';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import WebSocket, { WebSocketServer } from 'ws';
 
+import {
+  proxyEntryToSocksUrl,
+  resolveVoiceCallFallbackProxyEntries,
+} from './_localAccess.mjs';
+
 const GEMINI_LIVE_WS =
   'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
 
@@ -40,30 +45,6 @@ const LIVE_AUTH_TOKEN_NEW_SESSION_TTL_MS = 10 * 60_000;
 const LIVE_AUTH_TOKEN_EXPIRE_TTL_MS = 30 * 60_000;
 const LIVE_AUTH_TOKEN_USES = 32;
 
-/** host:port:user:pass fallback proxy list */
-const FALLBACK_PROXY_LIST = [
-  '95.81.98.243:20818:gemini:gBOiFtedtz2SHEVNtTqi',
-  '31.59.20.176:6754:cddtxqdm:kcqr3pqna7ja',
-  '23.95.150.145:6114:cddtxqdm:kcqr3pqna7ja',
-  '198.23.239.134:6540:cddtxqdm:kcqr3pqna7ja',
-  '45.38.107.97:6014:cddtxqdm:kcqr3pqna7ja',
-  '107.172.163.27:6543:cddtxqdm:kcqr3pqna7ja',
-  '198.105.121.200:6462:cddtxqdm:kcqr3pqna7ja',
-  '216.10.27.159:6837:cddtxqdm:kcqr3pqna7ja',
-  '142.111.67.146:5611:cddtxqdm:kcqr3pqna7ja',
-  '191.96.254.138:6185:cddtxqdm:kcqr3pqna7ja',
-  '31.58.9.4:6077:cddtxqdm:kcqr3pqna7ja',
-];
-
-function parseProxyEntry(entry: string): string {
-  const parts = entry.trim().split(':');
-  if (parts.length < 4) return '';
-
-  const [host, port, user, ...passParts] = parts;
-  const password = passParts.join(':');
-  return `socks5h://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}:${port}`;
-}
-
 const envProxy =
   process.env.HTTPS_PROXY ||
   process.env.https_proxy ||
@@ -85,9 +66,6 @@ function ensureProxyUrl(url: string): string {
 
   return normalized;
 }
-
-const fallbackUrls = FALLBACK_PROXY_LIST.map(parseProxyEntry).filter(Boolean);
-
 /** Proxy URLs to try in order. */
 let PROXY_URLS: string[] = envProxy?.trim() ? [ensureProxyUrl(envProxy.trim())] : [];
 let cachedRemoteGoogleApiKey:
@@ -678,8 +656,19 @@ server.listen(PORT, '0.0.0.0', () => {
     return;
   }
 
-  void loadProxyUrlsFromDb().then((dbUrls) => {
+  void Promise.all([
+    loadProxyUrlsFromDb(),
+    resolveVoiceCallFallbackProxyEntries().catch((error: unknown) => {
+      console.error('[voice-call-ws-proxy] Failed to load local fallback proxies:', error);
+      return [];
+    }),
+  ]).then(([dbUrls, fallbackEntries]) => {
+    const fallbackUrls = fallbackEntries.map(proxyEntryToSocksUrl).filter(Boolean);
+
     if (!dbUrls.length) {
+      const merged = mergeUniqueProxyUrls([envProxy?.trim(), ...fallbackUrls]);
+      PROXY_URLS = merged;
+
       if (PROXY_URLS.length) {
         console.log(
           `[voice-call-ws-proxy] Using ${PROXY_URLS.length} proxy/proxies (will try next on location error)`,
