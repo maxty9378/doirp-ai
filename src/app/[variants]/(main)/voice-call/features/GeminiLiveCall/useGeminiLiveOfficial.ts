@@ -1081,10 +1081,12 @@ export function useGeminiLiveOfficial({
         baseLiveConfig.tools = tools as LiveConnectConfig['tools'];
       }
 
+      const proxyBaseUrl = buildProxyBaseUrl(config.geminiWsUrl);
+      const usesProxyTransport = !!proxyBaseUrl;
       let liveAuthToken = '';
       let liveApiVersion = 'v1beta';
 
-      if (config.liveAuthTokenUrl) {
+      if (!usesProxyTransport && config.liveAuthTokenUrl) {
         try {
           const authTokenPayload = await createLiveAuthToken(config.liveAuthTokenUrl);
           liveAuthToken = authTokenPayload.authToken;
@@ -1102,9 +1104,6 @@ export function useGeminiLiveOfficial({
           }
         }
       }
-
-      const proxyBaseUrl = liveAuthToken ? undefined : buildProxyBaseUrl(config.geminiWsUrl);
-      const usesProxyTransport = !!proxyBaseUrl;
 
       const client = new GoogleGenAI({
         apiKey: liveAuthToken || config.apiKey || 'voice-call-proxy',

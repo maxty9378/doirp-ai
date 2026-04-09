@@ -6,6 +6,7 @@ export const PUBLIC_ROUTE_PATTERNS = [
   '/api/agent(.*)',
   '/api/dev(.*)',
   '/api/voice-call/proxy-key(.*)',
+  '/api/voice-call/proxy-auth-token(.*)',
   '/webapi(.*)',
   '/trpc(.*)',
   // version

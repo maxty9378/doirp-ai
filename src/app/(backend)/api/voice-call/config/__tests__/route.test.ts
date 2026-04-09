@@ -292,7 +292,7 @@ describe('GET /api/voice-call/config', () => {
     };
     expect(body.apiKey).toBeUndefined();
     expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
-    expect(body.liveAuthTokenUrl).toBe('/api/voice-call/auth-token');
+    expect(body.liveAuthTokenUrl).toBeUndefined();
   });
 
   it('keeps the public proxy URL in production when the app tunnel flag is enabled', async () => {
@@ -318,6 +318,6 @@ describe('GET /api/voice-call/config', () => {
     };
     expect(body.apiKey).toBeUndefined();
     expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
-    expect(body.liveAuthTokenUrl).toBe('/api/voice-call/auth-token');
+    expect(body.liveAuthTokenUrl).toBeUndefined();
   });
 });

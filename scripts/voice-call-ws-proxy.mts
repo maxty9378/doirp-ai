@@ -5,6 +5,7 @@
  * Start: VOICE_CALL_WS_PROXY_PORT=3011 bun run scripts/voice-call-ws-proxy.mts
  */
 
+import { GoogleGenAI } from '@google/genai';
 import { asc, desc, eq } from 'drizzle-orm';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import http from 'node:http';
@@ -20,12 +21,24 @@ const REMOTE_KEY_URLS = (process.env.VOICE_CALL_PROXY_KEY_URL || '')
   .split(',')
   .map((value) => value.trim())
   .filter(Boolean);
+const REMOTE_AUTH_TOKEN_URLS = (process.env.VOICE_CALL_PROXY_AUTH_TOKEN_URL || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
 const REMOTE_KEY_SHARED_SECRET = process.env.VOICE_CALL_PROXY_SHARED_SECRET?.trim() || '';
 const REMOTE_KEY_CACHE_TTL_MS = Math.max(
   0,
   Number.parseInt(process.env.VOICE_CALL_PROXY_KEY_CACHE_TTL_MS || '0', 10) || 0,
 );
+const REMOTE_AUTH_TOKEN_CACHE_TTL_MS = Math.max(
+  0,
+  Number.parseInt(process.env.VOICE_CALL_PROXY_AUTH_TOKEN_CACHE_TTL_MS || '0', 10) || 0,
+);
 const CLIENT_PROXY_PLACEHOLDER_KEY = 'voice-call-proxy';
+const LIVE_AUTH_TOKEN_API_VERSION = 'v1alpha';
+const LIVE_AUTH_TOKEN_NEW_SESSION_TTL_MS = 10 * 60_000;
+const LIVE_AUTH_TOKEN_EXPIRE_TTL_MS = 30 * 60_000;
+const LIVE_AUTH_TOKEN_USES = 32;
 
 /** host:port:user:pass fallback proxy list */
 const FALLBACK_PROXY_LIST = [
@@ -56,6 +69,7 @@ const envProxy =
   process.env.https_proxy ||
   process.env.HTTP_PROXY ||
   process.env.http_proxy;
+const PINNED_PROXY_ONLY = process.env.VOICE_CALL_WS_PROXY_PINNED_ONLY === '1';
 
 function ensureProxyUrl(url: string): string {
   const normalized = url.trim();
@@ -82,7 +96,35 @@ let cachedRemoteGoogleApiKey:
       value: string;
     }
   | null = null;
+let cachedRemoteAuthToken:
+  | {
+      apiVersion: string;
+      expiresAt: number;
+      value: string;
+    }
+  | null = null;
 let remoteGoogleApiKeyPromise: Promise<string> | null = null;
+let remoteAuthTokenPromise: Promise<{ apiVersion: string; authToken: string } | null> | null = null;
+
+type ResolvedUpstreamCredential =
+  | {
+      apiVersion: string;
+      kind: 'apiKey';
+      source: string;
+      value: string;
+    }
+  | {
+      apiVersion: string;
+      kind: 'authToken';
+      source: string;
+      value: string;
+    }
+  | {
+      apiVersion: 'v1beta';
+      kind: 'missing';
+      source: 'missing';
+      value: '';
+    };
 
 function mergeUniqueProxyUrls(urls: Array<string | null | undefined>): string[] {
   const result: string[] = [];
@@ -159,6 +201,10 @@ function clearRemoteGoogleApiKeyCache() {
   cachedRemoteGoogleApiKey = null;
 }
 
+function clearRemoteAuthTokenCache() {
+  cachedRemoteAuthToken = null;
+}
+
 function hasUsableClientKey(key: string) {
   return !!key && key !== CLIENT_PROXY_PLACEHOLDER_KEY;
 }
@@ -228,22 +274,188 @@ async function fetchGoogleApiKeyFromApp(): Promise<string> {
   return remoteGoogleApiKeyPromise;
 }
 
-async function resolveGoogleApiKey(url: URL | null) {
+async function fetchLiveAuthTokenFromApp(): Promise<{ apiVersion: string; authToken: string } | null> {
+  const now = Date.now();
+  if (cachedRemoteAuthToken && cachedRemoteAuthToken.expiresAt > now) {
+    return {
+      apiVersion: cachedRemoteAuthToken.apiVersion,
+      authToken: cachedRemoteAuthToken.value,
+    };
+  }
+
+  if (!REMOTE_AUTH_TOKEN_URLS.length || !REMOTE_KEY_SHARED_SECRET) return null;
+  if (remoteAuthTokenPromise) return remoteAuthTokenPromise;
+
+  remoteAuthTokenPromise = (async () => {
+    try {
+      for (const remoteAuthTokenUrl of REMOTE_AUTH_TOKEN_URLS) {
+        const response = await fetch(remoteAuthTokenUrl, {
+          headers: {
+            Authorization: `Bearer ${REMOTE_KEY_SHARED_SECRET}`,
+            'Cache-Control': 'no-store',
+            Pragma: 'no-cache',
+          },
+          method: 'GET',
+        }).catch((error) => {
+          console.error(
+            `[voice-call-ws-proxy] Remote auth token fetch error from ${remoteAuthTokenUrl}:`,
+            error,
+          );
+          return null;
+        });
+
+        if (!response) continue;
+
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '');
+          console.error(
+            `[voice-call-ws-proxy] Remote auth token fetch failed from ${remoteAuthTokenUrl}: HTTP ${response.status}${errorText ? ` ${errorText.slice(0, 200)}` : ''}`,
+          );
+          continue;
+        }
+
+        const payload = (await response.json().catch(() => null)) as
+          | { apiVersion?: string; authToken?: string }
+          | null;
+        const authToken = payload?.authToken?.trim() || '';
+        const apiVersion = payload?.apiVersion?.trim() || 'v1alpha';
+        if (!authToken) {
+          console.error(
+            `[voice-call-ws-proxy] Remote auth token fetch from ${remoteAuthTokenUrl} returned an empty authToken`,
+          );
+          continue;
+        }
+
+        cachedRemoteAuthToken = {
+          apiVersion,
+          expiresAt: Date.now() + REMOTE_AUTH_TOKEN_CACHE_TTL_MS,
+          value: authToken,
+        };
+
+        return { apiVersion, authToken };
+      }
+    } catch (error) {
+      console.error('[voice-call-ws-proxy] Remote auth token fetch error:', error);
+    } finally {
+      remoteAuthTokenPromise = null;
+    }
+
+    return null;
+  })();
+
+  return remoteAuthTokenPromise;
+}
+
+async function createLiveAuthTokenFromApiKey(
+  apiKey: string,
+  source: string,
+): Promise<{ apiVersion: string; authToken: string; source: string } | null> {
+  if (!apiKey) return null;
+
+  try {
+    const now = Date.now();
+    const client = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        apiVersion: LIVE_AUTH_TOKEN_API_VERSION,
+      },
+    });
+    const token = await client.authTokens.create({
+      config: {
+        expireTime: new Date(now + LIVE_AUTH_TOKEN_EXPIRE_TTL_MS).toISOString(),
+        newSessionExpireTime: new Date(now + LIVE_AUTH_TOKEN_NEW_SESSION_TTL_MS).toISOString(),
+        uses: LIVE_AUTH_TOKEN_USES,
+      },
+    });
+
+    const authToken = token.name?.trim() || '';
+    if (!authToken) {
+      throw new Error('Google auth token response is empty');
+    }
+
+    if (REMOTE_AUTH_TOKEN_CACHE_TTL_MS > 0) {
+      cachedRemoteAuthToken = {
+        apiVersion: LIVE_AUTH_TOKEN_API_VERSION,
+        expiresAt: Date.now() + REMOTE_AUTH_TOKEN_CACHE_TTL_MS,
+        value: authToken,
+      };
+    }
+
+    return {
+      apiVersion: LIVE_AUTH_TOKEN_API_VERSION,
+      authToken,
+      source: `${source}-local-auth-token`,
+    };
+  } catch (error) {
+    console.error(`[voice-call-ws-proxy] Failed to create live auth token from ${source}:`, error);
+    return null;
+  }
+}
+
+function buildUpstreamUrl(credential: ResolvedUpstreamCredential) {
+  if (credential.kind === 'authToken') {
+    return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.${credential.apiVersion}.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(credential.value)}`;
+  }
+
+  return `${GEMINI_LIVE_WS}?key=${encodeURIComponent(credential.value)}`;
+}
+
+async function resolveUpstreamCredential(url: URL | null): Promise<ResolvedUpstreamCredential> {
   const queryKey = url?.searchParams.get('key')?.trim() || '';
   if (hasUsableClientKey(queryKey)) {
-    return { key: queryKey, source: 'query' as const };
+    const queryAuthToken = await createLiveAuthTokenFromApiKey(queryKey, 'query');
+    if (queryAuthToken) {
+      return {
+        apiVersion: queryAuthToken.apiVersion,
+        kind: 'authToken',
+        source: queryAuthToken.source,
+        value: queryAuthToken.authToken,
+      };
+    }
+
+    return { apiVersion: 'v1beta', kind: 'apiKey', source: 'query', value: queryKey };
+  }
+
+  const remoteAuthToken = await fetchLiveAuthTokenFromApp();
+  if (remoteAuthToken) {
+    return {
+      apiVersion: remoteAuthToken.apiVersion,
+      kind: 'authToken',
+      source: 'remote-auth-token',
+      value: remoteAuthToken.authToken,
+    };
   }
 
   if (SERVER_GOOGLE_API_KEY) {
-    return { key: SERVER_GOOGLE_API_KEY, source: 'env' as const };
+    const envAuthToken = await createLiveAuthTokenFromApiKey(SERVER_GOOGLE_API_KEY, 'env');
+    if (envAuthToken) {
+      return {
+        apiVersion: envAuthToken.apiVersion,
+        kind: 'authToken',
+        source: envAuthToken.source,
+        value: envAuthToken.authToken,
+      };
+    }
+
+    return { apiVersion: 'v1beta', kind: 'apiKey', source: 'env', value: SERVER_GOOGLE_API_KEY };
   }
 
   const remoteKey = await fetchGoogleApiKeyFromApp();
   if (remoteKey) {
-    return { key: remoteKey, source: 'remote' as const };
+    const remoteKeyAuthToken = await createLiveAuthTokenFromApiKey(remoteKey, 'remote');
+    if (remoteKeyAuthToken) {
+      return {
+        apiVersion: remoteKeyAuthToken.apiVersion,
+        kind: 'authToken',
+        source: remoteKeyAuthToken.source,
+        value: remoteKeyAuthToken.authToken,
+      };
+    }
+
+    return { apiVersion: 'v1beta', kind: 'apiKey', source: 'remote', value: remoteKey };
   }
 
-  return { key: '', source: 'missing' as const };
+  return { apiVersion: 'v1beta', kind: 'missing', source: 'missing', value: '' };
 }
 
 process.on('uncaughtException', (error) => {
@@ -320,16 +532,18 @@ async function handleClientConnection(clientWs: WebSocket, req: http.IncomingMes
     currentUpstreamRef.current?.close();
   });
 
-  const { key, source } = await resolveGoogleApiKey(url);
+  const credential = await resolveUpstreamCredential(url);
 
-  if (!key) {
+  if (credential.kind === 'missing') {
     clientWs.close(4000, 'Missing key');
     return;
   }
 
-  console.log(`[voice-call-ws-proxy] Using Google API key from ${source}`);
+  console.log(
+    `[voice-call-ws-proxy] Using ${credential.kind === 'authToken' ? 'Google auth token' : 'Google API key'} from ${credential.source}`,
+  );
 
-  const upstreamUrl = `${GEMINI_LIVE_WS}?key=${encodeURIComponent(key)}`;
+  const upstreamUrl = buildUpstreamUrl(credential);
 
   function tryUpstream(proxyIndex: number) {
     if (clientWs.readyState !== WebSocket.OPEN) return;
@@ -364,6 +578,7 @@ async function handleClientConnection(clientWs: WebSocket, req: http.IncomingMes
       const statusCode = response.statusCode || 0;
       if (statusCode === 401 || statusCode === 403) {
         clearRemoteGoogleApiKeyCache();
+        clearRemoteAuthTokenCache();
       }
 
       console.error(`[voice-call-ws-proxy] Google rejected with status: ${statusCode}`);
@@ -455,6 +670,13 @@ async function handleClientConnection(clientWs: WebSocket, req: http.IncomingMes
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`[voice-call-ws-proxy] Listening on ws://0.0.0.0:${PORT}`);
+
+  if (PINNED_PROXY_ONLY && PROXY_URLS.length) {
+    console.log(
+      `[voice-call-ws-proxy] Using pinned proxy configuration only (${PROXY_URLS.length} proxy/proxies)`,
+    );
+    return;
+  }
 
   void loadProxyUrlsFromDb().then((dbUrls) => {
     if (!dbUrls.length) {

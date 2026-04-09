@@ -243,7 +243,7 @@ export async function GET(request: Request) {
 
     const { GOOGLE_API_KEY } = getLLMConfig();
     const apiKey = apiKeyManager.pick(GOOGLE_API_KEY);
-    const liveAuthTokenUrl = apiKey ? '/api/voice-call/auth-token' : null;
+    const liveAuthTokenUrl = !geminiWsUrl && apiKey ? '/api/voice-call/auth-token' : null;
 
     if (!geminiWsUrl && !apiKey) {
       return NextResponse.json(
