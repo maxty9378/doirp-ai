@@ -1,5 +1,6 @@
 const AUTH_PROTECTED_PROXY_HOST = 'doirp-ai.vercel.app';
 const AUTH_PROTECTED_PROXY_PATH = '/voice-call-ws';
+const DEPRECATED_VOICE_PROXY_HOSTS = new Set(['apidoirp.ru']);
 export const APP_VOICE_PROXY_PATH = '/gemini-live-ws';
 
 /**
@@ -45,8 +46,12 @@ export const normalizeVoiceProxyUrl = (url: string | null | undefined) => {
   try {
     const parsed = new URL(url.trim());
     const path = parsed.pathname.replace(/\/+$/, '');
+    const isDeprecatedProxy =
+      DEPRECATED_VOICE_PROXY_HOSTS.has(parsed.hostname) && path === AUTH_PROTECTED_PROXY_PATH;
     const isAuthProtectedProxy =
       parsed.hostname === AUTH_PROTECTED_PROXY_HOST && path === AUTH_PROTECTED_PROXY_PATH;
+
+    if (isDeprecatedProxy) return PUBLIC_VOICE_PROXY_WS;
 
     if (isAuthProtectedProxy) {
       parsed.pathname = APP_VOICE_PROXY_PATH;

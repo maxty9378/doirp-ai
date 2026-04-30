@@ -16,6 +16,10 @@ describe('voice call ws proxy config', () => {
     );
   });
 
+  it('normalizes the deprecated apidoirp proxy host to the current public proxy', () => {
+    expect(normalizeVoiceProxyUrl('wss://apidoirp.ru/voice-call-ws')).toBe(PUBLIC_VOICE_PROXY_WS);
+  });
+
   it('builds an HTTPS base URL from a WS endpoint', () => {
     expect(normalizeProxyBaseUrl('wss://voice-proxy.example.com/voice-call-ws?key=test')).toBe(
       'https://voice-proxy.example.com/voice-call-ws',
