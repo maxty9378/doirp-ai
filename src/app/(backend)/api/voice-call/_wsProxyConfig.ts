@@ -1,6 +1,6 @@
 const AUTH_PROTECTED_PROXY_HOST = 'doirp-ai.vercel.app';
 const AUTH_PROTECTED_PROXY_PATH = '/voice-call-ws';
-const DEPRECATED_VOICE_PROXY_HOSTS = new Set(['apidoirp.ru']);
+const DEPRECATED_VOICE_PROXY_HOSTS = new Set(['apidoirp.ru', 'ponkacat.ru']);
 export const APP_VOICE_PROXY_PATH = '/gemini-live-ws';
 
 /**
