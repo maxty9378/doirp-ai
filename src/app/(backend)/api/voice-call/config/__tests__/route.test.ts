@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
 
-import { PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
+import { APP_VOICE_PROXY_PATH, PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
@@ -270,7 +270,7 @@ describe('GET /api/voice-call/config', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns the public proxy websocket URL by default', async () => {
+  it('returns the app tunnel websocket URL by default', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       knowledgeEntries: [],
       scenario: {
@@ -291,12 +291,12 @@ describe('GET /api/voice-call/config', () => {
       liveAuthTokenUrl?: string | null;
     };
     expect(body.apiKey).toBeUndefined();
-    expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
+    expect(body.geminiWsUrl).toBe(`wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
     expect(body.liveAuthTokenUrl).toBeUndefined();
   });
 
-  it('keeps the public proxy URL in production when the app tunnel flag is enabled', async () => {
-    vi.stubEnv('VOICE_CALL_WS_USE_TUNNEL', '1');
+  it('returns the public proxy URL when the app tunnel is disabled', async () => {
+    vi.stubEnv('VOICE_CALL_WS_USE_TUNNEL', '0');
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       knowledgeEntries: [],
       scenario: {

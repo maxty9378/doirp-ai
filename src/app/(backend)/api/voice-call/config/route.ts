@@ -237,7 +237,7 @@ export async function GET(request: Request) {
       devProxyUrl: process.env.VOICE_CALL_WS_PROXY_DEV,
       explicitProxyUrl: process.env.VOICE_CALL_WS_PROXY_URL,
       nodeEnv: process.env.NODE_ENV,
-      useAppTunnelInProduction: process.env.VOICE_CALL_WS_USE_TUNNEL === '1',
+      useAppTunnelInProduction: process.env.VOICE_CALL_WS_USE_TUNNEL !== '0',
     });
     const geminiWsUrl = rawProxyUrl ? rawProxyUrl.replace(/^http/, 'ws') : null;
 

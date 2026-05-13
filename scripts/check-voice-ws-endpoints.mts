@@ -14,8 +14,8 @@ interface Endpoint {
 
 const DEFAULT_ENDPOINTS: Endpoint[] = [
   { label: 'prod same-origin tunnel', url: 'wss://doirp-ai.vercel.app/gemini-live-ws' },
-  { label: 'public fallback (current)', url: 'wss://apidoirp.ru/voice-call-ws' },
-  { label: 'public fallback (legacy)', url: 'wss://ponkacat.ru/voice-call-ws' },
+  { label: 'new VPS direct', url: 'ws://147.45.77.212/gemini-live-ws' },
+  { label: 'public fallback (legacy)', url: 'wss://apidoirp.ru/voice-call-ws' },
 ];
 
 const TIMEOUT_MS = Number(process.env.WS_PROBE_TIMEOUT_MS || '10000');
