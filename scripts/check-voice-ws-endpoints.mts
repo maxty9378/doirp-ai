@@ -13,8 +13,8 @@ interface Endpoint {
 }
 
 const DEFAULT_ENDPOINTS: Endpoint[] = [
+  { label: 'prod direct VPS', url: 'wss://147.45.77.212.sslip.io/gemini-live-ws' },
   { label: 'prod same-origin tunnel', url: 'wss://doirp-ai.vercel.app/gemini-live-ws' },
-  { label: 'new VPS direct', url: 'ws://147.45.77.212/gemini-live-ws' },
   { label: 'public fallback (legacy)', url: 'wss://apidoirp.ru/voice-call-ws' },
 ];
 

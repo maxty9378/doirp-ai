@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_TRAINING_ROUND_ENDING_PROMPT } from '@/const/voiceCall';
 
-import { APP_VOICE_PROXY_PATH, PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
+import { PUBLIC_VOICE_PROXY_WS } from '../../_wsProxyConfig';
 import { GET } from '../route';
 
 const GFD_KEY = 'training-gfd-stress';
@@ -270,33 +270,7 @@ describe('GET /api/voice-call/config', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns the app tunnel websocket URL by default', async () => {
-    mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
-      knowledgeEntries: [],
-      scenario: {
-        contextWindow: 5,
-        goals: [],
-        systemPrompt: 'System prompt from DB',
-        voiceName: 'Sulafat',
-      },
-    });
-
-    const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
-    const res = await GET(req);
-
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as {
-      apiKey?: string;
-      geminiWsUrl?: string | null;
-      liveAuthTokenUrl?: string | null;
-    };
-    expect(body.apiKey).toBeUndefined();
-    expect(body.geminiWsUrl).toBe(`wss://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
-    expect(body.liveAuthTokenUrl).toBeUndefined();
-  });
-
-  it('returns the public proxy URL when the app tunnel is disabled', async () => {
-    vi.stubEnv('VOICE_CALL_WS_USE_TUNNEL', '0');
+  it('returns the direct public proxy websocket URL by default', async () => {
     mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
       knowledgeEntries: [],
       scenario: {
@@ -318,6 +292,32 @@ describe('GET /api/voice-call/config', () => {
     };
     expect(body.apiKey).toBeUndefined();
     expect(body.geminiWsUrl).toBe(PUBLIC_VOICE_PROXY_WS);
+    expect(body.liveAuthTokenUrl).toBeUndefined();
+  });
+
+  it('returns the app tunnel URL when explicitly enabled', async () => {
+    vi.stubEnv('VOICE_CALL_WS_USE_TUNNEL', '1');
+    mockGetTrainingScenarioWithKnowledge.mockResolvedValueOnce({
+      knowledgeEntries: [],
+      scenario: {
+        contextWindow: 5,
+        goals: [],
+        systemPrompt: 'System prompt from DB',
+        voiceName: 'Sulafat',
+      },
+    });
+
+    const req = new Request(`http://localhost/api/voice-call/config?agentId=${GFD_KEY}`);
+    const res = await GET(req);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      apiKey?: string;
+      geminiWsUrl?: string | null;
+      liveAuthTokenUrl?: string | null;
+    };
+    expect(body.apiKey).toBeUndefined();
+    expect(body.geminiWsUrl).toBe('wss://doirp-ai.vercel.app/gemini-live-ws');
     expect(body.liveAuthTokenUrl).toBeUndefined();
   });
 });

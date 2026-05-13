@@ -4,9 +4,9 @@ const DEPRECATED_VOICE_PROXY_HOSTS = new Set(['apidoirp.ru']);
 export const APP_VOICE_PROXY_PATH = '/gemini-live-ws';
 
 /**
- * Public same-origin WebSocket proxy endpoint. Vercel rewrites this path to the VPS.
+ * Direct public WebSocket proxy endpoint on the VPS.
  */
-export const PUBLIC_VOICE_PROXY_WS = `wss://${AUTH_PROTECTED_PROXY_HOST}${APP_VOICE_PROXY_PATH}`;
+export const PUBLIC_VOICE_PROXY_WS = `wss://147.45.77.212.sslip.io${APP_VOICE_PROXY_PATH}`;
 
 export const buildAppVoiceProxyWsUrl = (appUrl: string | null | undefined) => {
   if (!appUrl?.trim()) return null;
@@ -78,7 +78,7 @@ export const resolveVoiceCallWsProxyUrl = ({
   devProxyUrl,
   explicitProxyUrl,
   nodeEnv = process.env.NODE_ENV,
-  useAppTunnelInProduction = true,
+  useAppTunnelInProduction = false,
 }: ResolveVoiceCallWsProxyUrlOptions = {}) => {
   const normalizedExplicit = normalizeVoiceProxyUrl(explicitProxyUrl);
   if (normalizedExplicit) return normalizedExplicit;

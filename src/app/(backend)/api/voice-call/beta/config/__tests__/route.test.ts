@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { APP_VOICE_PROXY_PATH, PUBLIC_VOICE_PROXY_WS } from '../../../_wsProxyConfig';
+import { PUBLIC_VOICE_PROXY_WS } from '../../../_wsProxyConfig';
 import { GET } from '../route';
 
 const DEFAULT_LIVE_MODEL = 'models/gemini-3.1-flash-live-preview';
@@ -99,22 +99,22 @@ describe('GET /api/voice-call/beta/config', () => {
     expect(body.proxyBaseUrl).toBe(PUBLIC_VOICE_PROXY_WS.replace(/^wss:/, 'https:'));
   });
 
-  it('returns app tunnel proxyBaseUrl by default', async () => {
-    const res = await GET();
-    const body = (await res.json()) as { proxyBaseUrl: string | null };
-
-    expect(res.status).toBe(200);
-    expect(body.proxyBaseUrl).toBe(`https://doirp-ai.vercel.app${APP_VOICE_PROXY_PATH}`);
-  });
-
-  it('can fall back to the public proxyBaseUrl when the app tunnel is disabled', async () => {
-    vi.stubEnv('VOICE_CALL_WS_USE_TUNNEL', '0');
-
+  it('returns direct public proxyBaseUrl by default', async () => {
     const res = await GET();
     const body = (await res.json()) as { proxyBaseUrl: string | null };
 
     expect(res.status).toBe(200);
     expect(body.proxyBaseUrl).toBe(PUBLIC_VOICE_PROXY_WS.replace(/^wss:/, 'https:'));
+  });
+
+  it('returns app tunnel proxyBaseUrl when explicitly enabled', async () => {
+    vi.stubEnv('VOICE_CALL_WS_USE_TUNNEL', '1');
+
+    const res = await GET();
+    const body = (await res.json()) as { proxyBaseUrl: string | null };
+
+    expect(res.status).toBe(200);
+    expect(body.proxyBaseUrl).toBe('https://doirp-ai.vercel.app/gemini-live-ws');
   });
 
   it('returns proxy-mode payload with normalized proxyBaseUrl', async () => {
