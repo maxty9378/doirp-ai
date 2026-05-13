@@ -21,8 +21,8 @@ import {
 
 import { AudioStreamer } from './AudioStreamer';
 
-const GEMINI_LIVE_WS =
-  'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent';
+export const DEFAULT_VOICE_CALL_PROXY_WS = 'wss://147.45.77.212.sslip.io/gemini-live-ws';
+export const CLIENT_PROXY_PLACEHOLDER_KEY = 'voice-call-proxy';
 const PCM_IN_SAMPLE_RATE = 16_000;
 const PCM_OUT_SAMPLE_RATE = 24_000;
 
@@ -52,7 +52,7 @@ export interface GeminiLiveConfig {
   enableCheckpoints?: boolean;
   enableScoring?: boolean;
   enableTurnPlanner?: boolean;
-  /** URL WebSocket-прокси (когда задан VOICE_CALL_WS_PROXY_URL), иначе клиент подключается к Google напрямую */
+  /** URL WebSocket-прокси. Клиент не подключается к Google Live напрямую. */
   geminiWsUrl?: string | null;
   /** Массив целей сценария из редактора (используем как чекпоинты в UI) */
   goals?: string[];
@@ -989,8 +989,9 @@ export function useGeminiLive({
       if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
       pushDebugEvent('ambient-audio-disabled');
 
-      const baseUrl = config.geminiWsUrl || GEMINI_LIVE_WS;
-      const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(config.apiKey)}`;
+      const baseUrl = config.geminiWsUrl || DEFAULT_VOICE_CALL_PROXY_WS;
+      const proxyKey = config.apiKey || CLIENT_PROXY_PLACEHOLDER_KEY;
+      const url = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}key=${encodeURIComponent(proxyKey)}`;
       // eslint-disable-next-line no-console
       console.log('[GeminiLive] Creating WebSocket...', url.slice(0, 100) + '...');
       const ws = new WebSocket(url);

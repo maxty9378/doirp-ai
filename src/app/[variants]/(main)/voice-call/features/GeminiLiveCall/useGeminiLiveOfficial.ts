@@ -50,13 +50,15 @@ import {
 import { AudioRecorder } from '../../beta/console/lib/audio-recorder';
 import { AudioStreamer } from './AudioStreamer';
 import { getSilenceNudgeDurationMs, shouldSendSilenceNudge } from './silenceNudge';
-import type {
-  GeminiLiveConfig,
-  GeminiLiveUIConfig,
-  HangUpReason,
-  TranscriptEntry,
-  UseGeminiLiveOptions,
-  VoiceCallCheckpoint,
+import {
+  CLIENT_PROXY_PLACEHOLDER_KEY,
+  DEFAULT_VOICE_CALL_PROXY_WS,
+  type GeminiLiveConfig,
+  type GeminiLiveUIConfig,
+  type HangUpReason,
+  type TranscriptEntry,
+  type UseGeminiLiveOptions,
+  type VoiceCallCheckpoint,
 } from './useGeminiLive';
 
 const PCM_IN_SAMPLE_RATE = 16_000;
@@ -869,7 +871,8 @@ export function useGeminiLiveOfficial({
 
       const config = configRef.current;
       if (!config) throw new Error('Не удалось загрузить конфиг звонка.');
-      if (!config.geminiWsUrl && !config.apiKey && !config.liveAuthTokenUrl) {
+      const effectiveGeminiWsUrl = config.geminiWsUrl || DEFAULT_VOICE_CALL_PROXY_WS;
+      if (!effectiveGeminiWsUrl && !config.apiKey && !config.liveAuthTokenUrl) {
         throw new Error('Нет API-ключа Google.');
       }
 
@@ -1081,7 +1084,7 @@ export function useGeminiLiveOfficial({
         baseLiveConfig.tools = tools as LiveConnectConfig['tools'];
       }
 
-      const proxyBaseUrl = buildProxyBaseUrl(config.geminiWsUrl);
+      const proxyBaseUrl = buildProxyBaseUrl(effectiveGeminiWsUrl);
       const usesProxyTransport = !!proxyBaseUrl;
       let liveAuthToken = '';
       let liveApiVersion = 'v1beta';
@@ -1099,14 +1102,14 @@ export function useGeminiLiveOfficial({
             message: error instanceof Error ? error.message : String(error || 'Unknown error'),
           });
 
-          if (!config.geminiWsUrl && !config.apiKey) {
+          if (!effectiveGeminiWsUrl && !config.apiKey) {
             throw error;
           }
         }
       }
 
       const client = new GoogleGenAI({
-        apiKey: liveAuthToken || config.apiKey || 'voice-call-proxy',
+        apiKey: liveAuthToken || config.apiKey || CLIENT_PROXY_PLACEHOLDER_KEY,
         httpOptions: {
           ...(proxyBaseUrl ? { baseUrl: proxyBaseUrl } : {}),
           apiVersion: liveApiVersion,
@@ -1522,7 +1525,7 @@ export function useGeminiLiveOfficial({
         : undefined;
 
       if (usesProxyTransport) {
-        const proxyWsUrl = config.geminiWsUrl!;
+        const proxyWsUrl = effectiveGeminiWsUrl;
         (window as any).WebSocket = class extends OriginalWebSocket {
           constructor(url: string | URL, protocols?: string | string[]) {
             let finalUrl = url.toString();
